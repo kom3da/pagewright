@@ -124,6 +124,10 @@ func (s *Server) PreviewHandler() http.Handler {
 		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 		w.Header().Set("Cache-Control", "private, no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		// Previews show the tenant's own body and theme on the admin's
+		// origin: sandbox them so nothing in a page can act with the
+		// admin's cookies, and allow no scripts at all.
+		w.Header().Set("Content-Security-Policy", "sandbox; script-src 'none'; object-src 'none'; frame-ancestors 'none'")
 		mux.ServeHTTP(w, r)
 	})
 }

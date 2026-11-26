@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -72,7 +73,7 @@ func runServe(ctx context.Context, cfg config.Config) error {
 		defer cancel()
 		return riverClient.Stop(stop)
 	})
-	g.Go(func() error { return listen(ctx, cfg.Addr, logRequests(mux)) })
+	g.Go(func() error { return listen(ctx, cfg.Addr, logRequests(secureHeaders(mux))) })
 	if cfg.SiteAddr != "" {
 		g.Go(func() error { return listen(ctx, cfg.SiteAddr, previewHandler(cfg.SiteDir())) })
 		slog.Info("公開サイトのプレビューを起動しました", "url", cfg.PublicBaseURL+"/")
@@ -117,6 +118,32 @@ func logRequests(next http.Handler) http.Handler {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
-		slog.Info("request", "method", r.Method, "path", r.URL.Path, "status", rec.status, "duration", time.Since(start))
+		slog.Info("request", "method", r.Method, "path", logPath(r.URL.Path), "status", rec.status, "duration", time.Since(start))
+	})
+}
+
+// logPath hides the token of preview links (/p/{token}/...), which opens
+// unpublished contents for up to 30 days to whoever reads the logs.
+func logPath(p string) string {
+	rest, ok := strings.CutPrefix(p, "/p/")
+	if !ok {
+		return p
+	}
+	if i := strings.IndexByte(rest, '/'); i >= 0 {
+		return "/p/[redacted]" + rest[i:]
+	}
+	return "/p/[redacted]"
+}
+
+// secureHeaders keeps the admin out of frames on other sites and stops
+// browsers from guessing content types. Handlers may set a stricter
+// policy (previews do).
+func secureHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Content-Security-Policy", "frame-ancestors 'none'")
+		next.ServeHTTP(w, r)
 	})
 }
