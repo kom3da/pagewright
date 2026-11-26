@@ -28,6 +28,7 @@ import { publicUrl } from "../config";
 import { BodyEditor, useBodyEditor } from "../editor/BodyEditor";
 import { editorContent, normalizeBody } from "../editor/normalize";
 import { formatJapanDateTime } from "../lib/datetime";
+import { descendantPageIds, pageRows } from "../lib/pageTree";
 import { optionalSlugSchema } from "../lib/slug";
 
 const typeLabels = { post: "記事", page: "固定ページ" } as const;
@@ -421,7 +422,8 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
               render={({ field, fieldState }) => (
                 <ParentSelect
                   ref={field.ref}
-                  pages={pages.filter((p) => p.id !== id)}
+                  pages={pages}
+                  self={id}
                   value={field.value}
                   onChange={field.onChange}
                   error={fieldState.error?.message}
@@ -618,16 +620,21 @@ function urlPreview(type: ContentType, last: string, parentId: string, pages: Co
 function ParentSelect({
   ref,
   pages,
+  self,
   value,
   onChange,
   error,
 }: {
   ref: Ref<HTMLSelectElement>;
   pages: ContentSummary[];
+  /** The page being edited: it and its descendants cannot be its parent. */
+  self: number;
   value: string;
   onChange: (value: string) => void;
   error?: string;
 }) {
+  const excluded = descendantPageIds(pages, self);
+  const choices = pageRows(pages).filter((p) => !excluded.has(p.id));
   return (
     <Field
       label="親ページ"
@@ -643,8 +650,9 @@ function ParentSelect({
           className={inputClass}
         >
           <option value="">なし（いちばん上の階層）</option>
-          {pages.map((p) => (
+          {choices.map((p) => (
             <option key={p.id} value={String(p.id)}>
+              {"　".repeat(p.depth)}
               {p.title || "（タイトルなし）"}
             </option>
           ))}

@@ -24,6 +24,31 @@ describe("content list", () => {
     await expectNoAxeViolations();
   });
 
+  it("shows schedules: 予約 with the date, and 公開中 with 更新を予約", async () => {
+    const c = db.contents.find((x) => x.id === 3);
+    Object.assign(c ?? {}, { scheduledAt: "2026-12-03T01:00:00Z", scheduledRevisionId: 300 });
+    renderApp("/posts");
+    const rows = within(await screen.findByRole("table"))
+      .getAllByRole("row")
+      .slice(1);
+    const status = (r: HTMLElement) => within(r).getAllByRole("cell")[1];
+    expect(status(rows[0])).toHaveTextContent("公開中更新を予約2026年12月3日 10:00に更新");
+    expect(within(rows[0]).queryByText("未公開の変更あり")).not.toBeInTheDocument();
+    expect(status(rows[1])).toHaveTextContent("予約2026年12月1日 9:00に公開");
+    expect(status(rows[2])).toHaveTextContent(/^下書き$/);
+  });
+
+  it("shows pages as a tree with their parents", async () => {
+    renderApp("/pages");
+    const table = await screen.findByRole("table");
+    const titles = within(table)
+      .getAllByRole("row")
+      .slice(1)
+      .map((r) => within(r).getAllByRole("cell")[0].textContent);
+    expect(titles).toEqual(["お問い合わせ", "会社概要", "会社概要 › 沿革"]);
+    await expectNoAxeViolations();
+  });
+
   it("creates a new page and opens the editor", async () => {
     const { user } = renderApp("/pages");
     await user.click(await screen.findByRole("button", { name: "新規作成" }));
@@ -321,6 +346,28 @@ describe("editor", () => {
       }),
     );
     expect(await screen.findByRole("heading", { level: 1, name: "カテゴリ" })).toBeInTheDocument();
+  });
+
+  it("does not offer the page itself or its descendants as parent", async () => {
+    await openEditor("/pages/4");
+    const parent = screen.getByLabelText("親ページ");
+    await within(parent).findByRole("option", { name: "お問い合わせ" });
+    expect(
+      within(parent)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["なし（いちばん上の階層）", "お問い合わせ"]);
+  });
+
+  it("indents child pages in the parent choices", async () => {
+    await openEditor("/pages/6");
+    const parent = screen.getByLabelText("親ページ");
+    await within(parent).findByRole("option", { name: "会社概要" });
+    expect(
+      within(parent)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["なし（いちばん上の階層）", "会社概要", "　沿革"]);
   });
 
   it("shows the parent page choice only for pages", async () => {
