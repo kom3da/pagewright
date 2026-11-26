@@ -1,0 +1,121 @@
+# Pagewright 本番用の構成（サーバー1台で、1つのサイトを公開する）
+#
+# 使い方は docs/install.md を参照。設定はこのファイルと同じ場所の .env に書く
+# （.env.example をコピーして作る）。
+#
+#   閲覧者 ─HTTPS→ caddy ─→ nginx ─┬→ 公開サイト（静的ファイル。app が止まっても表示される）
+#                                   └→ 管理画面（app）
+#                                        app ─→ db（PostgreSQL）
+#
+# よく使うコマンド（deploy/ で実行）:
+#   docker compose up -d                       起動（毎回 DB の更新（migrate）を先に行う）
+#   docker compose run --rm cli init ...       最初のサイトと管理者を作る
+#   docker compose run --rm cli login-url ...  ログイン用URLを出す（メールが届かないとき）
+#   docker compose logs -f app                 ログを見る
+
+name: pagewright
+
+x-image: &image ${PAGEWRIGHT_IMAGE:-ghcr.io/kom3da/pagewright:latest}
+
+services:
+  # データベース。データは db-data ボリュームに残る。
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pagewright # テーブルの所有者。マイグレーションと init だけが使う
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?.env に POSTGRES_PASSWORD を書いてください}
+      POSTGRES_DB: pagewright
+      # 初回だけ postgres/init/10-app-role.sh が使う（アプリ用ユーザーのパスワード）
+      PAGEWRIGHT_APP_DB_PASSWORD: ${PAGEWRIGHT_APP_DB_PASSWORD:?.env に PAGEWRIGHT_APP_DB_PASSWORD を書いてください}
+      TZ: ${TZ:-Asia/Tokyo}
+    volumes:
+      - db-data:/var/lib/postgresql
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "pagewright", "-d", "pagewright"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # 管理用のコマンド。`up` のたびに migrate（DBを最新の形にする）を実行して終わる。
+  # init・login-url・import-wxr もこのサービスで実行する。
+  cli:
+    image: *image
+    command: ["migrate"]
+    restart: "no"
+    environment:
+      # テーブルの所有者として接続する（migrate・init・login-url）
+      PAGEWRIGHT_MIGRATE_DATABASE_URL: postgres://pagewright:${POSTGRES_PASSWORD}@db:5432/pagewright?sslmode=disable
+      # import-wxr はアプリ用ユーザーで接続する
+      PAGEWRIGHT_DATABASE_URL: postgres://pagewright_app:${PAGEWRIGHT_APP_DB_PASSWORD}@db:5432/pagewright?sslmode=disable
+      PAGEWRIGHT_BASE_URL: https://${PAGEWRIGHT_ADMIN_DOMAIN:?.env に PAGEWRIGHT_ADMIN_DOMAIN を書いてください}
+      TZ: ${TZ:-Asia/Tokyo}
+    volumes:
+      - data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # 本体（管理画面・API・予約投稿などのジョブ・サイトの書き出し）
+  app:
+    image: *image
+    command: ["serve"]
+    restart: unless-stopped
+    environment:
+      # アプリ用ユーザー（pagewright_app）で接続する。RLSで他のサイトのデータは見えない
+      PAGEWRIGHT_DATABASE_URL: postgres://pagewright_app:${PAGEWRIGHT_APP_DB_PASSWORD}@db:5432/pagewright?sslmode=disable
+      PAGEWRIGHT_BASE_URL: https://${PAGEWRIGHT_ADMIN_DOMAIN}
+      PAGEWRIGHT_PUBLIC_BASE_URL: https://${PAGEWRIGHT_SITE_DOMAIN:?.env に PAGEWRIGHT_SITE_DOMAIN を書いてください}
+      PAGEWRIGHT_SMTP_ADDR: ${PAGEWRIGHT_SMTP_ADDR:?.env に PAGEWRIGHT_SMTP_ADDR を書いてください}
+      PAGEWRIGHT_MAIL_FROM: ${PAGEWRIGHT_MAIL_FROM:?.env に PAGEWRIGHT_MAIL_FROM を書いてください}
+      TZ: ${TZ:-Asia/Tokyo}
+    volumes:
+      - data:/data # 画像（media/）と書き出したサイト（site/）
+    depends_on:
+      db:
+        condition: service_healthy
+      cli:
+        condition: service_completed_successfully
+
+  # 公開サイトの配信と、管理画面への中継
+  nginx:
+    image: nginxinc/nginx-unprivileged:1.30-alpine
+    restart: unless-stopped
+    # app（ユーザーID 10001）が書き出した画像を読めるように、同じグループに入れる
+    group_add: ["10001"]
+    environment:
+      PAGEWRIGHT_SITE_DOMAIN: ${PAGEWRIGHT_SITE_DOMAIN}
+      PAGEWRIGHT_ADMIN_DOMAIN: ${PAGEWRIGHT_ADMIN_DOMAIN}
+      # init で表示されたサイトID。未設定のあいだ公開サイトは 404 になる
+      PAGEWRIGHT_SITE_ID: ${PAGEWRIGHT_SITE_ID:-unset}
+      NGINX_ENVSUBST_FILTER: ^PAGEWRIGHT_
+    volumes:
+      - data:/data:ro
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/90-pagewright-reload.sh:/docker-entrypoint.d/90-pagewright-reload.sh:ro
+
+  # HTTPS（証明書の自動取得）。クラウドのロードバランサーでHTTPSを終端するなら、
+  # このサービスを消し、nginx に ports: ["80:8080"] を付けてそちらへ向ける。
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "${PAGEWRIGHT_HTTP_PORT:-80}:80"
+      - "${PAGEWRIGHT_HTTPS_PORT:-443}:443"
+      - "${PAGEWRIGHT_HTTPS_PORT:-443}:443/udp"
+    environment:
+      PAGEWRIGHT_SITE_DOMAIN: ${PAGEWRIGHT_SITE_DOMAIN}
+      PAGEWRIGHT_ADMIN_DOMAIN: ${PAGEWRIGHT_ADMIN_DOMAIN}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - nginx
+
+volumes:
+  db-data: # データベース
+  data: # 画像と書き出したサイト
+  caddy-data: # HTTPS の証明書
+  caddy-config:
