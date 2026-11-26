@@ -12,7 +12,7 @@ import { CategoryCheckboxes } from "../components/CategoryCheckboxes";
 import { TagPicker } from "../components/TagPicker";
 import { useNotify } from "../components/Toaster";
 import { Button } from "../components/ui/Button";
-import { ConfirmDialog } from "../components/ui/Dialog";
+import { ConfirmDialog, Dialog } from "../components/ui/Dialog";
 import { Field, inputClass } from "../components/ui/Field";
 import {
   ErrorMessage,
@@ -24,7 +24,7 @@ import {
 } from "../components/ui/misc";
 import { publicUrl } from "../config";
 import { BodyEditor, useBodyEditor } from "../editor/BodyEditor";
-import { normalizeBody } from "../editor/normalize";
+import { editorContent, normalizeBody } from "../editor/normalize";
 import { optionalSlugSchema } from "../lib/slug";
 
 const typeLabels = { post: "記事", page: "固定ページ" } as const;
@@ -80,6 +80,11 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   const [savedTitle, setSavedTitle] = useState(initial.revision.title);
   const [titleError, setTitleError] = useState<string>();
   const titleRef = useRef<HTMLInputElement>(null);
+
+  // The revision this editor's content is based on. Sent with every draft save so the
+  // server can tell when someone else saved in between (409 edit_conflict).
+  const baseRevisionId = useRef(initial.revision.id);
+  const [conflict, setConflict] = useState(false);
 
   const bodyChanges = useRef(0);
   const [bodyDirty, setBodyDirty] = useState(false);
@@ -160,15 +165,21 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       const sentTitle = title;
       const sentChanges = bodyChanges.current;
       try {
+        // `fields` is not edited here; leaving it out keeps the latest revision's fields.
         detail = await api.saveDraft(id, {
           title: sentTitle,
           body: normalizeBody(editor.getJSON()),
-          fields: content.revision.fields,
+          baseRevisionId: baseRevisionId.current,
         });
       } catch (e) {
+        if (isApiError(e, 409, "edit_conflict")) {
+          setConflict(true);
+          return null;
+        }
         if (showFieldError(e)) return null;
         throw e;
       }
+      baseRevisionId.current = detail.revision.id;
       setSavedTitle(sentTitle);
       // Keep the dirty flag if the user kept typing while saving.
       if (bodyChanges.current === sentChanges) setBodyDirty(false);
@@ -227,6 +238,33 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       void queryClient.invalidateQueries({ queryKey: contentsQuery(type).queryKey });
       notify(`${label}を削除しました。`);
       await navigate({ to: type === "post" ? "/posts" : "/pages" });
+    });
+
+  // Edit conflict: either discard local edits and load the latest revision, or save the
+  // local edits on top of it.
+  const loadLatest = () =>
+    run("save", async () => {
+      const latest = await api.getContent(id);
+      baseRevisionId.current = latest.revision.id;
+      setTitle(latest.revision.title);
+      setSavedTitle(latest.revision.title);
+      setTitleError(undefined);
+      editor.commands.setContent(editorContent(latest.revision.body) ?? "", {
+        emitUpdate: false,
+      });
+      setBodyDirty(false);
+      form.reset(settingsFrom(latest));
+      update(latest);
+      setConflict(false);
+      notify("最新の内容を読み込みました。");
+    });
+
+  const overwrite = () =>
+    run("save", async () => {
+      const latest = await api.getContent(id);
+      baseRevisionId.current = latest.revision.id;
+      setConflict(false);
+      if (await persist()) notify("自分の内容で上書きして保存しました。");
     });
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -408,6 +446,15 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         danger
         onConfirm={remove}
       />
+      <ConflictDialog
+        open={conflict}
+        onClose={() => setConflict(false)}
+        label={label}
+        myText={conflict ? `${title}\n\n${editor.getText({ blockSeparator: "\n" })}` : ""}
+        busy={busy !== null}
+        onLoadLatest={loadLatest}
+        onOverwrite={overwrite}
+      />
       <ConfirmDialog
         open={blocker.status === "blocked"}
         onOpenChange={(o) => !o && blocker.reset?.()}
@@ -419,6 +466,62 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         onConfirm={() => blocker.proceed?.()}
       />
     </div>
+  );
+}
+
+function ConflictDialog({
+  open,
+  onClose,
+  label,
+  myText,
+  busy,
+  onLoadLatest,
+  onOverwrite,
+}: {
+  open: boolean;
+  onClose: () => void;
+  label: string;
+  myText: string;
+  busy: boolean;
+  onLoadLatest: () => void;
+  onOverwrite: () => void;
+}) {
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title="ほかの人が先に保存しました"
+      description={`この${label}を編集しているあいだに、別の画面やほかの人が新しい内容を保存しました。どちらの内容を残すか選んでください。`}
+      wide
+    >
+      <div className="space-y-6">
+        <Field
+          label="あなたの編集内容"
+          hint="まだ保存されていません。念のため、コピーして控えておくこともできます。"
+        >
+          {(ids) => <textarea {...ids} readOnly rows={8} value={myText} className={inputClass} />}
+        </Field>
+        <div className="space-y-2">
+          <Button variant="primary" onClick={onOverwrite} disabled={busy}>
+            自分の内容で上書きする
+          </Button>
+          <p className="text-sm text-slate-700">
+            ほかの人が保存した内容は、あなたの編集内容に置き換わります。
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Button variant="danger" onClick={onLoadLatest} disabled={busy}>
+            最新の内容を読み込む
+          </Button>
+          <p className="text-sm font-semibold text-red-700">
+            注意：あなたの編集内容は捨てられ、元に戻せません。
+          </p>
+        </div>
+        <div className="flex justify-end">
+          <Button onClick={onClose}>閉じて編集を続ける</Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }
 

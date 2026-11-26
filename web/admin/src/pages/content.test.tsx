@@ -72,8 +72,81 @@ describe("editor", () => {
           },
         ],
       },
-      fields: {},
+      baseRevisionId: 100,
     });
+    expect(screen.queryByText("保存していない変更があります")).not.toBeInTheDocument();
+  });
+
+  it("sends the revision of the last save as baseRevisionId", async () => {
+    const requests = recordRequests();
+    const { user } = await openEditor();
+    const title = screen.getByLabelText("タイトル");
+    for (const text of ["1", "2"]) {
+      await user.type(title, text);
+      await user.click(screen.getByRole("button", { name: "下書き保存" }));
+      await waitFor(() =>
+        expect(screen.queryByText("保存していない変更があります")).not.toBeInTheDocument(),
+      );
+    }
+    const bases = requests
+      .filter((r) => r.method === "PUT")
+      .map((r) => (r.body as { baseRevisionId: number }).baseRevisionId);
+    expect(bases).toEqual([100, 101]);
+  });
+
+  /** Someone else saves post 1 after the editor loaded it. */
+  const saveElsewhere = () => {
+    const c = db.contents.find((x) => x.id === 1);
+    if (!c) throw new Error("missing seed");
+    c.title = "ほかの人のタイトル";
+    c.revision = {
+      ...c.revision,
+      id: 150,
+      title: "ほかの人のタイトル",
+      body: {
+        type: "doc",
+        content: [{ type: "paragraph", content: [{ type: "text", text: "ほかの人の本文" }] }],
+      },
+    };
+  };
+
+  it("on an edit conflict, keeps the user's text and can overwrite with it", async () => {
+    const requests = recordRequests();
+    const { user } = await openEditor();
+    saveElsewhere();
+    const title = screen.getByLabelText("タイトル");
+    await user.clear(title);
+    await user.type(title, "わたしのタイトル");
+    await user.click(screen.getByRole("button", { name: "下書き保存" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "ほかの人が先に保存しました" });
+    expect(within(dialog).getByLabelText("あなたの編集内容")).toHaveValue(
+      "わたしのタイトル\n\nホームページを公開しましたの本文です。",
+    );
+    expect(screen.getByLabelText("タイトル")).toHaveValue("わたしのタイトル");
+    expect(within(dialog).getByText(/編集内容は捨てられ/)).toBeInTheDocument();
+    await expectNoAxeViolations(dialog);
+
+    await user.click(within(dialog).getByRole("button", { name: "自分の内容で上書きする" }));
+    expect(await screen.findByText("自分の内容で上書きして保存しました。")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const puts = requests.filter((r) => r.method === "PUT");
+    expect(puts.map((r) => (r.body as { baseRevisionId: number }).baseRevisionId)).toEqual([
+      100, 150,
+    ]);
+    expect(db.contents.find((c) => c.id === 1)?.title).toBe("わたしのタイトル");
+  });
+
+  it("on an edit conflict, can load the latest content instead", async () => {
+    const { user } = await openEditor();
+    saveElsewhere();
+    await user.type(screen.getByLabelText("タイトル"), "追記");
+    await user.click(screen.getByRole("button", { name: "下書き保存" }));
+    const dialog = await screen.findByRole("dialog", { name: "ほかの人が先に保存しました" });
+    await user.click(within(dialog).getByRole("button", { name: "最新の内容を読み込む" }));
+    expect(await screen.findByText("最新の内容を読み込みました。")).toBeInTheDocument();
+    expect(screen.getByLabelText("タイトル")).toHaveValue("ほかの人のタイトル");
+    expect(screen.getByRole("textbox", { name: "本文" })).toHaveTextContent("ほかの人の本文");
     expect(screen.queryByText("保存していない変更があります")).not.toBeInTheDocument();
   });
 
