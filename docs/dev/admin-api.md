@@ -103,7 +103,7 @@ type PreviewLink = { id: number; url?: string; expiresAt: string; createdAt: str
 プレビューのページ（`/p/{token}/`）は本体が描画する。帯で「プレビュー」と示し、検索エンジンには載せない。ページ内のリンクは公開サイトを指す。
 
 `slug` の検査：英小文字・数字・ハイフンのみ、数字だけは不可、1〜100 文字。日本語が入っていたら 422 `invalid_slug`（「ページのURLは英小文字・数字・ハイフンで入力してください」）。
-いちばん上の固定ページの URL を `posts` か `media` にする（サイトの仕組みが使う `/posts/`・`/media/` と重なる）と 422 `reserved_slug`（`field: "slug"`）。
+いちばん上の固定ページの URL を `posts`・`media`・`search`・`pagefind`・`_assets` にする（サイトの仕組みが使うパスと重なる）と 422 `reserved_slug`（`field: "slug"`）。下に固定ページがある固定ページを `DELETE` すると 422 `has_children`（先に下のページを移すか削除する）。
 
 URL の決まり方（MVP）：記事は `/posts/{slug または番号}/`、固定ページは `/{親の slug}/{slug または番号}/`。
 
