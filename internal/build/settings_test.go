@@ -77,6 +77,10 @@ func TestCorporateHome(t *testing.T) {
 			t.Errorf("home page lacks %q", want)
 		}
 	}
+	_, homeBody, _ := strings.Cut(home, "<body")
+	if n := strings.Count(homeBody, "住まいの設備工事と保守を通じて"); n != 1 {
+		t.Errorf("the lead appears %d times in the home page body, want once", n)
+	}
 	for _, unwanted := range []string{`class="card" href="/top/"`, `class="card" href="/contact/"`} {
 		if strings.Contains(home, unwanted) {
 			t.Errorf("home page has %q", unwanted)

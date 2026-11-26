@@ -61,7 +61,10 @@ type Summary struct {
 	Lead, Excerpt string
 	// Image is the first image of the body, if any.
 	Image *render.Image
-	// More reports that the body says more than Lead.
+	// Rest is the body without the first paragraph and the first image,
+	// for themes that show those as Lead and Image (pages only).
+	Rest template.HTML
+	// More reports that Rest has any text.
 	More bool
 }
 

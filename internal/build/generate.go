@@ -2,6 +2,7 @@ package build
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"path/filepath"
@@ -31,6 +32,7 @@ type item struct {
 	row     dbgen.ListPublishedContentsRow
 	path    string
 	body    render.Result
+	rest    render.Result // body without the lead paragraph and first image
 	cats    []Link
 	tags    []Link
 	parents []int64 // ancestor ids, root first
@@ -210,6 +212,9 @@ func (g *generator) index() {
 			g.warn("%s: %s", what, w)
 		}
 		it.body = body
+		if row.Type == "page" {
+			it.rest = restOf(row.Body, opts)
+		}
 		g.items = append(g.items, it)
 		g.itemByID[row.ID] = it
 		g.itemByPath[it.path] = it
@@ -332,8 +337,44 @@ func (g *generator) summaryOf(it *item) Summary {
 	return Summary{
 		Title: g.title(it), URL: it.path, Lead: lead, Excerpt: excerpt(it.body.Text, 60),
 		Image: it.body.FirstImage,
-		More:  utf8.RuneCountInString(strings.TrimSpace(it.body.Text)) > utf8.RuneCountInString(lead)+20,
+		Rest:  it.rest.HTML,
+		More:  strings.TrimSpace(it.rest.Text) != "",
 	}
+}
+
+// restOf renders a body without its first top-level paragraph and first
+// top-level image: what is left once a theme shows those as a lead and a
+// picture. Errors yield an empty result.
+func restOf(raw []byte, opts render.Options) render.Result {
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return render.Result{}
+	}
+	blocks, _ := doc["content"].([]any)
+	var rest []any
+	droppedPara, droppedImage := false, false
+	for _, b := range blocks {
+		typ, _ := b.(map[string]any)["type"].(string)
+		switch {
+		case typ == "paragraph" && !droppedPara:
+			droppedPara = true
+			continue
+		case typ == "image" && !droppedImage:
+			droppedImage = true
+			continue
+		}
+		rest = append(rest, b)
+	}
+	doc["content"] = rest
+	out, err := json.Marshal(doc)
+	if err != nil {
+		return render.Result{}
+	}
+	res, err := render.Body(out, opts)
+	if err != nil {
+		return render.Result{}
+	}
+	return res
 }
 
 // topPages are the published pages without a parent, except the home

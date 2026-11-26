@@ -641,6 +641,7 @@ a.badge:hover {
 
 .cta a:not(.button) {
   color: #ffffff;
+  white-space: nowrap;
 }
 
 .cta :focus-visible {
