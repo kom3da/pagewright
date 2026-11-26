@@ -111,3 +111,8 @@ RETURNING id;
 -- name: ListScheduled :many
 SELECT id, scheduled_revision_id, scheduled_at FROM contents
 WHERE scheduled_revision_id IS NOT NULL ORDER BY scheduled_at;
+
+-- name: LockContent :one
+-- Locks the content row until the transaction ends, so concurrent saves of
+-- one content take turns.
+SELECT id FROM contents WHERE id = $1 FOR UPDATE;

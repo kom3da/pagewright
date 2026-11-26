@@ -8,7 +8,7 @@
 - キーは camelCase。日時は RFC 3339（UTC）。ID は数値、ユーザーとテナントの ID は UUID 文字列
 - 認証：HTTP-only の Cookie `pw_session`（SameSite=Lax、本番は Secure）
 - CSRF 対策：GET 以外は、ヘッダー `X-Pagewright: 1` を必ず付ける。付いていなければ 403
-- エラー：`{"error": {"code": "invalid_slug", "message": "ページのURLは英小文字・数字・ハイフンで入力してください"}}`。`message` は管理画面にそのまま出せる日本語
+- エラー：`{"error": {"code": "invalid_slug", "message": "ページのURLは英小文字・数字・ハイフンで入力してください", "field": "slug"}}`。`message` は管理画面にそのまま出せる日本語。`field` は入力欄に関係するエラーのときだけ付き、リクエストの項目名（`slug`、`title`、`parentId`、`name`、`altText`、`file`、`publishAt` など）が入る
   - 401 `unauthenticated`：ログインしていない
   - 403 `no_site`：サイトを選んでいない／`forbidden`：権限がない／`csrf`
   - 404 `not_found`、409 `conflict`（URL の重複など）、422 入力エラー（`code` は項目ごと）
@@ -83,7 +83,7 @@ type ContentDetail = ContentSummary & {
 | `GET /api/contents?type=post` | `type`：`post` / `page` | 200 `ContentSummary[]`（番号の降順） |
 | `POST /api/contents` | `{"type": "post"}` | 201 `ContentDetail`（空の版を 1 つ作る） |
 | `GET /api/contents/{id}` | | 200 `ContentDetail` |
-| `PUT /api/contents/{id}/draft` | `{"title": "...", "body": {...}, "fields": {...}}`（`fields` は省略可） | 200 `ContentDetail`。保存のたびに新しい版を作る |
+| `PUT /api/contents/{id}/draft` | `{"title": "...", "body": {...}, "fields": {...}, "baseRevisionId": 12}`（`fields`・`baseRevisionId` は省略可） | 200 `ContentDetail`。保存のたびに新しい版を作る。`baseRevisionId`（編集を始めたときの `revision.id`）が最新の版と違えば、ほかの人が先に保存したので 409 `edit_conflict` |
 | `PATCH /api/contents/{id}` | `{"slug"?: string \| null, "parentId"?: number \| null, "categoryIds"?: number[], "tagIds"?: number[]}` | 200 `ContentDetail`。公開中に URL が変わったら、古い URL はリダイレクトとして残す |
 | `POST /api/contents/{id}/publish` | なし | 200 `ContentDetail`。最新の版を公開し、サイトの再ビルドを予約する |
 | `POST /api/contents/{id}/unpublish` | なし | 200 `ContentDetail`。再ビルドを予約する |
@@ -107,12 +107,13 @@ type Tag = { id: number; name: string; slug: string };
 | `GET /api/categories` | | 200 `Category[]` |
 | `POST /api/categories` | `{"name", "slug", "parentId"?}` | 201 `Category` |
 | `PATCH /api/categories/{id}` | `{"name"?, "slug"?, "parentId"?, "position"?}` | 200 `Category` |
-| `DELETE /api/categories/{id}` | | 204 |
+| `DELETE /api/categories/{id}` | | 204。子カテゴリは一つ上の階層に移る |
 | `GET /api/tags` | | 200 `Tag[]` |
 | `POST /api/tags` | `{"name", "slug"}` | 201 `Tag` |
+| `PATCH /api/tags/{id}` | `{"name"?, "slug"?}` | 200 `Tag` |
 | `DELETE /api/tags/{id}` | | 204 |
 
-カテゴリとタグの slug も同じ検査。重複は 409 `conflict`。
+カテゴリとタグの slug も同じ検査。重複は 409 `conflict`。slug を変えると、古い URL はリダイレクトとして残る。
 
 ## メディア（画像）
 
@@ -137,6 +138,7 @@ type Media = {
 | `GET /api/media` | | 200 `Media[]`（新しい順） |
 | `GET /api/media/{id}/file` | | 画像そのもの |
 | `PATCH /api/media/{id}` | `{"altText"}` | 200 `Media` |
+| `DELETE /api/media/{id}` | | 204。最新・公開中・予約中のどれかの本文で使われていれば 409 `media_in_use` |
 
 本文に画像を入れるときは `image` ノードに `src = media.url`、`mediaId = media.id`、`alt` を入れる。管理画面のエディタでの表示には `mediaId` から `/api/media/{id}/file` を使う。
 

@@ -92,12 +92,14 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/categories/{id}", s.site(s.deleteCategory))
 	mux.Handle("GET /api/tags", s.site(s.listTags))
 	mux.Handle("POST /api/tags", s.site(s.createTag))
+	mux.Handle("PATCH /api/tags/{id}", s.site(s.patchTag))
 	mux.Handle("DELETE /api/tags/{id}", s.site(s.deleteTag))
 
 	mux.Handle("GET /api/media", s.site(s.listMedia))
 	mux.Handle("POST /api/media", s.site(s.uploadMedia))
 	mux.Handle("GET /api/media/{id}/file", s.site(s.mediaFile))
 	mux.Handle("PATCH /api/media/{id}", s.site(s.patchMedia))
+	mux.Handle("DELETE /api/media/{id}", s.site(s.deleteMedia))
 
 	mux.Handle("POST /api/site/build", s.site(s.buildSite))
 
@@ -250,7 +252,31 @@ func (s *Server) finish(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func errorBody(code, msg string) any {
-	return map[string]any{"error": map[string]string{"code": code, "message": msg}}
+	e := map[string]string{"code": code, "message": msg}
+	if f, ok := errorFields[code]; ok {
+		e["field"] = f
+	}
+	return map[string]any{"error": e}
+}
+
+// errorFields names the input field an error code is about, so the admin
+// can show the message next to it.
+var errorFields = map[string]string{
+	"invalid_email":      "email",
+	"invalid_type":       "type",
+	"invalid_title":      "title",
+	"invalid_body":       "body",
+	"invalid_fields":     "fields",
+	"invalid_slug":       "slug",
+	"reserved_slug":      "slug",
+	"conflict":           "slug",
+	"invalid_parent":     "parentId",
+	"invalid_name":       "name",
+	"invalid_publish_at": "publishAt",
+	"alt_required":       "altText",
+	"file_required":      "file",
+	"unsupported_type":   "file",
+	"too_large":          "file",
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

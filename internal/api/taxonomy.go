@@ -188,8 +188,71 @@ func (s *Server) patchCategory(w http.ResponseWriter, r *http.Request, sess *ses
 	return nil
 }
 
+// deleteCategory deletes a category; its children move up to its parent.
 func (s *Server) deleteCategory(w http.ResponseWriter, r *http.Request, sess *session) error {
-	return s.deleteTaxonomy(w, r, sess, (*dbgen.Queries).DeleteCategory)
+	return s.deleteTaxonomy(w, r, sess, func(q *dbgen.Queries, ctx context.Context, id int64) (int64, error) {
+		if err := q.ReparentCategoryChildren(ctx, id); err != nil {
+			return 0, err
+		}
+		return q.DeleteCategory(ctx, id)
+	})
+}
+
+func (s *Server) patchTag(w http.ResponseWriter, r *http.Request, sess *session) error {
+	id, err := pathID(r)
+	if err != nil {
+		return err
+	}
+	var in struct {
+		Name *string `json:"name"`
+		Slug *string `json:"slug"`
+	}
+	if err := decode(w, r, &in); err != nil {
+		return err
+	}
+	p := dbgen.UpdateTagParams{ID: id}
+	if in.Name != nil {
+		name, err := checkName(*in.Name)
+		if err != nil {
+			return err
+		}
+		p.Name = &name
+	}
+	ctx := r.Context()
+	var out tagJSON
+	err = s.DB.InTenantTx(ctx, func(tx pgx.Tx, q *dbgen.Queries) error {
+		cur, err := q.GetTag(ctx, id)
+		if err != nil {
+			return err
+		}
+		if in.Slug != nil && *in.Slug != cur.Slug {
+			if err := checkSlug(*in.Slug); err != nil {
+				return err
+			}
+			p.Slug = in.Slug
+		}
+		t, err := q.UpdateTag(ctx, p)
+		if err != nil {
+			return err
+		}
+		if t.Slug != cur.Slug {
+			route, err := q.GetCanonicalRouteForTag(ctx, &id)
+			hasRoute := err == nil
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return err
+			}
+			if err := routing.MoveCanonical(ctx, q, route, hasRoute, routing.TagPath(t.Slug), dbgen.CreateRouteParams{TagID: &id}); err != nil {
+				return err
+			}
+		}
+		out = tagJSON{ID: t.ID, Name: t.Name, Slug: t.Slug}
+		return s.enqueueBuild(ctx, tx, sess.tenantID)
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, out)
+	return nil
 }
 
 func (s *Server) deleteTag(w http.ResponseWriter, r *http.Request, sess *session) error {

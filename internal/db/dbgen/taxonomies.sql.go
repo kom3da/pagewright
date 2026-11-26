@@ -286,6 +286,18 @@ func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
 	return items, nil
 }
 
+const reparentCategoryChildren = `-- name: ReparentCategoryChildren :exec
+UPDATE categories
+SET parent_id = (SELECT p.parent_id FROM categories p WHERE p.id = $1)
+WHERE parent_id = $1
+`
+
+// Moves the children of a category up to its parent, before deleting it.
+func (q *Queries) ReparentCategoryChildren(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, reparentCategoryChildren, id)
+	return err
+}
+
 const updateCategory = `-- name: UpdateCategory :one
 UPDATE categories SET
   name = coalesce($1, name),
@@ -322,6 +334,33 @@ func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) 
 		&i.Name,
 		&i.Slug,
 		&i.Position,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateTag = `-- name: UpdateTag :one
+UPDATE tags SET
+  name = coalesce($1, name),
+  slug = coalesce($2, slug)
+WHERE id = $3
+RETURNING tenant_id, id, name, slug, created_at
+`
+
+type UpdateTagParams struct {
+	Name *string
+	Slug *string
+	ID   int64
+}
+
+func (q *Queries) UpdateTag(ctx context.Context, arg UpdateTagParams) (Tag, error) {
+	row := q.db.QueryRow(ctx, updateTag, arg.Name, arg.Slug, arg.ID)
+	var i Tag
+	err := row.Scan(
+		&i.TenantID,
+		&i.ID,
+		&i.Name,
+		&i.Slug,
 		&i.CreatedAt,
 	)
 	return i, err

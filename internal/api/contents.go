@@ -203,9 +203,10 @@ func (s *Server) saveDraft(w http.ResponseWriter, r *http.Request, sess *session
 		return err
 	}
 	var in struct {
-		Title  string          `json:"title"`
-		Body   json.RawMessage `json:"body"`
-		Fields json.RawMessage `json:"fields"`
+		Title          string          `json:"title"`
+		Body           json.RawMessage `json:"body"`
+		Fields         json.RawMessage `json:"fields"`
+		BaseRevisionID *int64          `json:"baseRevisionId"`
 	}
 	if err := decode(w, r, &in); err != nil {
 		return err
@@ -228,12 +229,15 @@ func (s *Server) saveDraft(w http.ResponseWriter, r *http.Request, sess *session
 	ctx := r.Context()
 	var d contentDetail
 	err = s.DB.InTenant(ctx, func(q *dbgen.Queries) error {
-		if _, err := q.GetContent(ctx, id); err != nil {
+		if _, err := q.LockContent(ctx, id); err != nil {
 			return err
 		}
 		prev, err := q.GetLatestRevision(ctx, id)
 		if err != nil {
 			return err
+		}
+		if in.BaseRevisionID != nil && *in.BaseRevisionID != prev.ID {
+			return &apiError{http.StatusConflict, "edit_conflict", "ほかの人がこの内容を先に保存しました。いまの編集内容を控えてから、画面を読み込み直してください"}
 		}
 		if sess.role != "admin" {
 			prevDoc, err := body.Parse(prev.Body)

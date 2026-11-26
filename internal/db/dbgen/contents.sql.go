@@ -467,6 +467,19 @@ func (q *Queries) ListScheduled(ctx context.Context) ([]ListScheduledRow, error)
 	return items, nil
 }
 
+const lockContent = `-- name: LockContent :one
+SELECT id FROM contents WHERE id = $1 FOR UPDATE
+`
+
+// Locks the content row until the transaction ends, so concurrent saves of
+// one content take turns.
+func (q *Queries) LockContent(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, lockContent, id)
+	var id_2 int64
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const publishRevision = `-- name: PublishRevision :execrows
 UPDATE contents
 SET published_revision_id = $1,

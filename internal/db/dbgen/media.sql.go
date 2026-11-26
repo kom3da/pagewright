@@ -58,6 +58,17 @@ func (q *Queries) CreateMedia(ctx context.Context, arg CreateMediaParams) (Mediu
 	return i, err
 }
 
+const deleteMedia = `-- name: DeleteMedia :one
+DELETE FROM media WHERE id = $1 RETURNING storage_key
+`
+
+func (q *Queries) DeleteMedia(ctx context.Context, id int64) (string, error) {
+	row := q.db.QueryRow(ctx, deleteMedia, id)
+	var storage_key string
+	err := row.Scan(&storage_key)
+	return storage_key, err
+}
+
 const getMedia = `-- name: GetMedia :one
 SELECT tenant_id, id, storage_key, filename, content_type, size_bytes, width, height, alt_text, uploaded_by, created_at FROM media WHERE id = $1
 `
@@ -115,6 +126,26 @@ func (q *Queries) ListMedia(ctx context.Context) ([]Medium, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const mediaInUse = `-- name: MediaInUse :one
+SELECT EXISTS (
+  SELECT FROM contents c
+  JOIN content_revisions r ON r.content_id = c.id
+  WHERE (r.id = c.published_revision_id OR r.id = c.scheduled_revision_id
+         OR r.id = (SELECT max(l.id) FROM content_revisions l WHERE l.content_id = c.id))
+    AND jsonb_path_exists(r.body, '$.** ? (@.type == "image" && @.attrs.mediaId == $id)',
+                          jsonb_build_object('id', $1::bigint))
+)::boolean AS in_use
+`
+
+// Whether the latest, published or scheduled revision of any content shows
+// the image.
+func (q *Queries) MediaInUse(ctx context.Context, mediaID int64) (bool, error) {
+	row := q.db.QueryRow(ctx, mediaInUse, mediaID)
+	var in_use bool
+	err := row.Scan(&in_use)
+	return in_use, err
 }
 
 const updateMediaAlt = `-- name: UpdateMediaAlt :one

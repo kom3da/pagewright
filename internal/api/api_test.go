@@ -533,7 +533,9 @@ func TestTenantIsolation(t *testing.T) {
 		{http.MethodDelete, fmt.Sprintf("/api/contents/%d", bPost.ID), nil},
 		{http.MethodPatch, fmt.Sprintf("/api/categories/%d", bCat.ID), map[string]any{"name": "x"}},
 		{http.MethodDelete, fmt.Sprintf("/api/categories/%d", bCat.ID), nil},
+		{http.MethodPatch, fmt.Sprintf("/api/tags/%d", bTag.ID), map[string]any{"name": "x"}},
 		{http.MethodDelete, fmt.Sprintf("/api/tags/%d", bTag.ID), nil},
+		{http.MethodDelete, fmt.Sprintf("/api/media/%d", bMedia.ID), nil},
 		{http.MethodGet, fmt.Sprintf("/api/media/%d/file", bMedia.ID), nil},
 		{http.MethodPatch, fmt.Sprintf("/api/media/%d", bMedia.ID), map[string]any{"altText": "x"}},
 	}
@@ -595,5 +597,93 @@ func TestSchedule(t *testing.T) {
 	alice.mustDo(http.MethodDelete, path, nil, &d, http.StatusOK)
 	if d.Status != "draft" || d.ScheduledAt != nil {
 		t.Errorf("after unschedule = %+v, want draft", d)
+	}
+}
+
+func TestErrorField(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	d := alice.newContent("post", "x", false)
+	var out struct {
+		Error struct{ Code, Field string } `json:"error"`
+	}
+	if got := alice.do(http.MethodPatch, fmt.Sprintf("/api/contents/%d", d.ID), map[string]any{"slug": "日本語"}, &out); got != http.StatusUnprocessableEntity || out.Error.Field != "slug" {
+		t.Errorf("bad slug = %d %+v, want 422 with field slug", got, out.Error)
+	}
+}
+
+func TestEditConflict(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	d := alice.newContent("post", "最初", false)
+	base := d.Revision.ID
+	path := fmt.Sprintf("/api/contents/%d/draft", d.ID)
+
+	// Someone else saves first.
+	alice.mustDo(http.MethodPut, path, map[string]any{"title": "他の人", "body": json.RawMessage(paragraph), "baseRevisionId": base}, &d, http.StatusOK)
+	if got, code := alice.errorCode(http.MethodPut, path, map[string]any{"title": "私", "body": json.RawMessage(paragraph), "baseRevisionId": base}); got != http.StatusConflict || code != "edit_conflict" {
+		t.Errorf("save on a stale base = %d %s, want 409 edit_conflict", got, code)
+	}
+	alice.mustDo(http.MethodPut, path, map[string]any{"title": "私", "body": json.RawMessage(paragraph), "baseRevisionId": d.Revision.ID}, nil, http.StatusOK)
+}
+
+func TestTagEditAndMediaDelete(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+
+	var tag struct {
+		ID   int64
+		Slug string
+	}
+	alice.mustDo(http.MethodPost, "/api/tags", map[string]any{"name": "旧", "slug": "old"}, &tag, http.StatusCreated)
+	alice.mustDo(http.MethodPatch, fmt.Sprintf("/api/tags/%d", tag.ID), map[string]any{"name": "新", "slug": "new"}, &tag, http.StatusOK)
+	var kinds []string
+	rows, err := e.db.Admin.Query(context.Background(), "SELECT path || ' ' || kind FROM routes WHERE tag_id = $1 ORDER BY path", tag.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var k string
+		_ = rows.Scan(&k)
+		kinds = append(kinds, k)
+	}
+	rows.Close()
+	if diff := cmp.Diff([]string{"/posts/tag/new/ canonical", "/posts/tag/old/ redirect"}, kinds); diff != "" {
+		t.Errorf("tag routes (-want +got):\n%s", diff)
+	}
+
+	var used, unused mediaOut
+	alice.upload("a.png", pngBytes(t), "使う画像", &used)
+	alice.upload("b.png", pngBytes(t), "使わない画像", &unused)
+	d := alice.newContent("post", "画像つき", false)
+	body := fmt.Sprintf(`{"type":"doc","content":[{"type":"image","attrs":{"src":%q,"alt":"使う画像","mediaId":%d}}]}`, used.URL, used.ID)
+	alice.mustDo(http.MethodPut, fmt.Sprintf("/api/contents/%d/draft", d.ID), map[string]any{"title": "画像つき", "body": json.RawMessage(body)}, nil, http.StatusOK)
+
+	if got, code := alice.errorCode(http.MethodDelete, fmt.Sprintf("/api/media/%d", used.ID), nil); got != http.StatusConflict || code != "media_in_use" {
+		t.Errorf("deleting a used image = %d %s, want 409 media_in_use", got, code)
+	}
+	alice.mustDo(http.MethodDelete, fmt.Sprintf("/api/media/%d", unused.ID), nil, nil, http.StatusNoContent)
+	if got, _ := alice.errorCode(http.MethodGet, fmt.Sprintf("/api/media/%d/file", unused.ID), nil); got != http.StatusNotFound {
+		t.Errorf("deleted image file = %d, want 404", got)
+	}
+}
+
+func TestDeleteParentCategory(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	var parent, child struct {
+		ID       int64
+		ParentID *int64
+	}
+	alice.mustDo(http.MethodPost, "/api/categories", map[string]any{"name": "親", "slug": "parent"}, &parent, http.StatusCreated)
+	alice.mustDo(http.MethodPost, "/api/categories", map[string]any{"name": "子", "slug": "child", "parentId": parent.ID}, &child, http.StatusCreated)
+	alice.mustDo(http.MethodDelete, fmt.Sprintf("/api/categories/%d", parent.ID), nil, nil, http.StatusNoContent)
+	var cats []struct {
+		ID       int64
+		ParentID *int64
+	}
+	alice.mustDo(http.MethodGet, "/api/categories", nil, &cats, http.StatusOK)
+	if len(cats) != 1 || cats[0].ID != child.ID || cats[0].ParentID != nil {
+		t.Errorf("categories after deleting the parent = %+v, want the child at the top", cats)
 	}
 }

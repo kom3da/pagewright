@@ -13,3 +13,18 @@ SELECT * FROM media ORDER BY id DESC;
 
 -- name: UpdateMediaAlt :one
 UPDATE media SET alt_text = @alt_text WHERE id = @id RETURNING *;
+
+-- name: MediaInUse :one
+-- Whether the latest, published or scheduled revision of any content shows
+-- the image.
+SELECT EXISTS (
+  SELECT FROM contents c
+  JOIN content_revisions r ON r.content_id = c.id
+  WHERE (r.id = c.published_revision_id OR r.id = c.scheduled_revision_id
+         OR r.id = (SELECT max(l.id) FROM content_revisions l WHERE l.content_id = c.id))
+    AND jsonb_path_exists(r.body, '$.** ? (@.type == "image" && @.attrs.mediaId == $id)',
+                          jsonb_build_object('id', @media_id::bigint))
+)::boolean AS in_use;
+
+-- name: DeleteMedia :one
+DELETE FROM media WHERE id = $1 RETURNING storage_key;

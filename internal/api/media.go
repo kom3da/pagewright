@@ -168,6 +168,39 @@ func (s *Server) mediaFile(w http.ResponseWriter, r *http.Request, sess *session
 	return nil
 }
 
+// deleteMedia deletes an image that no current, published or scheduled
+// revision shows. Older revisions may keep pointing at it.
+func (s *Server) deleteMedia(w http.ResponseWriter, r *http.Request, sess *session) error {
+	id, err := pathID(r)
+	if err != nil {
+		return err
+	}
+	ctx := r.Context()
+	var key string
+	err = s.DB.InTenant(ctx, func(q *dbgen.Queries) error {
+		if _, err := q.GetMedia(ctx, id); err != nil {
+			return err
+		}
+		inUse, err := q.MediaInUse(ctx, id)
+		if err != nil {
+			return err
+		}
+		if inUse {
+			return &apiError{Status: http.StatusConflict, Code: "media_in_use", Message: "この画像は記事やページで使われているため削除できません。先に本文から外してください"}
+		}
+		key, err = q.DeleteMedia(ctx, id)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	if err := s.Media.Remove(sess.tenantID, key); err != nil {
+		s.Logger.Error("remove media file", "key", key, "err", err)
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
 func (s *Server) patchMedia(w http.ResponseWriter, r *http.Request, _ *session) error {
 	id, err := pathID(r)
 	if err != nil {

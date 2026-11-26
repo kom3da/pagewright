@@ -55,3 +55,16 @@ SELECT * FROM tags WHERE id = $1;
 
 -- name: DeleteTag :execrows
 DELETE FROM tags WHERE id = $1;
+
+-- name: UpdateTag :one
+UPDATE tags SET
+  name = coalesce(sqlc.narg(name), name),
+  slug = coalesce(sqlc.narg(slug), slug)
+WHERE id = @id
+RETURNING *;
+
+-- name: ReparentCategoryChildren :exec
+-- Moves the children of a category up to its parent, before deleting it.
+UPDATE categories
+SET parent_id = (SELECT p.parent_id FROM categories p WHERE p.id = @id)
+WHERE parent_id = @id;
