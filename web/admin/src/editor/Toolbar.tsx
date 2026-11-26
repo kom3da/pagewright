@@ -1,3 +1,4 @@
+import { ActionIcon, Button, Divider, Tooltip } from "@mantine/core";
 import { type Editor, useEditorState } from "@tiptap/react";
 import {
   Bold,
@@ -35,30 +36,36 @@ type ButtonProps = {
 };
 
 /**
- * Toolbar button. Uses aria-disabled instead of disabled so that it stays reachable
- * with the arrow keys (WAI-ARIA toolbar pattern).
+ * Toolbar button: an icon button with a tooltip, or a small text button. Uses aria-disabled
+ * (with Mantine's data-disabled look) instead of disabled so that it stays reachable with
+ * the arrow keys (WAI-ARIA toolbar pattern).
  */
 function ToolButton({ label, icon: Icon, text, pressed, disabled, onClick }: ButtonProps) {
-  return (
-    <button
-      type="button"
-      aria-label={text ? undefined : label}
-      title={label}
-      aria-pressed={pressed}
-      aria-disabled={disabled || undefined}
-      onClick={() => {
-        if (!disabled) onClick();
-      }}
-      className={classes.button}
-    >
-      {Icon && <Icon aria-hidden="true" size={18} />}
+  const common = {
+    variant: pressed ? "light" : "subtle",
+    color: pressed ? "brand" : "gray",
+    "aria-pressed": pressed,
+    "aria-disabled": disabled || undefined,
+    "data-disabled": disabled || undefined,
+    onClick: () => {
+      if (!disabled) onClick();
+    },
+    className: classes.button,
+  } as const;
+  const button = Icon ? (
+    <ActionIcon {...common} size="2.25rem" aria-label={label}>
+      <Icon aria-hidden="true" size={18} />
+    </ActionIcon>
+  ) : (
+    <Button {...common} size="sm" px="xs">
       {text}
-    </button>
+    </Button>
   );
+  return text === label ? button : <Tooltip label={label}>{button}</Tooltip>;
 }
 
 function Separator() {
-  return <span aria-hidden="true" className={classes.separator} />;
+  return <Divider orientation="vertical" aria-hidden="true" mx={4} my={6} />;
 }
 
 /** Arrow-key navigation between toolbar buttons with a single Tab stop. */

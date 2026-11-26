@@ -1,7 +1,8 @@
+/* Stays visible (under the editor's action bar) while scrolling a long body. */
 .toolbar {
   position: sticky;
-  top: 0;
-  z-index: 10;
+  top: calc(var(--app-shell-header-offset, 0rem) + var(--pw-editor-bar, 0rem));
+  z-index: 5;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -13,39 +14,12 @@
   background: var(--mantine-color-gray-0);
 }
 
+/* 36px targets. Disabled buttons stay focusable (aria-disabled), so they keep the
+   toolbar's background instead of Mantine's grey disabled fill. */
 .button {
-  display: inline-flex;
   min-width: 2.25rem;
-  min-height: 2.25rem;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 0 0.5rem;
-  border: 0;
-  border-radius: var(--mantine-radius-xs);
+  height: 2.25rem;
+}
+.button[data-disabled] {
   background: transparent;
-  color: var(--mantine-color-gray-8);
-  font: inherit;
-  font-size: var(--mantine-font-size-sm);
-  font-weight: 600;
-  cursor: pointer;
-}
-.button:hover {
-  background: var(--mantine-color-gray-2);
-}
-.button[aria-pressed="true"] {
-  background: var(--mantine-color-brand-1);
-  color: var(--mantine-color-brand-9);
-}
-.button[aria-disabled="true"] {
-  background: transparent;
-  color: var(--mantine-color-gray-5);
-  cursor: not-allowed;
-}
-
-.separator {
-  width: 1px;
-  height: 1.5rem;
-  margin: 0 4px;
-  background: var(--mantine-color-gray-3);
 }

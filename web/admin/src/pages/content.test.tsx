@@ -248,6 +248,29 @@ describe("editor", () => {
     expect(JSON.stringify(put?.body)).toContain('"marks":[{"type":"bold"}]');
   });
 
+  it("moves between toolbar buttons with the arrow keys, including disabled ones", async () => {
+    const { user } = await openEditor();
+    const toolbar = screen.getByRole("toolbar", { name: "本文の書式" });
+    const buttons = within(toolbar).getAllByRole("button");
+    expect(buttons.filter((b) => b.tabIndex === 0)).toEqual([buttons[0]]);
+
+    await user.click(screen.getByLabelText("タイトル"));
+    await user.tab();
+    expect(within(toolbar).getByRole("button", { name: "本文（段落）" })).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    expect(within(toolbar).getByRole("button", { name: "大見出し" })).toHaveFocus();
+    await user.keyboard("{End}");
+    const redo = within(toolbar).getByRole("button", { name: "やり直す" });
+    expect(redo).toHaveFocus();
+    expect(redo).toHaveAttribute("aria-disabled", "true");
+    await user.keyboard("{ArrowRight}");
+    expect(within(toolbar).getByRole("button", { name: "本文（段落）" })).toHaveFocus();
+    await user.keyboard("{ArrowLeft}");
+    expect(redo).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("textbox", { name: "本文" })).toHaveFocus();
+  });
+
   it("inserts the contact form from the toolbar and saves it as a contactForm block", async () => {
     const requests = recordRequests();
     const { user } = await openEditor();
