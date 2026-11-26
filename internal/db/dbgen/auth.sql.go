@@ -11,6 +11,17 @@ import (
 	"github.com/google/uuid"
 )
 
+const authCleanup = `-- name: AuthCleanup :one
+SELECT auth_cleanup()::bigint AS removed
+`
+
+func (q *Queries) AuthCleanup(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, authCleanup)
+	var removed int64
+	err := row.Scan(&removed)
+	return removed, err
+}
+
 const authLogin = `-- name: AuthLogin :one
 SELECT auth_login($1::bytea, $2::bytea, ($3::bigint || ' seconds')::interval)::uuid AS user_id
 `

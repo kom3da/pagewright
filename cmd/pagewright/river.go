@@ -28,10 +28,11 @@ func newRiver(d *db.DB, cfg config.Config) (*river.Client[pgx.Tx], error) {
 		slog.Info("Pagefind が見つからないため、公開サイトの検索は作りません（mise install で入ります）")
 	}
 	c, err := river.NewClient(riverpgxv5.New(d.Pool()), &river.Config{
-		Schema:  riverSchema,
-		Queues:  map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 2}},
-		Workers: workers,
-		Logger:  slog.Default(),
+		Schema:       riverSchema,
+		Queues:       map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 2}},
+		Workers:      workers,
+		PeriodicJobs: jobs.PeriodicJobs(),
+		Logger:       slog.Default(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("river client: %w", err)

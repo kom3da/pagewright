@@ -122,3 +122,38 @@ func TestAppCannotReadAuthTables(t *testing.T) {
 		}
 	}
 }
+
+func TestAuthCleanup(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	q := e.db.Queries()
+	for _, tok := range []string{"old-link", "new-link"} {
+		if _, err := q.AuthRequestLogin(ctx, dbgen.AuthRequestLoginParams{Email: "alice@example.com", TokenHash: hash(tok), TtlSeconds: 900}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := q.AuthLogin(ctx, dbgen.AuthLoginParams{LoginTokenHash: hash("new-link"), SessionTokenHash: hash("live"), TtlSeconds: 3600}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.AuthRequestLogin(ctx, dbgen.AuthRequestLoginParams{Email: "alice@example.com", TokenHash: hash("link3"), TtlSeconds: 900}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.AuthLogin(ctx, dbgen.AuthLoginParams{LoginTokenHash: hash("link3"), SessionTokenHash: hash("dead"), TtlSeconds: 3600}); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{
+		"UPDATE login_tokens SET expires_at = now() - interval '2 days' WHERE token_hash = sha256('old-link')",
+		"UPDATE sessions SET expires_at = now() - interval '1 second' WHERE token_hash = sha256('dead')",
+	} {
+		if _, err := e.admin.Exec(ctx, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n, err := q.AuthCleanup(ctx)
+	if err != nil || n != 2 {
+		t.Fatalf("AuthCleanup = %d, %v; want 2 removed", n, err)
+	}
+	if _, err := q.AuthSession(ctx, hash("live")); err != nil {
+		t.Errorf("live session removed: %v", err)
+	}
+}

@@ -20,3 +20,6 @@ SELECT auth_select_site(@token_hash::bytea, @tenant_id::uuid)::boolean AS ok;
 
 -- name: AuthLogout :exec
 SELECT auth_logout(@token_hash::bytea);
+
+-- name: AuthCleanup :one
+SELECT auth_cleanup()::bigint AS removed;
