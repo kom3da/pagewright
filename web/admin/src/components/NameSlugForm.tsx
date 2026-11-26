@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { ReactNode } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
-import { isApiError } from "../api/client";
+import { errorField, isApiError } from "../api/client";
 import { slugSchema } from "../lib/slug";
 import { Button } from "./ui/Button";
 import { Field, inputClass, TextField } from "./ui/Field";
@@ -50,8 +50,9 @@ export function NameSlugForm({
       await onSubmit(values);
       form.reset();
     } catch (e) {
-      if (isApiError(e, 409) || isApiError(e, 422, "invalid_slug")) {
-        form.setError("slug", { message: e.message }, { shouldFocus: true });
+      const field = errorField(e);
+      if (isApiError(e) && (field === "name" || field === "slug" || field === "parentId")) {
+        form.setError(field, { message: e.message }, { shouldFocus: true });
       } else if (isApiError(e)) {
         form.setError("root", { message: e.message });
       } else {
@@ -83,11 +84,12 @@ export function NameSlugForm({
           <Controller
             control={form.control}
             name="parentId"
-            render={({ field }) => (
-              <Field label="親カテゴリ">
+            render={({ field, fieldState }) => (
+              <Field label="親カテゴリ" error={fieldState.error?.message}>
                 {(ids) => (
                   <select
                     {...ids}
+                    ref={field.ref}
                     value={field.value}
                     onChange={field.onChange}
                     className={inputClass}

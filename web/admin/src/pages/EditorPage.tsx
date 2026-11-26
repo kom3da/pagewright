@@ -2,29 +2,33 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, ExternalLink } from "lucide-react";
-import { type KeyboardEvent, useRef, useState } from "react";
+import { type KeyboardEvent, type Ref, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
-import { api, errorMessage, isApiError } from "../api/client";
+import { api, errorField, errorMessage, isApiError } from "../api/client";
 import { contentQuery, contentsQuery } from "../api/queries";
 import type { ContentDetail, ContentPatch, ContentSummary, ContentType } from "../api/types";
 import { CategoryCheckboxes } from "../components/CategoryCheckboxes";
+import { ScheduleDialog, type ScheduleError } from "../components/ScheduleDialog";
 import { TagPicker } from "../components/TagPicker";
 import { useNotify } from "../components/Toaster";
 import { Button } from "../components/ui/Button";
-import { ConfirmDialog } from "../components/ui/Dialog";
+import { ConfirmDialog, Dialog } from "../components/ui/Dialog";
 import { Field, inputClass } from "../components/ui/Field";
 import {
   ErrorMessage,
   formatDateTime,
   Loading,
   PageHeading,
+  ScheduledUpdateBadge,
   StatusBadge,
   UnpublishedBadge,
 } from "../components/ui/misc";
 import { publicUrl } from "../config";
 import { BodyEditor, useBodyEditor } from "../editor/BodyEditor";
-import { normalizeBody } from "../editor/normalize";
+import { editorContent, normalizeBody } from "../editor/normalize";
+import { formatJapanDateTime } from "../lib/datetime";
+import { descendantPageIds, pageRows } from "../lib/pageTree";
 import { optionalSlugSchema } from "../lib/slug";
 
 const typeLabels = { post: "記事", page: "固定ページ" } as const;
@@ -65,7 +69,7 @@ const toPatch = (s: Settings): ContentPatch => ({
   tagIds: s.tagIds,
 });
 
-type Busy = "save" | "publish" | "unpublish" | "delete" | null;
+type Busy = "save" | "publish" | "unpublish" | "schedule" | "unschedule" | "delete" | null;
 
 function EditorForm({ content: initial }: { content: ContentDetail }) {
   const { id, type } = initial;
@@ -80,6 +84,11 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   const [savedTitle, setSavedTitle] = useState(initial.revision.title);
   const [titleError, setTitleError] = useState<string>();
   const titleRef = useRef<HTMLInputElement>(null);
+
+  // The revision this editor's content is based on. Sent with every draft save so the
+  // server can tell when someone else saved in between (409 edit_conflict).
+  const baseRevisionId = useRef(initial.revision.id);
+  const [conflict, setConflict] = useState(false);
 
   const bodyChanges = useRef(0);
   const [bodyDirty, setBodyDirty] = useState(false);
@@ -99,6 +108,8 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   const [busy, setBusy] = useState<Busy>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"unpublish" | "delete" | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleError, setScheduleError] = useState<ScheduleError | null>(null);
 
   const titleDirty = title !== savedTitle;
   const dirty = titleDirty || bodyDirty || settingsDirty;
@@ -113,10 +124,26 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
     withResolver: true,
   });
 
-  const showSlugError = (message?: string) => {
-    if (message) form.setError("slug", { message });
+  const showSettingsError = (name: "slug" | "parentId", message?: string) => {
+    if (message) form.setError(name, { message });
     setDetailsOpen(true);
-    setTimeout(() => form.setFocus("slug"));
+    setTimeout(() => form.setFocus(name));
+  };
+
+  /** Shows an API error at the input it is about. Returns false when it is not about one. */
+  const showFieldError = (e: unknown) => {
+    const field = errorField(e);
+    if (!isApiError(e) || !field) return false;
+    if (field === "title") {
+      setTitleError(e.message);
+      titleRef.current?.focus();
+      return true;
+    }
+    if (field === "slug" || field === "parentId") {
+      showSettingsError(field, e.message);
+      return true;
+    }
+    return false;
   };
 
   const update = (detail: ContentDetail) => {
@@ -127,7 +154,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   /** Saves settings and the draft if they changed. Returns null when input is invalid. */
   const persist = async (): Promise<ContentDetail | null> => {
     if (!(await form.trigger())) {
-      showSlugError();
+      showSettingsError("slug");
       return null;
     }
     let detail = content;
@@ -135,10 +162,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       try {
         detail = await api.patchContent(id, toPatch(form.getValues()));
       } catch (e) {
-        if (isApiError(e, 409) || isApiError(e, 422, "invalid_slug")) {
-          showSlugError(e.message);
-          return null;
-        }
+        if (showFieldError(e)) return null;
         throw e;
       }
       form.reset(settingsFrom(detail));
@@ -146,11 +170,22 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
     if (titleDirty || bodyDirty) {
       const sentTitle = title;
       const sentChanges = bodyChanges.current;
-      detail = await api.saveDraft(id, {
-        title: sentTitle,
-        body: normalizeBody(editor.getJSON()),
-        fields: content.revision.fields,
-      });
+      try {
+        // `fields` is not edited here; leaving it out keeps the latest revision's fields.
+        detail = await api.saveDraft(id, {
+          title: sentTitle,
+          body: normalizeBody(editor.getJSON()),
+          baseRevisionId: baseRevisionId.current,
+        });
+      } catch (e) {
+        if (isApiError(e, 409, "edit_conflict")) {
+          setConflict(true);
+          return null;
+        }
+        if (showFieldError(e)) return null;
+        throw e;
+      }
+      baseRevisionId.current = detail.revision.id;
       setSavedTitle(sentTitle);
       // Keep the dirty flag if the user kept typing while saving.
       if (bodyChanges.current === sentChanges) setBodyDirty(false);
@@ -183,14 +218,54 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
 
   const publish = () =>
     run("publish", async () => {
-      if (!title.trim()) {
-        setTitleError("公開するにはタイトルを入力してください。");
-        titleRef.current?.focus();
+      if (!requireTitle("公開するにはタイトルを入力してください。")) return;
+      if (!(await persist())) return;
+      let detail = await api.publish(id);
+      // The latest revision is live now, so a pending schedule could only republish the
+      // same or an older revision.
+      const hadSchedule = detail.scheduledAt !== null;
+      if (hadSchedule) detail = await api.unschedule(id);
+      update(detail);
+      notify(
+        `公開しました。${hadSchedule ? "予約は取り消しました。" : ""}公開サイトに反映されるまで少しお待ちください。`,
+      );
+    });
+
+  const requireTitle = (message: string) => {
+    if (title.trim()) return true;
+    setTitleError(message);
+    titleRef.current?.focus();
+    return false;
+  };
+
+  const openSchedule = () => {
+    if (!requireTitle("予約するにはタイトルを入力してください。")) return;
+    setScheduleError(null);
+    setScheduleOpen(true);
+  };
+
+  const schedule = (publishAt: string) =>
+    run("schedule", async () => {
+      setScheduleError(null);
+      try {
+        // Save first so that what the user sees is what gets scheduled.
+        if (!(await persist())) {
+          setScheduleOpen(false);
+          return;
+        }
+        update(await api.schedule(id, publishAt));
+      } catch (e) {
+        setScheduleError({ message: errorMessage(e), field: errorField(e) === "publishAt" });
         return;
       }
-      if (!(await persist())) return;
-      update(await api.publish(id));
-      notify("公開しました。公開サイトに反映されるまで少しお待ちください。");
+      setScheduleOpen(false);
+      notify(`${formatJapanDateTime(publishAt)}に公開するよう予約しました。`);
+    });
+
+  const unschedule = () =>
+    run("unschedule", async () => {
+      update(await api.unschedule(id));
+      notify("予約を取り消しました。");
     });
 
   const unpublish = () =>
@@ -211,6 +286,33 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       await navigate({ to: type === "post" ? "/posts" : "/pages" });
     });
 
+  // Edit conflict: either discard local edits and load the latest revision, or save the
+  // local edits on top of it.
+  const loadLatest = () =>
+    run("save", async () => {
+      const latest = await api.getContent(id);
+      baseRevisionId.current = latest.revision.id;
+      setTitle(latest.revision.title);
+      setSavedTitle(latest.revision.title);
+      setTitleError(undefined);
+      editor.commands.setContent(editorContent(latest.revision.body) ?? "", {
+        emitUpdate: false,
+      });
+      setBodyDirty(false);
+      form.reset(settingsFrom(latest));
+      update(latest);
+      setConflict(false);
+      notify("最新の内容を読み込みました。");
+    });
+
+  const overwrite = () =>
+    run("save", async () => {
+      const latest = await api.getContent(id);
+      baseRevisionId.current = latest.revision.id;
+      setConflict(false);
+      if (await persist()) notify("自分の内容で上書きして保存しました。");
+    });
+
   const onKeyDown = (e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "s") {
       e.preventDefault();
@@ -218,7 +320,10 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
     }
   };
 
-  const isPublic = content.status !== "draft";
+  const isPublic = content.status === "published";
+  // Saved after scheduling: the schedule still points at an older revision.
+  const scheduleOutdated =
+    content.scheduledRevisionId !== null && content.scheduledRevisionId !== content.revision.id;
   const slug = form.watch("slug");
   const parentId = form.watch("parentId");
   const pages = useQuery({ ...contentsQuery("page"), enabled: type === "page" }).data ?? [];
@@ -238,7 +343,10 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         <PageHeading title={`${label}の編集`}>{label}の編集</PageHeading>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <StatusBadge status={content.status} />
-          {content.hasUnpublishedChanges && isPublic && <UnpublishedBadge />}
+          {isPublic && content.scheduledAt && <ScheduledUpdateBadge />}
+          {isPublic &&
+            content.hasUnpublishedChanges &&
+            content.scheduledRevisionId !== content.revision.id && <UnpublishedBadge />}
           {content.url && (
             <a
               href={publicUrl(content.url)}
@@ -263,7 +371,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
             value={title}
             onChange={(e) => {
               setTitle(e.target.value);
-              if (e.target.value.trim()) setTitleError(undefined);
+              setTitleError(undefined);
             }}
             className={`${inputClass} text-xl font-bold`}
           />
@@ -311,11 +419,14 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
             <Controller
               control={form.control}
               name="parentId"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <ParentSelect
-                  pages={pages.filter((p) => p.id !== id)}
+                  ref={field.ref}
+                  pages={pages}
+                  self={id}
                   value={field.value}
                   onChange={field.onChange}
+                  error={fieldState.error?.message}
                 />
               )}
             />
@@ -341,6 +452,24 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
 
       <div className="sticky bottom-0 z-10 -mx-4 space-y-3 border-t border-slate-300 bg-slate-50/95 px-4 py-3">
         {actionError && <ErrorMessage>{actionError}</ErrorMessage>}
+        {content.scheduledAt && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-amber-700 bg-amber-50 px-3 py-2">
+            <div>
+              <p className="font-semibold text-amber-900">
+                {isPublic ? "更新の予約" : "予約"}：{formatJapanDateTime(content.scheduledAt)}
+                に公開
+              </p>
+              {scheduleOutdated && (
+                <p className="text-sm text-slate-800">
+                  予約したあとに保存した変更は、この予約に含まれていません。含めるには予約し直してください。
+                </p>
+              )}
+            </div>
+            <Button onClick={unschedule} disabled={busy !== null}>
+              {busy === "unschedule" ? "取り消しています…" : "予約を取り消す"}
+            </Button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="secondary" onClick={save} disabled={busy !== null}>
             {busy === "save" ? "保存しています…" : "下書き保存"}
@@ -351,6 +480,9 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
               : content.status === "published"
                 ? "変更を公開する"
                 : "公開する"}
+          </Button>
+          <Button onClick={openSchedule} disabled={busy !== null}>
+            {content.scheduledAt ? "予約し直す" : "日時を指定して公開"}
           </Button>
           {isPublic && (
             <Button onClick={() => setConfirm("unpublish")} disabled={busy !== null}>
@@ -375,7 +507,11 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         open={confirm === "unpublish"}
         onOpenChange={(o) => !o && setConfirm(null)}
         title="公開をやめますか？"
-        description={`この${label}は公開サイトから見えなくなります。内容は下書きとして残ります。`}
+        description={
+          content.scheduledAt
+            ? `この${label}は公開サイトから見えなくなります。予約は残るため、${formatJapanDateTime(content.scheduledAt)}にふたたび公開されます。`
+            : `この${label}は公開サイトから見えなくなります。内容は下書きとして残ります。`
+        }
         confirmLabel="公開をやめる"
         onConfirm={unpublish}
       />
@@ -387,6 +523,23 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         confirmLabel="削除する"
         danger
         onConfirm={remove}
+      />
+      <ScheduleDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        scheduledAt={content.scheduledAt}
+        busy={busy === "schedule"}
+        error={scheduleError}
+        onSubmit={schedule}
+      />
+      <ConflictDialog
+        open={conflict}
+        onClose={() => setConflict(false)}
+        label={label}
+        myText={conflict ? `${title}\n\n${editor.getText({ blockSeparator: "\n" })}` : ""}
+        busy={busy !== null}
+        onLoadLatest={loadLatest}
+        onOverwrite={overwrite}
       />
       <ConfirmDialog
         open={blocker.status === "blocked"}
@@ -402,6 +555,62 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   );
 }
 
+function ConflictDialog({
+  open,
+  onClose,
+  label,
+  myText,
+  busy,
+  onLoadLatest,
+  onOverwrite,
+}: {
+  open: boolean;
+  onClose: () => void;
+  label: string;
+  myText: string;
+  busy: boolean;
+  onLoadLatest: () => void;
+  onOverwrite: () => void;
+}) {
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title="ほかの人が先に保存しました"
+      description={`この${label}を編集しているあいだに、別の画面やほかの人が新しい内容を保存しました。どちらの内容を残すか選んでください。`}
+      wide
+    >
+      <div className="space-y-6">
+        <Field
+          label="あなたの編集内容"
+          hint="まだ保存されていません。念のため、コピーして控えておくこともできます。"
+        >
+          {(ids) => <textarea {...ids} readOnly rows={8} value={myText} className={inputClass} />}
+        </Field>
+        <div className="space-y-2">
+          <Button variant="primary" onClick={onOverwrite} disabled={busy}>
+            自分の内容で上書きする
+          </Button>
+          <p className="text-sm text-slate-700">
+            ほかの人が保存した内容は、あなたの編集内容に置き換わります。
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Button variant="danger" onClick={onLoadLatest} disabled={busy}>
+            最新の内容を読み込む
+          </Button>
+          <p className="text-sm font-semibold text-red-700">
+            注意：あなたの編集内容は捨てられ、元に戻せません。
+          </p>
+        </div>
+        <div className="flex justify-end">
+          <Button onClick={onClose}>閉じて編集を続ける</Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 function urlPreview(type: ContentType, last: string, parentId: string, pages: ContentSummary[]) {
   if (type === "post") return `/posts/${last}/`;
   const parent = pages.find((p) => String(p.id) === parentId);
@@ -409,26 +618,41 @@ function urlPreview(type: ContentType, last: string, parentId: string, pages: Co
 }
 
 function ParentSelect({
+  ref,
   pages,
+  self,
   value,
   onChange,
+  error,
 }: {
+  ref: Ref<HTMLSelectElement>;
   pages: ContentSummary[];
+  /** The page being edited: it and its descendants cannot be its parent. */
+  self: number;
   value: string;
   onChange: (value: string) => void;
+  error?: string;
 }) {
+  const excluded = descendantPageIds(pages, self);
+  const choices = pageRows(pages).filter((p) => !excluded.has(p.id));
   return (
-    <Field label="親ページ" hint="選ぶと、URLが「/親ページのURL/このページのURL/」になります。">
+    <Field
+      label="親ページ"
+      hint="選ぶと、URLが「/親ページのURL/このページのURL/」になります。"
+      error={error}
+    >
       {(ids) => (
         <select
           {...ids}
+          ref={ref}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className={inputClass}
         >
           <option value="">なし（いちばん上の階層）</option>
-          {pages.map((p) => (
+          {choices.map((p) => (
             <option key={p.id} value={String(p.id)}>
+              {"　".repeat(p.depth)}
               {p.title || "（タイトルなし）"}
             </option>
           ))}

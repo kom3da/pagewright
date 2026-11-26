@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "@tiptap/react";
 import { clsx } from "clsx";
-import { type FormEvent, useState } from "react";
-import { api, errorMessage } from "../api/client";
+import { type FormEvent, useRef, useState } from "react";
+import { api, errorField, errorMessage } from "../api/client";
 import { mediaQuery } from "../api/queries";
 import type { Media } from "../api/types";
+import { useNotify } from "../components/Toaster";
 import { Button } from "../components/ui/Button";
-import { Dialog } from "../components/ui/Dialog";
+import { ConfirmDialog, Dialog } from "../components/ui/Dialog";
 import { Field, inputClass } from "../components/ui/Field";
 import { ErrorMessage, Loading } from "../components/ui/misc";
 
@@ -33,7 +34,7 @@ export function MediaDialog({ editor, open, onClose }: Props) {
       {open && (
         <div className="space-y-8">
           <UploadForm onUploaded={insert} />
-          <MediaPicker onPick={insert} />
+          <MediaPicker onPick={insert} inBody={(id) => bodyUsesMedia(editor, id)} />
         </div>
       )}
     </Dialog>
@@ -51,7 +52,19 @@ function UploadForm({ onUploaded }: { onUploaded: (m: Media, alt: string) => voi
       void queryClient.invalidateQueries({ queryKey: mediaQuery.queryKey });
       onUploaded(media, v.alt);
     },
+    onError: (e) => {
+      const field = errorField(e);
+      if (field === "file") {
+        setErrors({ file: errorMessage(e) });
+        fileRef.current?.focus();
+      } else if (field === "altText") {
+        setErrors({ alt: errorMessage(e) });
+        altRef.current?.focus();
+      }
+    },
   });
+  const fileRef = useRef<HTMLInputElement>(null);
+  const altRef = useRef<HTMLTextAreaElement>(null);
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -81,6 +94,7 @@ function UploadForm({ onUploaded }: { onUploaded: (m: Media, alt: string) => voi
           {(ids) => (
             <input
               {...ids}
+              ref={fileRef}
               type="file"
               accept={ACCEPT.join(",")}
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
@@ -92,6 +106,7 @@ function UploadForm({ onUploaded }: { onUploaded: (m: Media, alt: string) => voi
           {(ids) => (
             <textarea
               {...ids}
+              ref={altRef}
               rows={2}
               value={alt}
               onChange={(e) => setAlt(e.target.value)}
@@ -99,7 +114,9 @@ function UploadForm({ onUploaded }: { onUploaded: (m: Media, alt: string) => voi
             />
           )}
         </Field>
-        {upload.isError && <ErrorMessage>{errorMessage(upload.error)}</ErrorMessage>}
+        {upload.isError && !errorField(upload.error) && (
+          <ErrorMessage>{errorMessage(upload.error)}</ErrorMessage>
+        )}
         <Button type="submit" variant="primary" disabled={upload.isPending}>
           {upload.isPending ? "アップロードしています…" : "アップロードして入れる"}
         </Button>
@@ -108,16 +125,64 @@ function UploadForm({ onUploaded }: { onUploaded: (m: Media, alt: string) => voi
   );
 }
 
-function MediaPicker({ onPick }: { onPick: (m: Media, alt: string) => void }) {
+/** Whether the (possibly unsaved) body in the editor shows the image. */
+function bodyUsesMedia(editor: Editor, mediaId: number) {
+  let found = false;
+  editor.state.doc.descendants((node) => {
+    if (node.type.name === "image" && node.attrs.mediaId === mediaId) found = true;
+    return !found;
+  });
+  return found;
+}
+
+function MediaPicker({
+  onPick,
+  inBody,
+}: {
+  onPick: (m: Media, alt: string) => void;
+  inBody: (mediaId: number) => boolean;
+}) {
+  const queryClient = useQueryClient();
+  const notify = useNotify();
   const { data, isPending, error } = useQuery(mediaQuery);
   const [selected, setSelected] = useState<Media | null>(null);
   const [alt, setAlt] = useState("");
   const [altError, setAltError] = useState<string>();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const choose = (m: Media) => {
     setSelected(m);
     setAlt(m.altText);
     setAltError(undefined);
+    setDeleteError(null);
+  };
+
+  const remove = useMutation({
+    mutationFn: (m: Media) => api.deleteMedia(m.id),
+    onSuccess: (_, m) => {
+      setConfirmDelete(false);
+      setSelected(null);
+      void queryClient.invalidateQueries({ queryKey: mediaQuery.queryKey });
+      notify(`画像「${m.altText || m.filename}」を削除しました。`);
+    },
+    onError: (e) => {
+      setConfirmDelete(false);
+      // 409 media_in_use: the message tells the user to remove it from the body first.
+      setDeleteError(errorMessage(e));
+    },
+  });
+
+  const askDelete = () => {
+    if (!selected) return;
+    if (inBody(selected.id)) {
+      setDeleteError(
+        "この画像は編集中の本文で使われているため削除できません。先に本文から外してください。",
+      );
+      return;
+    }
+    setDeleteError(null);
+    setConfirmDelete(true);
   };
 
   const onSubmit = (e: FormEvent) => {
@@ -180,11 +245,27 @@ function MediaPicker({ onPick }: { onPick: (m: Media, alt: string) => void }) {
               />
             )}
           </Field>
-          <Button type="submit" variant="primary">
-            この画像を入れる
-          </Button>
+          {deleteError && <ErrorMessage>{deleteError}</ErrorMessage>}
+          <div className="flex flex-wrap gap-3">
+            <Button type="submit" variant="primary">
+              この画像を入れる
+            </Button>
+            <Button variant="ghost" className="ml-auto text-red-700" onClick={askDelete}>
+              この画像を削除
+            </Button>
+          </div>
         </form>
       )}
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="この画像を削除しますか？"
+        description={`「${selected?.altText || selected?.filename || ""}」を削除します。元に戻せません。記事やページで使っている画像は削除できません。`}
+        confirmLabel="削除する"
+        danger
+        busy={remove.isPending}
+        onConfirm={() => selected && remove.mutate(selected)}
+      />
     </section>
   );
 }

@@ -10,10 +10,13 @@ import {
   formatDateTime,
   Loading,
   PageHeading,
+  ScheduledUpdateBadge,
   StatusBadge,
   UnpublishedBadge,
 } from "../components/ui/misc";
 import { publicUrl } from "../config";
+import { formatJapanDateTime } from "../lib/datetime";
+import { type PageRow, pageRows } from "../lib/pageTree";
 
 const labels = {
   post: { title: "記事", empty: "まだ記事がありません。「新規作成」から書き始めましょう。" },
@@ -26,6 +29,11 @@ const labels = {
 export function ContentListPage({ type }: { type: ContentType }) {
   const { data, isPending, error } = useQuery(contentsQuery(type));
   const label = labels[type];
+  // Pages are shown as a tree (parents first); posts keep the API order.
+  const rows: PageRow[] =
+    type === "page"
+      ? pageRows(data ?? [])
+      : (data ?? []).map((c) => ({ ...c, depth: 0, ancestors: [] }));
 
   return (
     <div className="space-y-6">
@@ -37,12 +45,14 @@ export function ContentListPage({ type }: { type: ContentType }) {
         <Loading />
       ) : error ? (
         <ErrorMessage>{errorMessage(error)}</ErrorMessage>
-      ) : data.length === 0 ? (
+      ) : rows.length === 0 ? (
         <p>{label.empty}</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-300 bg-white">
           <table className="w-full text-left">
-            <caption className="sr-only">{label.title}の一覧（番号の新しい順）</caption>
+            <caption className="sr-only">
+              {label.title}の一覧（{type === "page" ? "親ページの下に子ページ" : "番号の新しい順"}）
+            </caption>
             <thead className="border-b border-slate-300 bg-slate-100 text-sm">
               <tr>
                 <th scope="col" className="px-4 py-2">
@@ -60,9 +70,14 @@ export function ContentListPage({ type }: { type: ContentType }) {
               </tr>
             </thead>
             <tbody>
-              {data.map((c) => (
+              {rows.map((c) => (
                 <tr key={c.id} className="border-b border-slate-200 last:border-0">
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" style={{ paddingLeft: `${1 + c.depth * 1.5}rem` }}>
+                    {c.ancestors.length > 0 && (
+                      <span className="mr-1 text-sm text-slate-700">
+                        {c.ancestors.map((a) => `${a.title || "（タイトルなし）"} › `).join("")}
+                      </span>
+                    )}
                     <Link
                       to={type === "post" ? "/posts/$id" : "/pages/$id"}
                       params={{ id: String(c.id) }}
@@ -74,8 +89,19 @@ export function ContentListPage({ type }: { type: ContentType }) {
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
                       <StatusBadge status={c.status} />
-                      {c.hasUnpublishedChanges && c.status !== "draft" && <UnpublishedBadge />}
+                      {c.status === "published" && c.scheduledAt && <ScheduledUpdateBadge />}
+                      {/* With a scheduled update, the summary cannot tell whether the changes
+                          are part of it, so only the schedule is shown. */}
+                      {c.hasUnpublishedChanges && c.status === "published" && !c.scheduledAt && (
+                        <UnpublishedBadge />
+                      )}
                     </div>
+                    {c.scheduledAt && (
+                      <p className="mt-1 text-sm whitespace-nowrap text-slate-800">
+                        {formatJapanDateTime(c.scheduledAt)}に
+                        {c.status === "published" ? "更新" : "公開"}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm">
                     {c.url ? (

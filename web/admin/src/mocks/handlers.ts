@@ -45,6 +45,7 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
     hasUnpublishedChanges: false,
     url: null,
     publishedAt: null,
+    scheduledAt: null,
     updatedAt: t,
     parentId: null,
     categoryIds: [],
@@ -61,6 +62,7 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
       createdAt: t,
     },
     publishedRevisionId: null,
+    scheduledRevisionId: null,
     ...extra,
   });
   return {
@@ -83,7 +85,11 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
         publishedRevisionId: 299,
         categoryIds: [1],
       }),
-      content(2, "post", "新しい施工事例を追加しました", { status: "scheduled" }),
+      content(2, "post", "新しい施工事例を追加しました", {
+        status: "scheduled",
+        scheduledAt: "2026-12-01T00:00:00Z",
+        scheduledRevisionId: 200,
+      }),
       content(1, "post", "ホームページを公開しました"),
       content(4, "page", "会社概要", {
         status: "published",
@@ -92,6 +98,15 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
         publishedAt: t,
         publishedRevisionId: 400,
       }),
+      content(5, "page", "沿革", {
+        status: "published",
+        slug: "history",
+        url: "/company/history/",
+        publishedAt: t,
+        publishedRevisionId: 500,
+        parentId: 4,
+      }),
+      content(6, "page", "お問い合わせ"),
     ],
     categories: [
       { id: 1, name: "お知らせ", slug: "news", parentId: null, position: 0 },
@@ -115,13 +130,37 @@ export const resetDb = (overrides: Partial<Db> = {}) => {
   return db;
 };
 
+// Mirrors errorFields in internal/api/server.go.
+const errorFields: Record<string, string> = {
+  invalid_title: "title",
+  invalid_slug: "slug",
+  conflict: "slug",
+  invalid_parent: "parentId",
+  invalid_name: "name",
+  invalid_publish_at: "publishAt",
+  alt_required: "altText",
+  file_required: "file",
+};
+
 const error = (status: number, code: string, message: string) =>
-  HttpResponse.json({ error: { code, message } }, { status });
+  HttpResponse.json(
+    { error: { code, message, ...(errorFields[code] && { field: errorFields[code] }) } },
+    { status },
+  );
 
 const summary = (c: ContentDetail): ContentSummary => {
-  const { parentId, categoryIds, tagIds, revision, publishedRevisionId, ...s } = c;
+  const { categoryIds, tagIds, revision, publishedRevisionId, scheduledRevisionId, ...s } = c;
   return s;
 };
+
+/** Recomputes the derived fields after a change, as the server does. */
+function refresh(c: ContentDetail) {
+  c.status = c.publishedRevisionId ? "published" : c.scheduledRevisionId ? "scheduled" : "draft";
+  c.hasUnpublishedChanges =
+    c.publishedRevisionId !== null && c.publishedRevisionId !== c.revision.id;
+  c.url = c.publishedRevisionId ? contentUrl(c) : null;
+  c.updatedAt = now();
+}
 
 /** Auth + CSRF + site checks shared by every handler that needs them. */
 function guard(request: Request, { site = true } = {}) {
@@ -207,6 +246,7 @@ export const handlers = [
       hasUnpublishedChanges: false,
       url: null,
       publishedAt: null,
+      scheduledAt: null,
       updatedAt: now(),
       parentId: null,
       categoryIds: [],
@@ -220,6 +260,7 @@ export const handlers = [
         createdAt: now(),
       },
       publishedRevisionId: null,
+      scheduledRevisionId: null,
     };
     db.contents.push(c);
     return HttpResponse.json(c, { status: 201 });
@@ -241,7 +282,15 @@ export const handlers = [
       title: string;
       body: ContentDetail["revision"]["body"];
       fields?: Record<string, unknown>;
+      baseRevisionId?: number;
     };
+    if (input.baseRevisionId !== undefined && input.baseRevisionId !== c.revision.id) {
+      return error(
+        409,
+        "edit_conflict",
+        "ほかの人がこの内容を先に保存しました。いまの編集内容を控えてから、画面を読み込み直してください",
+      );
+    }
     c.revision = {
       id: c.revision.id + 1,
       title: input.title,
@@ -251,8 +300,7 @@ export const handlers = [
       createdAt: now(),
     };
     c.title = input.title;
-    c.updatedAt = now();
-    c.hasUnpublishedChanges = c.publishedRevisionId !== null;
+    refresh(c);
     return HttpResponse.json(c);
   }),
 
@@ -274,7 +322,7 @@ export const handlers = [
       ...(input.categoryIds && { categoryIds: input.categoryIds }),
       ...(input.tagIds && { tagIds: input.tagIds }),
     });
-    if (c.status === "published") c.url = contentUrl(c);
+    refresh(c);
     return HttpResponse.json(c);
   }),
 
@@ -283,13 +331,9 @@ export const handlers = [
     if (denied) return denied;
     const c = findContent(params.id);
     if (!c) return error(404, "not_found", "見つかりません。");
-    Object.assign(c, {
-      status: "published",
-      publishedRevisionId: c.revision.id,
-      hasUnpublishedChanges: false,
-      publishedAt: c.publishedAt ?? now(),
-    });
-    c.url = contentUrl(c);
+    // Like the server, publishing now leaves an existing schedule in place.
+    Object.assign(c, { publishedRevisionId: c.revision.id, publishedAt: c.publishedAt ?? now() });
+    refresh(c);
     db.builds++;
     return HttpResponse.json(c);
   }),
@@ -299,13 +343,36 @@ export const handlers = [
     if (denied) return denied;
     const c = findContent(params.id);
     if (!c) return error(404, "not_found", "見つかりません。");
-    Object.assign(c, {
-      status: "draft",
-      publishedRevisionId: null,
-      hasUnpublishedChanges: false,
-      url: null,
-    });
+    c.publishedRevisionId = null;
+    refresh(c);
     db.builds++;
+    return HttpResponse.json(c);
+  }),
+
+  http.post("/api/contents/:id/schedule", async ({ request, params }) => {
+    const denied = guard(request);
+    if (denied) return denied;
+    const c = findContent(params.id);
+    if (!c) return error(404, "not_found", "見つかりません。");
+    const { publishAt } = (await request.json()) as { publishAt: string };
+    const at = new Date(publishAt);
+    if (Number.isNaN(at.getTime()) || at.getTime() < Date.now() + 60_000) {
+      return error(422, "invalid_publish_at", "公開する日時は、今から1分以上あとにしてください");
+    }
+    c.scheduledRevisionId = c.revision.id;
+    c.scheduledAt = at.toISOString().replace(".000Z", "Z");
+    refresh(c);
+    return HttpResponse.json(c);
+  }),
+
+  http.delete("/api/contents/:id/schedule", ({ request, params }) => {
+    const denied = guard(request);
+    if (denied) return denied;
+    const c = findContent(params.id);
+    if (!c) return error(404, "not_found", "見つかりません。");
+    c.scheduledRevisionId = null;
+    c.scheduledAt = null;
+    refresh(c);
     return HttpResponse.json(c);
   }),
 
@@ -351,7 +418,11 @@ export const handlers = [
   http.delete("/api/categories/:id", ({ request, params }) => {
     const denied = guard(request);
     if (denied) return denied;
-    db.categories = db.categories.filter((c) => c.id !== Number(params.id));
+    const gone = db.categories.find((c) => c.id === Number(params.id));
+    if (!gone) return error(404, "not_found", "見つかりません。");
+    // Child categories move up one level.
+    for (const c of db.categories) if (c.parentId === gone.id) c.parentId = gone.parentId;
+    db.categories = db.categories.filter((c) => c.id !== gone.id);
     return new HttpResponse(null, { status: 204 });
   }),
 
@@ -370,6 +441,25 @@ export const handlers = [
     return HttpResponse.json(t, { status: 201 });
   }),
 
+  http.patch("/api/tags/:id", async ({ request, params }) => {
+    const denied = guard(request);
+    if (denied) return denied;
+    const t = db.tags.find((x) => x.id === Number(params.id));
+    if (!t) return error(404, "not_found", "見つかりません。");
+    const input = (await request.json()) as Partial<Tag>;
+    if (input.name !== undefined && !input.name.trim()) {
+      return error(422, "invalid_name", "名前を100文字以内で入力してください");
+    }
+    if (input.slug !== undefined) {
+      if (slugProblem(input.slug)) return invalidSlug();
+      if (db.tags.some((o) => o.id !== t.id && o.slug === input.slug)) {
+        return error(409, "conflict", "このURLはすでに使われています。");
+      }
+    }
+    Object.assign(t, input);
+    return HttpResponse.json(t);
+  }),
+
   http.delete("/api/tags/:id", ({ request, params }) => {
     const denied = guard(request);
     if (denied) return denied;
@@ -386,7 +476,14 @@ export const handlers = [
     const denied = guard(request);
     if (denied) return denied;
     const upload = await readUpload(request);
-    if (!upload) return error(422, "invalid_file", "画像を選んでください。");
+    if (!upload) return error(422, "file_required", "画像ファイルを選んでください");
+    if (!upload.altText.trim()) {
+      return error(
+        422,
+        "alt_required",
+        "画像の説明（代替テキスト）を500文字以内で入力してください",
+      );
+    }
     const id = db.nextId++;
     const m: Media = {
       id,
@@ -402,6 +499,22 @@ export const handlers = [
     };
     db.media.push(m);
     return HttpResponse.json(m, { status: 201 });
+  }),
+
+  http.delete("/api/media/:id", ({ request, params }) => {
+    const denied = guard(request);
+    if (denied) return denied;
+    const id = Number(params.id);
+    if (!db.media.some((m) => m.id === id)) return error(404, "not_found", "見つかりません。");
+    if (db.contents.some((c) => usesMedia(c, id))) {
+      return error(
+        409,
+        "media_in_use",
+        "この画像は記事やページで使われているため削除できません。先に本文から外してください",
+      );
+    }
+    db.media = db.media.filter((m) => m.id !== id);
+    return new HttpResponse(null, { status: 204 });
   }),
 
   http.get("/api/media/:id/file", () => {
@@ -446,6 +559,13 @@ async function readUpload(request: Request) {
       altText: /name="altText"\r\n\r\n([^\r]*)\r\n/.exec(text)?.[1] ?? "",
     };
   }
+}
+
+// The mock keeps only the latest revision, so only that body is checked.
+function usesMedia(c: ContentDetail, mediaId: number) {
+  const walk = (n: ContentDetail["revision"]["body"]): boolean =>
+    (n.type === "image" && n.attrs?.mediaId === mediaId) || (n.content ?? []).some(walk);
+  return walk(c.revision.body);
 }
 
 function contentUrl(c: ContentDetail) {

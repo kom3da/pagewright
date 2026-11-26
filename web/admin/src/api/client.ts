@@ -11,6 +11,7 @@ import type {
   Media,
   Tag,
   TagInput,
+  TagPatch,
 } from "./types";
 
 export class ApiError extends Error {
@@ -18,6 +19,8 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** Request field the error is about (e.g. "slug"), when the server names one. */
+    readonly field?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -28,6 +31,25 @@ export const isApiError = (e: unknown, status?: number, code?: string): e is Api
   e instanceof ApiError &&
   (status === undefined || e.status === status) &&
   (code === undefined || e.code === code);
+
+// Used when a server response has no `field` (older servers).
+const fieldsByCode: Record<string, string> = {
+  invalid_slug: "slug",
+  reserved_slug: "slug",
+  conflict: "slug",
+  invalid_title: "title",
+  invalid_parent: "parentId",
+  invalid_name: "name",
+  invalid_publish_at: "publishAt",
+  alt_required: "altText",
+  file_required: "file",
+  unsupported_type: "file",
+  too_large: "file",
+};
+
+/** The input field an API error is about, or undefined when it is not about one. */
+export const errorField = (e: unknown): string | undefined =>
+  e instanceof ApiError ? (e.field ?? fieldsByCode[e.code]) : undefined;
 
 /** Turns any thrown value into a message that can be shown to the user as-is. */
 export const errorMessage = (e: unknown): string =>
@@ -68,7 +90,8 @@ async function request<T>(method: string, path: string, body?: Body): Promise<T>
   const data = await res.json().catch(() => null);
   const err = data?.error;
   if (err && typeof err.code === "string" && typeof err.message === "string") {
-    throw new ApiError(res.status, err.code, err.message);
+    const field = typeof err.field === "string" ? err.field : undefined;
+    throw new ApiError(res.status, err.code, err.message, field);
   }
   throw new ApiError(
     res.status,
@@ -97,6 +120,9 @@ export const api = {
   patchContent: (id: number, input: ContentPatch) => patch<ContentDetail>(`/contents/${id}`, input),
   publish: (id: number) => post<ContentDetail>(`/contents/${id}/publish`),
   unpublish: (id: number) => post<ContentDetail>(`/contents/${id}/unpublish`),
+  schedule: (id: number, publishAt: string) =>
+    post<ContentDetail>(`/contents/${id}/schedule`, { publishAt }),
+  unschedule: (id: number) => request<ContentDetail>("DELETE", `/contents/${id}/schedule`),
   deleteContent: (id: number) => del(`/contents/${id}`),
 
   listCategories: () => get<Category[]>("/categories"),
@@ -106,6 +132,7 @@ export const api = {
 
   listTags: () => get<Tag[]>("/tags"),
   createTag: (input: TagInput) => post<Tag>("/tags", input),
+  patchTag: (id: number, input: TagPatch) => patch<Tag>(`/tags/${id}`, input),
   deleteTag: (id: number) => del(`/tags/${id}`),
 
   listMedia: () => get<Media[]>("/media"),
@@ -116,6 +143,7 @@ export const api = {
     return post<Media>("/media", form);
   },
   patchMedia: (id: number, altText: string) => patch<Media>(`/media/${id}`, { altText }),
+  deleteMedia: (id: number) => del(`/media/${id}`),
 
   buildSite: () => post<void>("/site/build"),
 };

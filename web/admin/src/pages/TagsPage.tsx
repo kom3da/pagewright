@@ -6,13 +6,14 @@ import type { Tag } from "../api/types";
 import { NameSlugForm } from "../components/NameSlugForm";
 import { useNotify } from "../components/Toaster";
 import { Button } from "../components/ui/Button";
-import { ConfirmDialog } from "../components/ui/Dialog";
+import { ConfirmDialog, Dialog } from "../components/ui/Dialog";
 import { ErrorMessage, Loading, PageHeading } from "../components/ui/misc";
 
 export function TagsPage() {
   const { data, isPending, error } = useQuery(tagsQuery);
   const queryClient = useQueryClient();
   const notify = useNotify();
+  const [editing, setEditing] = useState<Tag | null>(null);
   const [deleting, setDeleting] = useState<Tag | null>(null);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: tagsQuery.queryKey });
@@ -87,15 +88,20 @@ export function TagsPage() {
                   <tr key={t.id} className="border-b border-slate-200 last:border-0">
                     <td className="px-4 py-2">{t.name}</td>
                     <td className="px-4 py-2 font-mono text-sm">{t.slug}</td>
-                    <td className="px-4 py-2 text-right">
-                      <Button
-                        variant="ghost"
-                        className="text-red-700"
-                        onClick={() => setDeleting(t)}
-                        aria-label={`「${t.name}」を削除`}
-                      >
-                        削除
-                      </Button>
+                    <td className="px-4 py-2">
+                      <div className="flex justify-end gap-2">
+                        <Button onClick={() => setEditing(t)} aria-label={`「${t.name}」を編集`}>
+                          編集
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          className="text-red-700"
+                          onClick={() => setDeleting(t)}
+                          aria-label={`「${t.name}」を削除`}
+                        >
+                          削除
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -104,6 +110,29 @@ export function TagsPage() {
           </div>
         )}
       </section>
+
+      <Dialog
+        open={editing !== null}
+        onOpenChange={(o) => !o && setEditing(null)}
+        title="タグを編集"
+        description="URL（英数字）を変えると、古いURLは新しいURLへ自動で転送されます。"
+      >
+        {editing && (
+          <NameSlugForm
+            noun="タグ"
+            slugExample="event"
+            defaultValues={{ name: editing.name, slug: editing.slug }}
+            submitLabel="保存する"
+            extraButtons={<Button onClick={() => setEditing(null)}>キャンセル</Button>}
+            onSubmit={async (v) => {
+              await api.patchTag(editing.id, { name: v.name, slug: v.slug });
+              await refresh();
+              setEditing(null);
+              notify("タグを保存しました。");
+            }}
+          />
+        )}
+      </Dialog>
 
       <ConfirmDialog
         open={deleting !== null}
