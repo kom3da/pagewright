@@ -90,6 +90,23 @@ describe("home dashboard", () => {
     await expectNoAxeViolations();
   });
 
+  it("rebuilds the site from the update card and shows the new result", async () => {
+    const { user } = renderApp("/");
+    const section = await screen.findByRole("region", { name: "公開サイトの更新" });
+    expect(await within(section).findByText(/2026年11月20日 10:05/)).toBeVisible();
+    // Not in the sidebar any more.
+    const nav = screen.getByRole("navigation", { name: "メインメニュー" });
+    expect(within(nav).queryByRole("button", { name: "サイトを更新" })).toBeNull();
+
+    await user.click(within(section).getByRole("button", { name: "サイトを更新" }));
+    expect(await screen.findByText(/サイトの更新を始めました/)).toBeInTheDocument();
+    expect(db.builds).toBe(1);
+    await waitFor(() =>
+      expect(within(section).queryByText(/2026年11月20日 10:05/)).not.toBeInTheDocument(),
+    );
+    expect(within(section).getByText("前回の更新はうまくいきました")).toBeVisible();
+  });
+
   it("guides the first steps on a brand-new site", async () => {
     db.contents = [];
     db.buildLog = [];

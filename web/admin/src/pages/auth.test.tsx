@@ -106,10 +106,12 @@ describe("session and sites", () => {
     expect(screen.getByText("管理中のサイト")).toBeInTheDocument();
   });
 
-  it("starts a site build from the sidebar", async () => {
-    const { user } = renderApp("/");
-    await user.click(await screen.findByRole("button", { name: "サイトを更新" }));
-    expect(await screen.findByText(/サイトの更新を始めました/)).toBeInTheDocument();
-    expect(db.builds).toBe(1);
+  it("greets by name, or just ようこそ without one (never the email address)", async () => {
+    db.me.user.displayName = "";
+    renderApp("/");
+    expect(await screen.findByRole("heading", { level: 1, name: "ようこそ" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: `アカウントのメニュー（${db.me.user.email}）` }),
+    ).toBeInTheDocument();
   });
 });

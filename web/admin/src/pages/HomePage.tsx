@@ -2,6 +2,7 @@ import {
   Alert,
   Badge,
   Box,
+  Button,
   Grid,
   Group,
   List,
@@ -12,16 +13,23 @@ import {
   ThemeIcon,
   Title,
 } from "@mantine/core";
-import { useInfiniteQuery, useQuery, useSuspenseQuery } from "@tanstack/react-query";
-import { CircleAlert, CircleCheck, CircleDashed, TriangleAlert } from "lucide-react";
-import type { ReactNode } from "react";
-import { errorMessage } from "../api/client";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
+import { CircleAlert, CircleCheck, CircleDashed, RefreshCw, TriangleAlert } from "lucide-react";
+import { type ReactNode, useState } from "react";
+import { api, errorMessage } from "../api/client";
 import { buildsQuery, contentsQuery, meQuery, submissionsQuery } from "../api/queries";
 import type { ContentSummary, ContentType } from "../api/types";
 import { NewContentButton } from "../components/NewContentButton";
 import { AnchorLink } from "../components/ui/AnchorLink";
 import { ExternalLink } from "../components/ui/ExternalLink";
 import { ErrorMessage, Loading } from "../components/ui/feedback";
+import { notify } from "../components/ui/notify";
 import { PageHeader } from "../components/ui/PageHeader";
 import { ResponsiveList } from "../components/ui/ResponsiveList";
 import { Section } from "../components/ui/Section";
@@ -76,7 +84,7 @@ export function HomePage() {
   return (
     <>
       <PageHeader
-        title={`ようこそ、${me.user.displayName || me.user.email} さん`}
+        title={me.user.displayName ? `ようこそ、${me.user.displayName} さん` : "ようこそ"}
         documentTitle="ホーム"
         description={`${siteName ? `「${siteName}」の` : ""}いまの状況と、次にやることをまとめています。`}
         actions={
@@ -370,10 +378,36 @@ function RecentEdits({ contents }: { contents: ContentSummary[] }) {
   );
 }
 
-/** The last export of the public site: when, and whether it worked. */
+/** While a requested build has not finished yet, the card checks again this often. */
+const BUILD_POLL_MS = 3000;
+
+/**
+ * The last export of the public site: when, and whether it worked. 「サイトを更新」 rebuilds
+ * the whole site by hand (publishing normally does it); the card then follows that build.
+ */
 function SiteUpdate() {
-  const { data, isPending, error } = useQuery(buildsQuery);
+  const queryClient = useQueryClient();
+  const [requestedAt, setRequestedAt] = useState<string | null>(null);
+  const { data, isPending, error } = useQuery({
+    ...buildsQuery,
+    refetchInterval: (q) => {
+      const latest = q.state.data?.[0];
+      const waiting = requestedAt && (!latest || latest.startedAt < requestedAt);
+      return waiting ? BUILD_POLL_MS : false;
+    },
+  });
   const last = data?.[0];
+  const waiting = requestedAt !== null && (!last || last.startedAt < requestedAt);
+  const build = useMutation({
+    mutationFn: api.buildSite,
+    onSuccess: () => {
+      // A little earlier than now: the server's clock may be slightly behind ours.
+      setRequestedAt(new Date(Date.now() - 60_000).toISOString());
+      void queryClient.invalidateQueries({ queryKey: buildsQuery.queryKey });
+      notify("サイトの更新を始めました。公開サイトに反映されるまで少しお待ちください。");
+    },
+    onError: (e) => notify(errorMessage(e), "error"),
+  });
   return (
     <Section title="公開サイトの更新">
       {isPending ? (
@@ -396,7 +430,7 @@ function SiteUpdate() {
           <Stack gap="xs">
             <Text size="sm">
               {formatJapanDateTime(last.finishedAt)}
-              に公開サイトを更新しようとしましたが、失敗しました。メニューの「サイトを更新」をもう一度押してください。何度も失敗するときは、サイトを作った会社や担当者に連絡してください。
+              に公開サイトを更新しようとしましたが、失敗しました。下の「サイトを更新」をもう一度押してください。何度も失敗するときは、サイトを作った会社や担当者に連絡してください。
             </Text>
             <Text size="sm">くわしい内容：{last.error}</Text>
           </Stack>
@@ -430,6 +464,22 @@ function SiteUpdate() {
           </List>
         </Alert>
       )}
+      <Stack gap={6} align="flex-start">
+        <Button
+          size="sm"
+          leftSection={<RefreshCw aria-hidden="true" size={16} />}
+          onClick={() => build.mutate()}
+          loading={build.isPending}
+          aria-describedby="build-help"
+        >
+          サイトを更新
+        </Button>
+        <Text id="build-help" size="sm" c="dimmed" aria-live="polite">
+          {waiting
+            ? "更新しています。終わると、ここに結果が出ます。"
+            : "公開サイト全体を作り直します。ふだんは公開するたびに自動で更新されるので、表示がおかしいときだけ押してください。"}
+        </Text>
+      </Stack>
       <ExternalLink href={publicUrl("/")}>公開サイトを見る</ExternalLink>
     </Section>
   );

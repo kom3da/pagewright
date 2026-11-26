@@ -988,6 +988,18 @@ export const handlers = [
     const denied = guard(request);
     if (denied) return denied;
     db.builds++;
+    // The mock finishes the build at once, so the home screen can show the new result.
+    const at = now();
+    db.buildLog.unshift({
+      id: db.nextId++,
+      startedAt: at,
+      finishedAt: at,
+      files: 24,
+      changed: 0,
+      removed: 0,
+      warnings: [],
+      error: null,
+    });
     return new HttpResponse(null, { status: 202 });
   }),
 

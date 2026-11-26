@@ -2,7 +2,6 @@ import {
   AppShell,
   Box,
   Burger,
-  Button,
   Group,
   Menu,
   NavLink,
@@ -26,11 +25,11 @@ import {
   LogOut,
   type LucideIcon,
   Newspaper,
-  RefreshCw,
   Settings,
   Tags,
+  UserRound,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { api, errorMessage } from "../api/client";
 import { meQuery } from "../api/queries";
 import { publicSiteOrigin } from "../config";
@@ -65,7 +64,7 @@ const navGroups: NavItem[][] = [
 const NAVBAR_ID = "pw-sidebar";
 
 /**
- * The app shell: a sidebar (site, main menu, 「サイトを更新」, user) and the main area.
+ * The app shell: a sidebar (site, main menu, public site link, account) and the main area.
  * On phones the sidebar is a drawer opened from the top bar's menu button.
  */
 export function AppLayout() {
@@ -90,18 +89,21 @@ export function AppLayout() {
         navbar={{ width: 256, breakpoint: "sm", collapsed: { mobile: !opened } }}
       >
         <AppShell.Header hiddenFrom="sm" px="md">
-          <Group h="100%" gap="sm" wrap="nowrap">
-            <Burger
-              opened={opened}
+          <Group h="100%" gap="sm" wrap="nowrap" justify="space-between">
+            {/* The open drawer shows the site name itself: show it here only while closed. */}
+            <Text fw={700} truncate aria-hidden={opened || undefined}>
+              {opened ? "" : (site?.name ?? "サイト")}
+            </Text>
+            <UnstyledButton
               onClick={toggle}
-              size="sm"
               aria-label={opened ? "メニューを閉じる" : "メニューを開く"}
               aria-expanded={opened}
               aria-controls={NAVBAR_ID}
-            />
-            <Text fw={700} truncate>
-              {site?.name ?? "サイト"}
-            </Text>
+              className={classes.menuButton}
+            >
+              <Burger opened={opened} size="sm" component="span" aria-hidden="true" />
+              <span>{opened ? "閉じる" : "メニュー"}</span>
+            </UnstyledButton>
           </Group>
         </AppShell.Header>
 
@@ -119,7 +121,6 @@ export function AppLayout() {
             <MainMenu />
           </AppShell.Section>
           <AppShell.Section p="sm" className={classes.footer}>
-            <BuildButton />
             <NavLink
               href={publicSiteOrigin}
               target="_blank"
@@ -242,43 +243,6 @@ function SiteSwitcher() {
   );
 }
 
-/** Rebuilds the whole public site. Normally publishing does this automatically. */
-function BuildButton() {
-  const [startedAt, setStartedAt] = useState<string | null>(null);
-  const build = useMutation({
-    mutationFn: api.buildSite,
-    onSuccess: () => {
-      setStartedAt(
-        new Intl.DateTimeFormat("ja-JP", { timeStyle: "short", timeZone: "Asia/Tokyo" }).format(
-          new Date(),
-        ),
-      );
-      notify("サイトの更新を始めました。公開サイトに反映されるまで少しお待ちください。");
-    },
-    onError: (e) => notify(errorMessage(e), "error"),
-  });
-  return (
-    <Box mb="xs">
-      <Button
-        fullWidth
-        size="sm"
-        justify="flex-start"
-        leftSection={<RefreshCw aria-hidden="true" size={16} />}
-        onClick={() => build.mutate()}
-        loading={build.isPending}
-        aria-describedby="build-help"
-      >
-        サイトを更新
-      </Button>
-      <Text id="build-help" size="xs" c="dimmed" mt={6} px={4}>
-        {startedAt
-          ? `${startedAt}に更新を始めました。`
-          : "公開サイト全体を作り直します。ふだんは公開するたびに自動で更新されます。"}
-      </Text>
-    </Box>
-  );
-}
-
 function UserMenu() {
   const { data: me } = useSuspenseQuery(meQuery);
   const queryClient = useQueryClient();
@@ -297,18 +261,24 @@ function UserMenu() {
   return (
     <Menu position="top-start" width="target">
       <Menu.Target>
-        <UnstyledButton className={classes.userButton}>
-          <Box miw={0}>
-            <Text size="sm" fw={600} truncate>
-              {name}
-            </Text>
-            {me.user.displayName && (
-              <Text size="xs" c="dimmed" truncate>
-                {me.user.email}
+        <UnstyledButton
+          className={classes.userButton}
+          aria-label={`アカウントのメニュー（${name}）`}
+        >
+          <Group gap="xs" wrap="nowrap">
+            <UserRound aria-hidden="true" size={18} className={classes.userIcon} />
+            <Box miw={0} style={{ flex: 1 }}>
+              <Text size="sm" fw={600} truncate>
+                {name}
               </Text>
-            )}
-            <VisuallyHidden>（アカウントのメニュー）</VisuallyHidden>
-          </Box>
+              {me.user.displayName && (
+                <Text size="xs" c="dimmed" truncate>
+                  {me.user.email}
+                </Text>
+              )}
+            </Box>
+            <ChevronsUpDown aria-hidden="true" size={16} className={classes.userIcon} />
+          </Group>
         </UnstyledButton>
       </Menu.Target>
       <Menu.Dropdown>

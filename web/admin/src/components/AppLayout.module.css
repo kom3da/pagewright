@@ -30,9 +30,34 @@
   padding: var(--mantine-spacing-xs);
   border-radius: var(--mantine-radius-sm);
 }
+/* The account menu looks like a button (border), not like the menu links above it. */
+.userButton {
+  margin-top: var(--mantine-spacing-xs);
+  min-height: 2.75rem;
+  border: 1px solid var(--mantine-color-gray-4);
+  background: var(--mantine-color-white);
+}
 .siteButton:hover,
 .userButton:hover {
   background: var(--mantine-color-gray-1);
+}
+
+.userIcon {
+  flex-shrink: 0;
+  color: var(--mantine-color-gray-6);
+}
+
+/* Phone top bar: the burger with a visible 「メニュー」 label, 44px tall. */
+.menuButton {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  min-height: 2.75rem;
+  padding: 0 var(--mantine-spacing-sm) 0 var(--mantine-spacing-xs);
+  border: 1px solid var(--mantine-color-gray-4);
+  border-radius: var(--mantine-radius-sm);
+  font-weight: 700;
 }
 
 .footer {
