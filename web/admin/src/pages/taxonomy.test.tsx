@@ -82,10 +82,23 @@ describe("categories", () => {
     expect(db.categories.find((c) => c.id === 2)?.name).toBe("施工実績");
   });
 
+  it("explains that child categories move up one level when deleting", async () => {
+    const { user } = renderApp("/categories");
+    await user.click(await screen.findByRole("button", { name: "「施工事例」を削除" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "カテゴリを削除しますか？" });
+    expect(dialog).toHaveAccessibleDescription(
+      /子カテゴリ（「リフォーム」）は削除されず、一つ上の階層に移ります。/,
+    );
+    await user.click(within(dialog).getByRole("button", { name: "削除する" }));
+    await screen.findByText("カテゴリ「施工事例」を削除しました。");
+    expect(db.categories.find((c) => c.id === 3)?.parentId).toBeNull();
+  });
+
   it("deletes after confirmation", async () => {
     const { user } = renderApp("/categories");
     await user.click(await screen.findByRole("button", { name: "「お知らせ」を削除" }));
     const dialog = await screen.findByRole("alertdialog", { name: "カテゴリを削除しますか？" });
+    expect(dialog).not.toHaveAccessibleDescription(/子カテゴリ/);
     await user.click(within(dialog).getByRole("button", { name: "削除する" }));
     expect(await screen.findByText("カテゴリ「お知らせ」を削除しました。")).toBeInTheDocument();
     expect(db.categories.some((c) => c.id === 1)).toBe(false);

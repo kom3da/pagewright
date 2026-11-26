@@ -39,6 +39,7 @@ export function CategoriesPage() {
   });
 
   const categories = data ?? [];
+  const deletingChildren = categories.filter((c) => deleting && c.parentId === deleting.id);
   const rows = flattenTree(buildCategoryTree(categories));
   const parentChoices = (exclude?: number) => {
     const excluded = exclude === undefined ? new Set<number>() : descendantIds(categories, exclude);
@@ -164,7 +165,13 @@ export function CategoriesPage() {
         open={deleting !== null}
         onOpenChange={(o) => !o && setDeleting(null)}
         title="カテゴリを削除しますか？"
-        description={`「${deleting?.name ?? ""}」を削除します。記事は削除されず、このカテゴリから外れます。`}
+        description={
+          <>
+            「{deleting?.name}」を削除します。記事は削除されず、このカテゴリから外れます。
+            {deletingChildren.length > 0 &&
+              `子カテゴリ（${deletingChildren.map((c) => `「${c.name}」`).join("")}）は削除されず、一つ上の階層に移ります。`}
+          </>
+        }
         confirmLabel="削除する"
         danger
         busy={remove.isPending}
