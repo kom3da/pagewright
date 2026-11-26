@@ -13,5 +13,26 @@
     "notFound": "ページが見つかりません",
     "feedDescription": "%sのお知らせ"
   },
-  "dateFormat": "2006年1月2日"
+  "dateFormat": "2006年1月2日",
+  "settings": [
+    {
+      "key": "address",
+      "label": "住所",
+      "description": "フッターに表示します。",
+      "type": "text",
+      "maxLength": 200
+    },
+    {
+      "key": "phone",
+      "label": "電話番号",
+      "description": "フッターとご相談の帯に表示し、スマートフォンではそのまま電話をかけられます。",
+      "type": "tel"
+    },
+    {
+      "key": "businessHours",
+      "label": "受付時間",
+      "description": "例：平日 9:00〜18:00。電話番号と一緒に表示します。",
+      "type": "text"
+    }
+  ]
 }

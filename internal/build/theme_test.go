@@ -10,6 +10,8 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/kom3da/pagewright/internal/build"
 	"github.com/kom3da/pagewright/internal/db/dbgen"
 	"github.com/kom3da/pagewright/internal/db/dbtest"
@@ -98,6 +100,12 @@ func TestLoadThemeErrors(t *testing.T) {
 			f["templates/search.html"] = &fstest.MapFile{Data: []byte(`{{define "other"}}{{end}}`)}
 		}, `templates/search.html must define "main"`},
 		{"no stylesheet", func(f fstest.MapFS) { delete(f, "assets/style.css") }, "assets/style.css is missing"},
+		{"bad setting type", func(f fstest.MapFS) {
+			f["theme.json"].Data = []byte(strings.Replace(string(f["theme.json"].Data), `"dateFormat"`, `"settings": [{"key": "phone", "label": "Phone", "type": "number"}], "dateFormat"`, 1))
+		}, "type must be text, tel, url or page"},
+		{"duplicate setting", func(f fstest.MapFS) {
+			f["theme.json"].Data = []byte(strings.Replace(string(f["theme.json"].Data), `"dateFormat"`, `"settings": [{"key": "a", "label": "A", "type": "text"}, {"key": "a", "label": "A2", "type": "text"}], "dateFormat"`, 1))
+		}, "declared twice"},
 	}
 	for _, tt := range tests {
 		fsys := base()
@@ -125,4 +133,29 @@ func (s *seeder) link(contentID, categoryID int64) {
 	s.do(func(q *dbgen.Queries) error {
 		return q.AddContentCategory(s.ctx, dbgen.AddContentCategoryParams{ContentID: contentID, CategoryID: categoryID})
 	})
+}
+
+func TestCheckThemeSettings(t *testing.T) {
+	info := build.ThemeInfo{Settings: []build.SettingDecl{
+		{Key: "phone", Label: "電話番号", Type: "tel"},
+		{Key: "site", Label: "URL", Type: "url"},
+		{Key: "note", Label: "メモ", Type: "text", MaxLength: 5},
+		{Key: "about", Label: "紹介ページ", Type: "page"},
+	}}
+	got, err := info.CheckSettings(map[string]any{"phone": " 03-1234-5678 ", "site": "/about/", "note": "", "about": float64(12)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"phone": "03-1234-5678", "site": "/about/", "about": int64(12)}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("CheckSettings (-want +got):\n%s", diff)
+	}
+	for _, bad := range []map[string]any{
+		{"phone": "call me"}, {"site": "javascript:alert(1)"}, {"note": "123456"},
+		{"note": "a\nb"}, {"about": "12"}, {"about": float64(1.5)}, {"color": "red"},
+	} {
+		if _, err := info.CheckSettings(bad); err == nil {
+			t.Errorf("CheckSettings(%v) accepted", bad)
+		}
+	}
 }

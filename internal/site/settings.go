@@ -1,5 +1,5 @@
 // Package site holds per-site settings shared by the admin API and the
-// build: colors, font, time zone and contact address.
+// build: colors, font, time zone, contact address and theme values.
 package site
 
 import (
@@ -10,8 +10,6 @@ import (
 	"regexp"
 	"strconv"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/kom3da/pagewright/themes"
 )
@@ -31,16 +29,18 @@ type Settings struct {
 	TimeZone string `json:"timeZone,omitempty"`
 	// ContactEmail receives contact form messages.
 	ContactEmail string `json:"contactEmail,omitempty"`
-	// Address, Phone and BusinessHours are shown in the footer and the
-	// contact band of the site.
-	Address       string `json:"address,omitempty"`
-	Phone         string `json:"phone,omitempty"`
-	BusinessHours string `json:"businessHours,omitempty"`
 	// Theme is the name of a built-in theme; empty is the default.
 	Theme string `json:"theme,omitempty"`
 	// FrontPageID is the page shown at the top of the home page (its
 	// title, lead and first image, then its body).
 	FrontPageID int64 `json:"frontPageId,omitempty"`
+	// PrivacyPageID is the page about handling personal data, which
+	// contact forms link to.
+	PrivacyPageID int64 `json:"privacyPageId,omitempty"`
+	// ThemeSettings holds the values of the settings each theme declares in
+	// its theme.json, by theme name, so switching themes keeps them. The
+	// build package checks them against the declarations.
+	ThemeSettings map[string]map[string]any `json:"themeSettings,omitempty"`
 }
 
 // DefaultTimeZone is used when TimeZone is empty.
@@ -57,23 +57,7 @@ type FieldError struct {
 
 func (e *FieldError) Error() string { return e.Field + ": " + e.Message }
 
-var (
-	hexColor     = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
-	phonePattern = regexp.MustCompile(`^[0-9+()\- ]{1,30}$`)
-)
-
-// singleLine reports valid UTF-8 without control characters.
-func singleLine(s string) bool {
-	if !utf8.ValidString(s) {
-		return false
-	}
-	for _, r := range s {
-		if unicode.IsControl(r) {
-			return false
-		}
-	}
-	return true
-}
+var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 // Parse decodes stored settings. Unknown or broken JSON yields defaults.
 func Parse(raw []byte) Settings {
@@ -107,21 +91,6 @@ func (s Settings) Validate() error {
 		if _, err := time.LoadLocation(s.TimeZone); err != nil {
 			return &FieldError{"timeZone", "タイムゾーンが正しくありません"}
 		}
-	}
-	for _, t := range []struct {
-		field, value, name string
-		max                int
-	}{
-		{"address", s.Address, "住所", 200},
-		{"phone", s.Phone, "電話番号", 30},
-		{"businessHours", s.BusinessHours, "受付時間", 100},
-	} {
-		if utf8.RuneCountInString(t.value) > t.max || !singleLine(t.value) {
-			return &FieldError{t.field, fmt.Sprintf("%sは改行なしの%d文字以内で入力してください", t.name, t.max)}
-		}
-	}
-	if s.Phone != "" && !phonePattern.MatchString(s.Phone) {
-		return &FieldError{"phone", "電話番号は数字とハイフンで入力してください（例：03-1234-5678）"}
 	}
 	if s.Theme != "" {
 		if _, ok := themes.Lookup(s.Theme); !ok {

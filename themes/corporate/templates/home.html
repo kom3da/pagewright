@@ -45,7 +45,7 @@
 {{- end}}
 
 {{- $guide := false}}
-{{- range .Site.Pages}}{{if ne .URL $.Site.ContactURL}}{{$guide = true}}{{end}}{{end}}
+{{- range .Site.Pages}}{{if and (ne .URL $.Site.ContactURL) (ne .URL $.Site.PrivacyURL)}}{{$guide = true}}{{end}}{{end}}
 {{- if $guide}}
 <section class="section{{if not (and .Front .Front.More)}} section--tinted{{end}}" aria-labelledby="home-pages-heading">
   <div class="container">
@@ -54,7 +54,7 @@
       <h2 id="home-pages-heading">ご案内</h2>
     </div>
     <ul class="cards">
-      {{- range .Site.Pages}}{{if ne .URL $.Site.ContactURL}}
+      {{- range .Site.Pages}}{{if and (ne .URL $.Site.ContactURL) (ne .URL $.Site.PrivacyURL)}}
       <li>
         <a class="card" href="{{.URL}}">
           {{- with .Image}}<img class="card__image" src="{{.Src}}" alt="">{{end}}

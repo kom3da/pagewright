@@ -1052,3 +1052,49 @@ func TestContentSearchAndBuilds(t *testing.T) {
 		t.Errorf("A's builds = %+v", builds)
 	}
 }
+
+func TestThemeSettings(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	bob := e.login("bob@example.com")
+	var s map[string]any
+	alice.mustDo(http.MethodGet, "/api/site", nil, &s, http.StatusOK)
+	themes, _ := s["themes"].([]any)
+	if len(themes) == 0 {
+		t.Fatal("no themes listed")
+	}
+
+	put := func(c *client, ts map[string]any) (int, string) {
+		var out struct {
+			Error struct{ Code, Field string } `json:"error"`
+		}
+		got := c.do(http.MethodPut, "/api/site", map[string]any{"name": "サイト", "themeSettings": map[string]any{"corporate": ts}}, &out)
+		return got, out.Error.Field
+	}
+	if got, field := put(alice, map[string]any{"phone": "03-1234-5678", "address": "東京都"}); got != http.StatusOK {
+		t.Fatalf("valid theme settings = %d %s", got, field)
+	}
+	alice.mustDo(http.MethodGet, "/api/site", nil, &s, http.StatusOK)
+	ts, _ := s["themeSettings"].(map[string]any)
+	if corp, _ := ts["corporate"].(map[string]any); corp["phone"] != "03-1234-5678" {
+		t.Errorf("stored theme settings = %v", ts)
+	}
+	if got, field := put(alice, map[string]any{"phone": "call me"}); got != http.StatusUnprocessableEntity || field != "themeSettings.phone" {
+		t.Errorf("bad phone = %d %s, want 422 on themeSettings.phone", got, field)
+	}
+	if got, field := put(alice, map[string]any{"favoriteColor": "red"}); got != http.StatusUnprocessableEntity || field != "themeSettings.favoriteColor" {
+		t.Errorf("undeclared key = %d %s, want 422", got, field)
+	}
+	var unknown struct {
+		Error struct{ Field string } `json:"error"`
+	}
+	if got := alice.do(http.MethodPut, "/api/site", map[string]any{"name": "サイト", "themeSettings": map[string]any{"nope": map[string]any{}}}, &unknown); got != http.StatusUnprocessableEntity {
+		t.Errorf("unknown theme = %d, want 422", got)
+	}
+	// B's site keeps its own (empty) values.
+	var bs map[string]any
+	bob.mustDo(http.MethodGet, "/api/site", nil, &bs, http.StatusOK)
+	if bs["themeSettings"] != nil {
+		t.Errorf("site B sees theme settings %v", bs["themeSettings"])
+	}
+}

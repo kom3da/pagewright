@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/kom3da/pagewright/internal/build"
 	"github.com/kom3da/pagewright/internal/db/dbgen"
 	"github.com/kom3da/pagewright/internal/site"
 )
@@ -49,6 +50,15 @@ type siteSettingsInput struct {
 type siteSettingsJSON struct {
 	siteSettingsInput
 	Logo *mediaJSON `json:"logo"`
+	// Themes lists the installed themes and the settings each declares.
+	Themes []themeJSON `json:"themes"`
+}
+
+type themeJSON struct {
+	Name        string              `json:"name"`
+	Title       string              `json:"title"`
+	Description string              `json:"description"`
+	Settings    []build.SettingDecl `json:"settings"`
 }
 
 const maxMenuItems = 20
@@ -62,7 +72,10 @@ func loadSite(ctx context.Context, q *dbgen.Queries) (siteSettingsJSON, error) {
 	}
 	out := siteSettingsJSON{siteSettingsInput: siteSettingsInput{
 		Name: row.Name, LogoMediaID: row.LogoMediaID, Settings: site.Parse(row.Settings), Menu: []menuItemJSON{},
-	}}
+	}, Themes: []themeJSON{}}
+	for _, t := range build.Themes() {
+		out.Themes = append(out.Themes, themeJSON{Name: t.Name, Title: t.Title, Description: t.Description, Settings: nonNil(t.Settings)})
+	}
 	if row.LogoMediaID != nil {
 		m, err := q.GetMedia(ctx, *row.LogoMediaID)
 		if err != nil {
@@ -128,18 +141,26 @@ func (s *Server) putSite(w http.ResponseWriter, r *http.Request, sess *session) 
 			return invalid("invalid_menu", fmt.Sprintf("メニューの%d番目のURLは / か https:// で始め、表示名も入れてください", i+1))
 		}
 	}
-	settings, err := json.Marshal(in.Settings)
-	if err != nil {
-		return err
-	}
 
 	ctx := r.Context()
 	var out siteSettingsJSON
-	err = s.DB.InTenantTx(ctx, func(tx pgx.Tx, q *dbgen.Queries) error {
-		if id := in.FrontPageID; id != 0 {
-			c, err := q.GetContent(ctx, id)
+	err := s.DB.InTenantTx(ctx, func(tx pgx.Tx, q *dbgen.Queries) error {
+		if err := checkThemeSettings(ctx, q, &in.Settings); err != nil {
+			return err
+		}
+		for _, ref := range []struct {
+			id         int64
+			code, what string
+		}{
+			{in.FrontPageID, "invalid_front_page", "トップページ"},
+			{in.PrivacyPageID, "invalid_privacy_page", "個人情報の取り扱いのページ"},
+		} {
+			if ref.id == 0 {
+				continue
+			}
+			c, err := q.GetContent(ctx, ref.id)
 			if errors.Is(err, pgx.ErrNoRows) || (err == nil && c.Type != "page") {
-				return invalid("invalid_front_page", "トップページには固定ページを選んでください")
+				return invalid(ref.code, ref.what+"には固定ページを選んでください")
 			} else if err != nil {
 				return err
 			}
@@ -150,6 +171,10 @@ func (s *Server) putSite(w http.ResponseWriter, r *http.Request, sess *session) 
 			} else if err != nil {
 				return err
 			}
+		}
+		settings, err := json.Marshal(in.Settings)
+		if err != nil {
+			return err
 		}
 		if err := q.UpdateSite(ctx, dbgen.UpdateSiteParams{Name: name, Settings: settings, LogoMediaID: in.LogoMediaID}); err != nil {
 			return err
@@ -217,5 +242,39 @@ func (s *Server) listBuilds(w http.ResponseWriter, r *http.Request, _ *session) 
 		return err
 	}
 	writeJSON(w, http.StatusOK, out)
+	return nil
+}
+
+// checkThemeSettings validates the values of each theme's declared
+// settings and normalizes them in place. Page values must be pages of this
+// site.
+func checkThemeSettings(ctx context.Context, q *dbgen.Queries, s *site.Settings) error {
+	for name, values := range s.ThemeSettings {
+		info, err := build.ThemeByName(name)
+		if err != nil {
+			return &site.FieldError{Field: "themeSettings", Message: "入っていないテーマの設定です"}
+		}
+		clean, err := info.CheckSettings(values)
+		var se *build.SettingError
+		if errors.As(err, &se) {
+			return &site.FieldError{Field: "themeSettings." + se.Key, Message: se.Message}
+		}
+		if err != nil {
+			return err
+		}
+		for key, v := range clean {
+			id, ok := v.(int64)
+			if !ok {
+				continue
+			}
+			c, err := q.GetContent(ctx, id)
+			if errors.Is(err, pgx.ErrNoRows) || (err == nil && c.Type != "page") {
+				return &site.FieldError{Field: "themeSettings." + key, Message: "固定ページを選んでください"}
+			} else if err != nil {
+				return err
+			}
+		}
+		s.ThemeSettings[name] = clean
+	}
 	return nil
 }

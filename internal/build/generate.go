@@ -16,6 +16,7 @@ import (
 
 	"github.com/kom3da/pagewright/internal/db/dbgen"
 	"github.com/kom3da/pagewright/internal/render"
+	"github.com/kom3da/pagewright/internal/site"
 )
 
 // PostsPerPage is the length of post lists and archives.
@@ -46,21 +47,23 @@ type generator struct {
 	out      *output
 	warn     func(format string, args ...any)
 
-	site        *Site
-	items       []*item // published, newest first
-	itemByID    map[int64]*item
-	itemByPath  map[string]*item
-	legacy      map[string]map[string]string // WordPress query param -> id -> path
-	treeByID    map[int64]dbgen.ListContentTreeRow
-	catPath     map[int64]string
-	tagPath     map[int64]string
-	postsOfCat  map[int64][]*item
-	postsOfTag  map[int64][]*item
-	sitemap     []sitemapURL
-	redirects   []redirect
-	loc         *time.Location // site time zone for dates
-	logoKey     string         // storage key of the logo, copied with the media
-	frontPageID int64          // page shown on the home page, from the settings
+	site          *Site
+	items         []*item // published, newest first
+	itemByID      map[int64]*item
+	itemByPath    map[string]*item
+	legacy        map[string]map[string]string // WordPress query param -> id -> path
+	treeByID      map[int64]dbgen.ListContentTreeRow
+	catPath       map[int64]string
+	tagPath       map[int64]string
+	postsOfCat    map[int64][]*item
+	postsOfTag    map[int64][]*item
+	sitemap       []sitemapURL
+	redirects     []redirect
+	loc           *time.Location // site time zone for dates
+	logoKey       string         // storage key of the logo, copied with the media
+	settings      site.Settings  // parsed site settings
+	frontPageID   int64          // page shown on the home page, from the settings
+	privacyPageID int64          // page about personal data, from the settings
 }
 
 type sitemapURL struct {
@@ -71,6 +74,7 @@ type sitemapURL struct {
 type redirect struct{ from, to string }
 
 func (g *generator) run() error {
+	g.prepare()
 	g.reserveSystemFiles()
 	g.index()
 	g.buildSite()
@@ -298,6 +302,8 @@ func (g *generator) buildSite() {
 		g.site.SearchURL = searchPath
 	}
 	g.applySettings()
+	g.site.PrivacyURL = g.privacyPath()
+	g.site.Theme = g.themeValues()
 	// The contact page is the first published page with the contact form.
 	for _, it := range g.topPages() {
 		if it.body.HasContactForm {
@@ -485,7 +491,7 @@ func (g *generator) contactForm(path string) func() (template.HTML, error) {
 		return nil
 	}
 	return func() (template.HTML, error) {
-		html, _, err := g.theme.part("contact-form", ContactForm{Action: action, Page: path})
+		html, _, err := g.theme.part("contact-form", ContactForm{Action: action, Page: path, PrivacyURL: g.privacyPath()})
 		return html, err
 	}
 }
@@ -695,4 +701,42 @@ func (g *generator) copyMedia() error {
 		}
 	}
 	return nil
+}
+
+// prepare reads the site settings the rest of the build relies on. It
+// runs before bodies are rendered.
+func (g *generator) prepare() {
+	g.settings = site.Parse(g.snap.tenant.Settings)
+	g.frontPageID = g.settings.FrontPageID
+	g.privacyPageID = g.settings.PrivacyPageID
+	g.loc = g.settings.Location()
+}
+
+// privacyPath is the public path of the privacy page from the settings, if
+// it is a published page. It works while bodies are still being rendered.
+func (g *generator) privacyPath() string {
+	id := g.privacyPageID
+	if id == 0 {
+		return ""
+	}
+	published := false
+	for _, c := range g.snap.contents {
+		if c.ID == id && c.Type == "page" {
+			published = true
+			break
+		}
+	}
+	if !published {
+		return ""
+	}
+	for _, r := range g.snap.routes {
+		if r.Kind == "canonical" && r.ContentID != nil && *r.ContentID == id {
+			return r.Path
+		}
+	}
+	p, _, ok := g.rulePath(id)
+	if !ok {
+		return ""
+	}
+	return p
 }

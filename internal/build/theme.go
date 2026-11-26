@@ -33,11 +33,16 @@ type Site struct {
 	SearchURL string
 	// ContactURL is the page with the contact form, or empty.
 	ContactURL string
+	// PrivacyURL is the page about personal data chosen in the settings,
+	// or empty.
+	PrivacyURL string
 	// Pages are the published pages without a parent, in number order,
 	// except the front page.
 	Pages []Summary
-	// Address, Phone and Hours come from the site settings.
-	Address, Phone, Hours string
+	// Theme holds the values of the settings the theme declares in
+	// theme.json, by key: a string, or a *Link for page settings. Unset
+	// values are absent.
+	Theme map[string]any
 	// LogoURL is the logo image, or empty to show the name as text.
 	LogoURL string
 	// StyleVars overrides theme CSS variables (colors, font) from the site
@@ -138,6 +143,20 @@ type Manifest struct {
 	Labels Labels `json:"labels"`
 	// DateFormat is a Go time layout for the "date" function.
 	DateFormat string `json:"dateFormat"`
+	// Settings are extra fields the admin shows for this theme; their
+	// values reach templates as .Site.Theme.<key>.
+	Settings []SettingDecl `json:"settings"`
+}
+
+// SettingDecl declares one theme setting.
+type SettingDecl struct {
+	Key         string `json:"key"`         // letters and digits, starting with a letter
+	Label       string `json:"label"`       // shown in the admin
+	Description string `json:"description"` // optional help text
+	// Type is "text" (one line), "tel", "url" or "page" (a published page).
+	Type string `json:"type"`
+	// MaxLength bounds text values (default 100).
+	MaxLength int `json:"maxLength"`
 }
 
 // Labels are the theme's words for what the core generates.
@@ -159,8 +178,9 @@ var pageTemplates = []string{"home", "single", "list", "404", "search"}
 
 // ContactForm is the data of the theme's "contact-form" part.
 type ContactForm struct {
-	Action string // where the form posts
-	Page   string // the public path of the page the form is on
+	Action     string // where the form posts
+	Page       string // the public path of the page the form is on
+	PrivacyURL string // the page about personal data, or empty
 }
 
 // part renders the named part; ok is false when the theme has none.
@@ -318,7 +338,7 @@ func (m Manifest) check() error {
 	if m.DateFormat == "" {
 		return fmt.Errorf("theme %s: theme.json dateFormat is missing (a Go time layout, e.g. \"2006年1月2日\")", m.Name)
 	}
-	return nil
+	return m.checkSettings()
 }
 
 func (t *theme) render(kind string, p *Page) ([]byte, error) {

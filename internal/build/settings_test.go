@@ -57,7 +57,9 @@ func TestCorporateHome(t *testing.T) {
 	s.publish(service.ID, s.revision(service.ID, "事業紹介", paragraph("給湯器・水まわりの交換に対応します。")).ID, at)
 	contact := s.content("page", ptr("contact"), nil)
 	s.publish(contact.ID, s.revision(contact.ID, "お問い合わせ", `{"type":"doc","content":[{"type":"contactForm"}]}`).ID, at)
-	s.admin(`UPDATE tenants SET settings = jsonb_build_object('frontPageId', $2::bigint, 'phone', '03-1234-5678', 'address', '東京都千代田区1-1', 'businessHours', '平日 9:00〜18:00') WHERE id = $1`, s.tenant(), front.ID)
+	s.admin(`UPDATE tenants SET settings = jsonb_build_object('frontPageId', $2::bigint, 'themeSettings',
+		jsonb_build_object('corporate', jsonb_build_object('phone', '03-1234-5678', 'address', '東京都千代田区1-1', 'businessHours', '平日 9:00〜18:00')))
+		WHERE id = $1`, s.tenant(), front.ID)
 
 	opts := build.Options{OutDir: t.TempDir(), FormBaseURL: "https://admin.example"}
 	if _, err := build.Build(context.Background(), env.DB, s.tenant(), opts); err != nil {

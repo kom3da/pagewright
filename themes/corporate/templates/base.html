@@ -59,11 +59,11 @@
   <div class="container site-footer__inner">
     <div class="site-footer__about">
       <p class="site-footer__name">{{.Site.Name}}</p>
-      {{- if or .Site.Address .Site.Phone .Site.Hours}}
+      {{- if or .Site.Theme.address .Site.Theme.phone .Site.Theme.businessHours}}
       <p class="site-footer__contact">
-        {{- with .Site.Address}}{{.}}<br>{{end -}}
-        {{- with .Site.Phone}}TEL <a href="tel:{{.}}">{{.}}</a><br>{{end -}}
-        {{- with .Site.Hours}}{{.}}{{end -}}
+        {{- with .Site.Theme.address}}{{.}}<br>{{end -}}
+        {{- with .Site.Theme.phone}}TEL <a href="tel:{{.}}">{{.}}</a><br>{{end -}}
+        {{- with .Site.Theme.businessHours}}{{.}}{{end -}}
       </p>
       {{- end}}
     </div>
@@ -75,6 +75,9 @@
         {{- end}}
         {{- with .Site.SearchURL}}
         <li><a href="{{.}}">サイト内検索</a></li>
+        {{- end}}
+        {{- with .Site.PrivacyURL}}
+        <li><a href="{{.}}">個人情報の取り扱い</a></li>
         {{- end}}
       </ul>
     </nav>
@@ -125,8 +128,8 @@
     <div class="cta__inner">
       <div class="cta__text">
         <h2 id="cta-heading">お気軽にご相談ください</h2>
-        {{- if or $.Site.Hours $.Site.Phone}}
-        <p>{{with $.Site.Hours}}{{.}}{{end}}{{if and $.Site.Hours $.Site.Phone}}　{{end}}{{with $.Site.Phone}}TEL <a href="tel:{{.}}">{{.}}</a>{{end}}</p>
+        {{- if or $.Site.Theme.businessHours $.Site.Theme.phone}}
+        <p>{{with $.Site.Theme.businessHours}}{{.}}{{end}}{{if and $.Site.Theme.businessHours $.Site.Theme.phone}}　{{end}}{{with $.Site.Theme.phone}}TEL <a href="tel:{{.}}">{{.}}</a>{{end}}</p>
         {{- end}}
       </div>
       <a class="button button--inverse" href="{{.}}">お問い合わせ</a>

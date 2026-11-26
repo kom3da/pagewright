@@ -12,8 +12,7 @@ const mincho = `"Hiragino Mincho ProN", "BIZ UDPMincho", "Noto Serif JP", "Yu Mi
 
 // applySettings reads the site settings into the theme data.
 func (g *generator) applySettings() {
-	s := site.Parse(g.snap.tenant.Settings)
-	g.loc = s.Location()
+	s := g.settings
 	var vars []string
 	// Colors were checked for contrast and format when saved; check the
 	// format again since they end up in CSS.
@@ -21,8 +20,6 @@ func (g *generator) applySettings() {
 		g.warn("site settings ignored: %v", err)
 		return
 	}
-	g.site.Address, g.site.Phone, g.site.Hours = s.Address, s.Phone, s.BusinessHours
-	g.frontPageID = s.FrontPageID
 	if c := s.PrimaryColor; c != "" {
 		vars = append(vars, "--color-accent: "+c, "--color-accent-dark: "+site.Darken(c, 0.75), "--color-focus: "+c)
 	}

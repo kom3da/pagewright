@@ -61,6 +61,7 @@ func RenderPreview(ctx context.Context, d *db.DB, tenantID uuid.UUID, contentID 
 		snap: snap, opts: Options{BaseURL: base, FormBaseURL: opts.FormBaseURL}, tenantID: tenantID, theme: th,
 		warn: func(string, ...any) {},
 	}
+	g.prepare()
 	g.index()
 	g.buildSite()
 	g.site.StylesheetURL = opts.SelfURL + strings.TrimPrefix(th.css, "/")
