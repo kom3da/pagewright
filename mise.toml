@@ -23,6 +23,11 @@ run = [
   "go run ./cmd/pagewright serve",
 ]
 
+[tasks.build]
+description = "管理画面を埋め込んだ pagewright のバイナリを bin/ に作る"
+depends = ["admin:build"]
+run = "go build -tags embedadmin -o bin/pagewright ./cmd/pagewright"
+
 [tasks.test]
 description = "Goと管理画面のテスト（GoのテストのDBは compose.dev.yaml のものを使う）"
 run = ["go test ./...", "pnpm --dir web/admin test"]
