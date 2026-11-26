@@ -53,6 +53,14 @@ export function UnpublishedBadge() {
   );
 }
 
+export function ScheduledUpdateBadge() {
+  return (
+    <span className="inline-block rounded-full border border-amber-700 bg-amber-50 px-2.5 py-0.5 text-sm font-semibold whitespace-nowrap text-amber-900">
+      更新を予約
+    </span>
+  );
+}
+
 // Focus moves to the page heading after client-side navigation so screen reader users
 // know the page changed. The first page load keeps the browser default.
 let firstHeading = true;

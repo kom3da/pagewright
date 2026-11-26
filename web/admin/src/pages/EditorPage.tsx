@@ -9,6 +9,7 @@ import { api, errorField, errorMessage, isApiError } from "../api/client";
 import { contentQuery, contentsQuery } from "../api/queries";
 import type { ContentDetail, ContentPatch, ContentSummary, ContentType } from "../api/types";
 import { CategoryCheckboxes } from "../components/CategoryCheckboxes";
+import { ScheduleDialog, type ScheduleError } from "../components/ScheduleDialog";
 import { TagPicker } from "../components/TagPicker";
 import { useNotify } from "../components/Toaster";
 import { Button } from "../components/ui/Button";
@@ -19,12 +20,14 @@ import {
   formatDateTime,
   Loading,
   PageHeading,
+  ScheduledUpdateBadge,
   StatusBadge,
   UnpublishedBadge,
 } from "../components/ui/misc";
 import { publicUrl } from "../config";
 import { BodyEditor, useBodyEditor } from "../editor/BodyEditor";
 import { editorContent, normalizeBody } from "../editor/normalize";
+import { formatJapanDateTime } from "../lib/datetime";
 import { optionalSlugSchema } from "../lib/slug";
 
 const typeLabels = { post: "記事", page: "固定ページ" } as const;
@@ -65,7 +68,7 @@ const toPatch = (s: Settings): ContentPatch => ({
   tagIds: s.tagIds,
 });
 
-type Busy = "save" | "publish" | "unpublish" | "delete" | null;
+type Busy = "save" | "publish" | "unpublish" | "schedule" | "unschedule" | "delete" | null;
 
 function EditorForm({ content: initial }: { content: ContentDetail }) {
   const { id, type } = initial;
@@ -104,6 +107,8 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   const [busy, setBusy] = useState<Busy>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"unpublish" | "delete" | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleError, setScheduleError] = useState<ScheduleError | null>(null);
 
   const titleDirty = title !== savedTitle;
   const dirty = titleDirty || bodyDirty || settingsDirty;
@@ -212,14 +217,54 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
 
   const publish = () =>
     run("publish", async () => {
-      if (!title.trim()) {
-        setTitleError("公開するにはタイトルを入力してください。");
-        titleRef.current?.focus();
+      if (!requireTitle("公開するにはタイトルを入力してください。")) return;
+      if (!(await persist())) return;
+      let detail = await api.publish(id);
+      // The latest revision is live now, so a pending schedule could only republish the
+      // same or an older revision.
+      const hadSchedule = detail.scheduledAt !== null;
+      if (hadSchedule) detail = await api.unschedule(id);
+      update(detail);
+      notify(
+        `公開しました。${hadSchedule ? "予約は取り消しました。" : ""}公開サイトに反映されるまで少しお待ちください。`,
+      );
+    });
+
+  const requireTitle = (message: string) => {
+    if (title.trim()) return true;
+    setTitleError(message);
+    titleRef.current?.focus();
+    return false;
+  };
+
+  const openSchedule = () => {
+    if (!requireTitle("予約するにはタイトルを入力してください。")) return;
+    setScheduleError(null);
+    setScheduleOpen(true);
+  };
+
+  const schedule = (publishAt: string) =>
+    run("schedule", async () => {
+      setScheduleError(null);
+      try {
+        // Save first so that what the user sees is what gets scheduled.
+        if (!(await persist())) {
+          setScheduleOpen(false);
+          return;
+        }
+        update(await api.schedule(id, publishAt));
+      } catch (e) {
+        setScheduleError({ message: errorMessage(e), field: errorField(e) === "publishAt" });
         return;
       }
-      if (!(await persist())) return;
-      update(await api.publish(id));
-      notify("公開しました。公開サイトに反映されるまで少しお待ちください。");
+      setScheduleOpen(false);
+      notify(`${formatJapanDateTime(publishAt)}に公開するよう予約しました。`);
+    });
+
+  const unschedule = () =>
+    run("unschedule", async () => {
+      update(await api.unschedule(id));
+      notify("予約を取り消しました。");
     });
 
   const unpublish = () =>
@@ -274,7 +319,10 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
     }
   };
 
-  const isPublic = content.status !== "draft";
+  const isPublic = content.status === "published";
+  // Saved after scheduling: the schedule still points at an older revision.
+  const scheduleOutdated =
+    content.scheduledRevisionId !== null && content.scheduledRevisionId !== content.revision.id;
   const slug = form.watch("slug");
   const parentId = form.watch("parentId");
   const pages = useQuery({ ...contentsQuery("page"), enabled: type === "page" }).data ?? [];
@@ -294,7 +342,10 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         <PageHeading title={`${label}の編集`}>{label}の編集</PageHeading>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <StatusBadge status={content.status} />
-          {content.hasUnpublishedChanges && isPublic && <UnpublishedBadge />}
+          {isPublic && content.scheduledAt && <ScheduledUpdateBadge />}
+          {isPublic &&
+            content.hasUnpublishedChanges &&
+            content.scheduledRevisionId !== content.revision.id && <UnpublishedBadge />}
           {content.url && (
             <a
               href={publicUrl(content.url)}
@@ -399,6 +450,24 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
 
       <div className="sticky bottom-0 z-10 -mx-4 space-y-3 border-t border-slate-300 bg-slate-50/95 px-4 py-3">
         {actionError && <ErrorMessage>{actionError}</ErrorMessage>}
+        {content.scheduledAt && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-amber-700 bg-amber-50 px-3 py-2">
+            <div>
+              <p className="font-semibold text-amber-900">
+                {isPublic ? "更新の予約" : "予約"}：{formatJapanDateTime(content.scheduledAt)}
+                に公開
+              </p>
+              {scheduleOutdated && (
+                <p className="text-sm text-slate-800">
+                  予約したあとに保存した変更は、この予約に含まれていません。含めるには予約し直してください。
+                </p>
+              )}
+            </div>
+            <Button onClick={unschedule} disabled={busy !== null}>
+              {busy === "unschedule" ? "取り消しています…" : "予約を取り消す"}
+            </Button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="secondary" onClick={save} disabled={busy !== null}>
             {busy === "save" ? "保存しています…" : "下書き保存"}
@@ -409,6 +478,9 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
               : content.status === "published"
                 ? "変更を公開する"
                 : "公開する"}
+          </Button>
+          <Button onClick={openSchedule} disabled={busy !== null}>
+            {content.scheduledAt ? "予約し直す" : "日時を指定して公開"}
           </Button>
           {isPublic && (
             <Button onClick={() => setConfirm("unpublish")} disabled={busy !== null}>
@@ -433,7 +505,11 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         open={confirm === "unpublish"}
         onOpenChange={(o) => !o && setConfirm(null)}
         title="公開をやめますか？"
-        description={`この${label}は公開サイトから見えなくなります。内容は下書きとして残ります。`}
+        description={
+          content.scheduledAt
+            ? `この${label}は公開サイトから見えなくなります。予約は残るため、${formatJapanDateTime(content.scheduledAt)}にふたたび公開されます。`
+            : `この${label}は公開サイトから見えなくなります。内容は下書きとして残ります。`
+        }
         confirmLabel="公開をやめる"
         onConfirm={unpublish}
       />
@@ -445,6 +521,14 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         confirmLabel="削除する"
         danger
         onConfirm={remove}
+      />
+      <ScheduleDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        scheduledAt={content.scheduledAt}
+        busy={busy === "schedule"}
+        error={scheduleError}
+        onSubmit={schedule}
       />
       <ConflictDialog
         open={conflict}

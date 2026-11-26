@@ -337,6 +337,120 @@ describe("editor", () => {
   });
 });
 
+describe("scheduled publishing", () => {
+  const fillSchedule = async (
+    user: ReturnType<typeof renderApp>["user"],
+    dialog: HTMLElement,
+    date: string,
+    time: string,
+  ) => {
+    const dateInput = within(dialog).getByLabelText("日付");
+    const timeInput = within(dialog).getByLabelText("時刻");
+    await user.clear(dateInput);
+    await user.type(dateInput, date);
+    await user.clear(timeInput);
+    await user.type(timeInput, time);
+  };
+
+  it("schedules with a Japan-time date and time and shows the schedule", async () => {
+    const requests = recordRequests();
+    const { user } = await openEditor();
+    await user.click(screen.getByRole("button", { name: "日時を指定して公開" }));
+    const dialog = await screen.findByRole("dialog", { name: "日時を指定して公開" });
+    expect(within(dialog).getByRole("group", { name: "公開する日時（日本時間）" })).toBeVisible();
+    await expectNoAxeViolations(dialog);
+    await fillSchedule(user, dialog, "2099-12-01", "09:00");
+    await user.click(within(dialog).getByRole("button", { name: "この日時で予約する" }));
+
+    expect(await screen.findByText("2099年12月1日 9:00に公開するよう予約しました。")).toBeVisible();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("予約：2099年12月1日 9:00に公開")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "予約し直す" })).toBeInTheDocument();
+    expect(requests.find((r) => r.path === "/api/contents/1/schedule")?.body).toEqual({
+      publishAt: "2099-12-01T00:00:00Z",
+    });
+    expect(db.contents.find((c) => c.id === 1)).toMatchObject({
+      status: "scheduled",
+      scheduledAt: "2099-12-01T00:00:00Z",
+    });
+  });
+
+  it("checks the date on the client before sending", async () => {
+    const { user } = await openEditor();
+    await user.click(screen.getByRole("button", { name: "日時を指定して公開" }));
+    const dialog = await screen.findByRole("dialog");
+    await fillSchedule(user, dialog, "2020-01-01", "09:00");
+    await user.click(within(dialog).getByRole("button", { name: "この日時で予約する" }));
+    const date = within(dialog).getByLabelText("日付");
+    expect(date).toHaveAccessibleDescription(/今から1分以上あとにしてください。$/);
+    expect(date).toHaveFocus();
+    expect(db.contents.find((c) => c.id === 1)?.scheduledAt).toBeNull();
+  });
+
+  it("shows invalid_publish_at from the server at the date and time fields", async () => {
+    failWith(
+      "post",
+      "/api/contents/1/schedule",
+      422,
+      "invalid_publish_at",
+      "公開する日時は、今から1分以上あとにしてください",
+      "publishAt",
+    );
+    const { user } = await openEditor();
+    await user.click(screen.getByRole("button", { name: "日時を指定して公開" }));
+    const dialog = await screen.findByRole("dialog");
+    await fillSchedule(user, dialog, "2099-12-01", "09:00");
+    await user.click(within(dialog).getByRole("button", { name: "この日時で予約する" }));
+    const date = within(dialog).getByLabelText("日付");
+    await waitFor(() => expect(date).toHaveAttribute("aria-invalid", "true"));
+    expect(date).toHaveAccessibleDescription(/1分以上あとにしてください$/);
+    expect(within(dialog).getByLabelText("時刻")).toHaveAttribute("aria-invalid", "true");
+    expect(date).toHaveFocus();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("shows an existing schedule and cancels it", async () => {
+    const requests = recordRequests();
+    const { user } = await openEditor("/posts/2");
+    expect(screen.getByText("予約：2026年12月1日 9:00に公開")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "予約を取り消す" }));
+    expect(await screen.findByText("予約を取り消しました。")).toBeInTheDocument();
+    expect(screen.queryByText(/予約：/)).not.toBeInTheDocument();
+    expect(screen.getByText("下書き")).toBeInTheDocument();
+    expect(
+      requests.some((r) => r.method === "DELETE" && r.path === "/api/contents/2/schedule"),
+    ).toBe(true);
+  });
+
+  it("notes changes saved after scheduling", async () => {
+    const { user } = await openEditor("/posts/2");
+    await user.type(screen.getByLabelText("タイトル"), "（改訂）");
+    await user.click(screen.getByRole("button", { name: "下書き保存" }));
+    expect(await screen.findByText(/予約に含まれていません/)).toBeInTheDocument();
+  });
+
+  it("shows a scheduled update of a published post", async () => {
+    const c = db.contents.find((x) => x.id === 3);
+    Object.assign(c ?? {}, { scheduledAt: "2026-12-01T00:00:00Z", scheduledRevisionId: 300 });
+    await openEditor("/posts/3");
+    expect(screen.getByText("公開中")).toBeInTheDocument();
+    expect(screen.getByText("更新を予約")).toBeInTheDocument();
+    expect(screen.getByText("更新の予約：2026年12月1日 9:00に公開")).toBeInTheDocument();
+    // The unpublished changes are the scheduled ones.
+    expect(screen.queryByText("未公開の変更あり")).not.toBeInTheDocument();
+  });
+
+  it("publishing now cancels the schedule", async () => {
+    const { user } = await openEditor("/posts/2");
+    await user.click(screen.getByRole("button", { name: "公開する" }));
+    expect(await screen.findByText(/予約は取り消しました。/)).toBeInTheDocument();
+    expect(db.contents.find((c) => c.id === 2)).toMatchObject({
+      status: "published",
+      scheduledAt: null,
+    });
+  });
+});
+
 describe("images", () => {
   it("requires alt text, uploads and inserts the image with mediaId", async () => {
     const requests = recordRequests();
