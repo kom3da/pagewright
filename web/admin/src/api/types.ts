@@ -21,6 +21,8 @@ export type ContentSummary = {
   hasUnpublishedChanges: boolean;
   url: string | null;
   publishedAt: string | null;
+  scheduledAt: string | null;
+  parentId: number | null;
   updatedAt: string;
 };
 
@@ -43,17 +45,19 @@ export type Revision = {
 };
 
 export type ContentDetail = ContentSummary & {
-  parentId: number | null;
   categoryIds: number[];
   tagIds: number[];
   revision: Revision;
   publishedRevisionId: number | null;
+  scheduledRevisionId: number | null;
 };
 
 export type DraftInput = {
   title: string;
   body: BodyNode;
   fields?: Record<string, unknown>;
+  /** The revision.id editing started from. A newer latest revision means 409 edit_conflict. */
+  baseRevisionId?: number;
 };
 
 export type ContentPatch = {
@@ -76,6 +80,7 @@ export type CategoryPatch = Partial<CategoryInput & { position: number }>;
 
 export type Tag = { id: number; name: string; slug: string };
 export type TagInput = { name: string; slug: string };
+export type TagPatch = Partial<TagInput>;
 
 export type Media = {
   id: number;
@@ -90,4 +95,4 @@ export type Media = {
   createdAt: string;
 };
 
-export type ApiErrorBody = { error: { code: string; message: string } };
+export type ApiErrorBody = { error: { code: string; message: string; field?: string } };

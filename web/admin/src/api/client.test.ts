@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { failWith, recordRequests } from "../test/utils";
-import { ApiError, api } from "./client";
+import { ApiError, api, errorField } from "./client";
 
 describe("api client", () => {
   it("sends X-Pagewright only on non-GET requests, with same-origin credentials", async () => {
@@ -31,6 +31,33 @@ describe("api client", () => {
       code: "invalid_slug",
       message: "ページのURLは英小文字・数字・ハイフンで入力してください",
     });
+  });
+
+  it("reads error.field, falling back to the code when it is missing", async () => {
+    const err = await api.schedule(2, "2000-01-01T00:00:00Z").catch((e) => e);
+    expect(err).toMatchObject({ status: 422, code: "invalid_publish_at", field: "publishAt" });
+    expect(errorField(err)).toBe("publishAt");
+
+    // failWith sends no field, as an older server would.
+    failWith("post", "/api/tags", 409, "conflict", "このURLはすでに使われています。");
+    const old = await api.createTag({ name: "a", slug: "a" }).catch((e) => e);
+    expect(old.field).toBeUndefined();
+    expect(errorField(old)).toBe("slug");
+    expect(errorField(new ApiError(409, "edit_conflict", "x"))).toBeUndefined();
+    expect(errorField(new Error("x"))).toBeUndefined();
+  });
+
+  it("calls the schedule, tag and media endpoints", async () => {
+    const requests = recordRequests();
+    const scheduled = await api.schedule(1, "2099-12-01T00:00:00Z");
+    expect(scheduled).toMatchObject({ status: "scheduled", scheduledAt: "2099-12-01T00:00:00Z" });
+    expect((await api.unschedule(1)).scheduledAt).toBeNull();
+    expect(await api.patchTag(1, { name: "催し" })).toMatchObject({ id: 1, name: "催し" });
+    expect(requests.map((r) => [r.method, r.path, r.body])).toEqual([
+      ["POST", "/api/contents/1/schedule", { publishAt: "2099-12-01T00:00:00Z" }],
+      ["DELETE", "/api/contents/1/schedule", undefined],
+      ["PATCH", "/api/tags/1", { name: "催し" }],
+    ]);
   });
 
   it("sends media as multipart with the alt text", async () => {
