@@ -14,7 +14,7 @@ import { FileText, Newspaper, Search } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { errorMessage } from "../api/client";
 import { contentsQuery } from "../api/queries";
-import type { ContentFilter, ContentStatus, ContentType } from "../api/types";
+import type { ContentFilter, ContentStatus, ContentSummary, ContentType } from "../api/types";
 import { NewContentButton } from "../components/NewContentButton";
 import { AnchorLink } from "../components/ui/AnchorLink";
 import { ExternalLink } from "../components/ui/ExternalLink";
@@ -153,6 +153,14 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
                     >
                       {c.title || "（タイトルなし）"}
                     </AnchorLink>
+                    {/* Only published contents have a public URL. */}
+                    {c.url && (
+                      <Box>
+                        <ExternalLink href={publicUrl(c.url)} size="sm" c="dimmed">
+                          {c.url}
+                        </ExternalLink>
+                      </Box>
+                    )}
                   </div>
                 ),
               },
@@ -162,28 +170,20 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
                 render: (c) => (
                   <Stack gap={4}>
                     <ContentStatusBadges {...c} />
-                    {c.scheduledAt && (
+                    {/* A scheduled first publication is in 公開日; an update is said here. */}
+                    {c.status === "published" && c.scheduledAt && (
                       <Text size="sm" style={{ whiteSpace: "nowrap" }}>
-                        {formatJapanDateTime(c.scheduledAt)}に
-                        {c.status === "published" ? "更新" : "公開"}
+                        {formatJapanDateTime(c.scheduledAt)}に更新
                       </Text>
                     )}
                   </Stack>
                 ),
               },
               {
-                key: "url",
-                header: "公開中のURL",
-                render: (c) =>
-                  c.url ? (
-                    <ExternalLink href={publicUrl(c.url)} size="sm">
-                      {c.url}
-                    </ExternalLink>
-                  ) : (
-                    <Text size="sm" c="dimmed">
-                      未公開
-                    </Text>
-                  ),
+                key: "publishedAt",
+                header: "公開日",
+                nowrap: true,
+                render: (c) => <Text size="sm">{publishedDate(c)}</Text>,
               },
               {
                 key: "updatedAt",
@@ -197,6 +197,13 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
       </Stack>
     </>
   );
+}
+
+/** 公開日 of a row: the date on the site, the planned date (予定), or ― when not published. */
+function publishedDate(c: ContentSummary) {
+  if (c.status === "published" && c.publishedAt) return formatDateTime(c.publishedAt);
+  if (c.status === "scheduled" && c.scheduledAt) return `${formatDateTime(c.scheduledAt)}（予定）`;
+  return "―";
 }
 
 /** Search box and status filter. Each change is a new history entry (back undoes it). */

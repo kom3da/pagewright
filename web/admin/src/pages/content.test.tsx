@@ -3,16 +3,35 @@ import { describe, expect, it } from "vitest";
 import { db } from "../mocks/handlers";
 import { expectNoAxeViolations, failWith, recordRequests, renderApp } from "../test/utils";
 
+/** The title cell's text without the public URL shown under published titles. */
+const titleCell = (row: HTMLElement) => {
+  const cell = within(row).getAllByRole("cell")[0].cloneNode(true) as HTMLElement;
+  for (const a of cell.querySelectorAll('a[target="_blank"]')) a.remove();
+  return cell.textContent;
+};
+
 describe("content list", () => {
   it("shows status badges, unpublished changes and the public URL", async () => {
     renderApp("/posts");
     const table = await screen.findByRole("table");
     const rows = within(table).getAllByRole("row").slice(1);
-    expect(rows.map((r) => within(r).getAllByRole("cell")[0].textContent)).toEqual([
+    expect(rows.map((r) => within(r).getAllByRole("link")[0].textContent)).toEqual([
       "年末年始の営業について",
       "新しい施工事例を追加しました",
       "ホームページを公開しました",
     ]);
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["タイトル", "状態", "公開日", "最終更新"]);
+    // 公開日: the date on the site, the planned date, or ― before publishing.
+    const published = (r: HTMLElement) => within(r).getAllByRole("cell")[2];
+    expect(published(rows[0])).toHaveTextContent(/^\d{4}\/\d{2}\/\d{2} \d{1,2}:\d{2}$/);
+    expect(published(rows[1])).toHaveTextContent("2026/12/01 9:00（予定）");
+    expect(published(rows[2])).toHaveTextContent("―");
+    // The public URL is under the title, only for published ones.
+    expect(within(rows[1]).getAllByRole("link")).toHaveLength(1);
     expect(within(rows[0]).getByText("公開中")).toBeInTheDocument();
     expect(within(rows[0]).getByText("未公開の変更あり")).toBeInTheDocument();
     expect(within(rows[1]).getByText("予約")).toBeInTheDocument();
@@ -34,17 +53,14 @@ describe("content list", () => {
     const status = (r: HTMLElement) => within(r).getAllByRole("cell")[1];
     expect(status(rows[0])).toHaveTextContent("公開中更新を予約2026年12月3日 10:00に更新");
     expect(within(rows[0]).queryByText("未公開の変更あり")).not.toBeInTheDocument();
-    expect(status(rows[1])).toHaveTextContent("予約2026年12月1日 9:00に公開");
+    expect(status(rows[1])).toHaveTextContent(/^予約$/);
     expect(status(rows[2])).toHaveTextContent(/^下書き$/);
   });
 
   it("shows pages as a tree with their parents", async () => {
     renderApp("/pages");
     const table = await screen.findByRole("table");
-    const titles = within(table)
-      .getAllByRole("row")
-      .slice(1)
-      .map((r) => within(r).getAllByRole("cell")[0].textContent);
+    const titles = within(table).getAllByRole("row").slice(1).map(titleCell);
     expect(titles).toEqual(["お問い合わせ", "会社概要", "会社概要 › 沿革"]);
     await expectNoAxeViolations();
   });
@@ -71,7 +87,7 @@ describe("content list search and filter", () => {
     within(await screen.findByRole("table"))
       .getAllByRole("row")
       .slice(1)
-      .map((r) => within(r).getAllByRole("cell")[0].textContent);
+      .map(titleCell);
 
   it("searches by words and keeps the search in the URL", async () => {
     const requests = recordRequests();
