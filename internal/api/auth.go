@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -41,6 +42,13 @@ func (s *Server) loginLink(w http.ResponseWriter, r *http.Request, _ *session) e
 	email := strings.TrimSpace(in.Email)
 	if a, err := mail.ParseAddress(email); err != nil || a.Address != email || len(email) > 254 {
 		return invalid("invalid_email", "メールアドレスの形式が正しくありません")
+	}
+
+	// Limit every address alike, registered or not, so the answer reveals
+	// nothing.
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if !s.loginByIP.allow(ip) || !s.loginByEmail.allow(strings.ToLower(email)) {
+		return &apiError{http.StatusTooManyRequests, "too_many_requests", "ログイン用のリンクの送信が続いています。しばらく待ってからお試しください"}
 	}
 
 	token := newToken()

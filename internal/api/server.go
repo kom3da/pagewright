@@ -49,6 +49,8 @@ type Options struct {
 // Server is the admin API.
 type Server struct {
 	Options
+	loginByEmail *limiter
+	loginByIP    *limiter
 }
 
 const (
@@ -63,7 +65,11 @@ func New(o Options) *Server {
 	if o.Logger == nil {
 		o.Logger = slog.Default()
 	}
-	return &Server{Options: o}
+	return &Server{
+		Options:      o,
+		loginByEmail: newLimiter(5, 15*time.Minute),
+		loginByIP:    newLimiter(30, 15*time.Minute),
+	}
 }
 
 // Handler returns the routes under /api/.

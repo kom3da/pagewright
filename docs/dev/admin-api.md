@@ -24,7 +24,7 @@
 
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
-| `POST /api/auth/login-link` | `{"email": "..."}` | 204。登録の有無にかかわらず同じ応答。登録済みならメールで `/admin/login/verify?token=...` を送る（有効 15 分、1 回限り） |
+| `POST /api/auth/login-link` | `{"email": "..."}` | 204。登録の有無にかかわらず同じ応答。登録済みならメールで `/admin/login/verify?token=...` を送る（有効 15 分、1 回限り）。同じアドレスへは 15 分に 5 回、同じ IP からは 15 分に 30 回まで。超えると 429 `too_many_requests` |
 | `POST /api/auth/verify` | `{"token": "..."}` | 200 `Me`。Cookie を発行。リンクを開いただけではトークンを使わず、画面のボタンでこの API を呼ぶ。無効・期限切れは 400 `invalid_token` |
 | `POST /api/auth/logout` | なし | 204 |
 | `GET /api/me` | なし | 200 `Me` または 401 |

@@ -687,3 +687,18 @@ func TestDeleteParentCategory(t *testing.T) {
 		t.Errorf("categories after deleting the parent = %+v, want the child at the top", cats)
 	}
 }
+
+func TestLoginLinkRateLimit(t *testing.T) {
+	e := newEnv(t)
+	c := e.anon()
+	for i := range 5 {
+		if got := c.do(http.MethodPost, "/api/auth/login-link", map[string]string{"email": "nobody@example.com"}, nil); got != http.StatusNoContent {
+			t.Fatalf("request %d = %d, want 204", i+1, got)
+		}
+	}
+	if got, code := c.errorCode(http.MethodPost, "/api/auth/login-link", map[string]string{"email": "Nobody@Example.com"}); got != http.StatusTooManyRequests || code != "too_many_requests" {
+		t.Errorf("6th request = %d %s, want 429 too_many_requests", got, code)
+	}
+	// Other addresses are not affected.
+	c.mustDo(http.MethodPost, "/api/auth/login-link", map[string]string{"email": "alice@example.com"}, nil, http.StatusNoContent)
+}
