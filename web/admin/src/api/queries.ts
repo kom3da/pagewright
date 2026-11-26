@@ -18,3 +18,13 @@ export const categoriesQuery = queryOptions({
 export const tagsQuery = queryOptions({ queryKey: ["tags"], queryFn: api.listTags });
 
 export const mediaQuery = queryOptions({ queryKey: ["media"], queryFn: api.listMedia });
+
+export const siteQuery = queryOptions({ queryKey: ["site"], queryFn: api.getSite });
+
+// Contact messages are personal data: never persisted, and dropped from memory as soon
+// as no screen shows them.
+export const submissionsQuery = queryOptions({
+  queryKey: ["submissions"],
+  queryFn: api.listSubmissions,
+  gcTime: 0,
+});
