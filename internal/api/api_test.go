@@ -405,6 +405,32 @@ func TestUnpublishDraft(t *testing.T) {
 	}
 }
 
+// TestMoveUnderDraftPage moves a page whose child is a draft: the
+// published grandchild must follow to the new URL.
+func TestMoveUnderDraftPage(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	patch := func(id int64, in map[string]any) detail {
+		var d detail
+		alice.mustDo(http.MethodPatch, fmt.Sprintf("/api/contents/%d", id), in, &d, http.StatusOK)
+		return d
+	}
+	a := alice.newContent("page", "A", true)
+	patch(a.ID, map[string]any{"slug": "a"})
+	b := alice.newContent("page", "B", false)
+	patch(b.ID, map[string]any{"slug": "b", "parentId": a.ID})
+	c := alice.newContent("page", "C", true)
+	c = patch(c.ID, map[string]any{"slug": "c", "parentId": b.ID})
+	if c.URL == nil || *c.URL != "/a/b/c/" {
+		t.Fatalf("C's URL = %v, want /a/b/c/", c.URL)
+	}
+	patch(a.ID, map[string]any{"slug": "a2"})
+	alice.mustDo(http.MethodGet, fmt.Sprintf("/api/contents/%d", c.ID), nil, &c, http.StatusOK)
+	if c.URL == nil || *c.URL != "/a2/b/c/" {
+		t.Errorf("C's URL after moving A = %v, want /a2/b/c/", c.URL)
+	}
+}
+
 func TestValidation(t *testing.T) {
 	e := newEnv(t)
 	alice := e.login("alice@example.com")

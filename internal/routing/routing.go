@@ -60,9 +60,9 @@ func ContentPath(ctx context.Context, q *dbgen.Queries, c dbgen.Content) (string
 var reservedPrefixes = []string{"/posts/", "/media/"}
 
 // SyncContent makes the canonical route of a content match its URL.
-// A previous canonical URL is kept as a redirect. Pages below it follow.
-// Contents that were never published (no route yet) are left alone until
-// they are published.
+// A previous canonical URL is kept as a redirect. Pages below it follow,
+// also below a page that was never published: that page gets no route
+// until it is published, but published pages under it still move.
 func SyncContent(ctx context.Context, q *dbgen.Queries, id int64) error {
 	c, err := q.GetContent(ctx, id)
 	if err != nil {
@@ -73,18 +73,17 @@ func SyncContent(ctx context.Context, q *dbgen.Queries, id int64) error {
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
-	if !hasRoute && c.PublishedRevisionID == nil {
-		return nil
-	}
-	path, err := ContentPath(ctx, q, c)
-	if err != nil {
-		return err
-	}
-	if hasRoute && cur.Path == path {
-		return nil
-	}
-	if err := MoveCanonical(ctx, q, cur, hasRoute, path, dbgen.CreateRouteParams{ContentID: &id}); err != nil {
-		return err
+	if hasRoute || c.PublishedRevisionID != nil {
+		path, err := ContentPath(ctx, q, c)
+		if err != nil {
+			return err
+		}
+		if hasRoute && cur.Path == path {
+			return nil
+		}
+		if err := MoveCanonical(ctx, q, cur, hasRoute, path, dbgen.CreateRouteParams{ContentID: &id}); err != nil {
+			return err
+		}
 	}
 	if c.Type != "page" {
 		return nil
