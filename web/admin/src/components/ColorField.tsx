@@ -107,13 +107,23 @@ export function ColorField({ label, hint, value, defaultColor, error, onChange }
                 <RatioIcon aria-hidden="true" size={18} />
               </Box>
             )}
-            <Text id={ids.ratio} size="sm">
-              {ratio === null
-                ? "色コードを読み取れないため、見え方を表示できません。"
-                : `白い文字とのコントラスト比：${formatRatio(ratio)}（${
-                    ok ? "基準の 4.5:1 以上です" : "基準の 4.5:1 に足りません"
-                  }）`}
-            </Text>
+            {/* Plain words first; the ratio only backs them up. */}
+            <Box id={ids.ratio}>
+              {ratio === null ? (
+                <Text size="sm">色コードを読み取れないため、見え方を表示できません。</Text>
+              ) : (
+                <>
+                  <Text size="sm" fw={700}>
+                    {ok
+                      ? "この色の上の白い文字は、はっきり読めます。"
+                      : "白い文字が読みにくい色です。もう少し濃い色にしてください。"}
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    白い文字とのコントラスト比 {formatRatio(ratio)}（基準は 4.5:1 以上）
+                  </Text>
+                </>
+              )}
+            </Box>
           </Group>
         </Group>
         {error && (

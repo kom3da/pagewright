@@ -52,14 +52,16 @@ describe("site settings", () => {
     const { user } = await openSettings();
     const theme = screen.getByRole("group", { name: "テーマカラー" });
     const code = within(theme).getByLabelText(/色コード/);
-    expect(code).toHaveAccessibleDescription(/コントラスト比：8\.\d:1（基準の 4\.5:1 以上です）/);
+    expect(code).toHaveAccessibleDescription(
+      /白い文字は、はっきり読めます。.*コントラスト比 8\.\d:1（基準は 4\.5:1 以上）/,
+    );
 
     await user.type(code, "#7fb3ff");
     expect(code).toHaveAttribute("aria-invalid", "true");
     expect(code).toHaveAccessibleDescription(
       /明るすぎて.*コントラスト比 2\.\d:1.*4\.5:1 以上が必要/,
     );
-    expect(within(theme).getByText(/基準の 4\.5:1 に足りません/)).toBeInTheDocument();
+    expect(within(theme).getByText(/白い文字が読みにくい色です/)).toBeInTheDocument();
 
     await save(user);
     await waitFor(() => expect(code).toHaveFocus());
