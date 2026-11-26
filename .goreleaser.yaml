@@ -1,0 +1,80 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# Release: binaries for linux/darwin (amd64, arm64) with the admin UI embedded,
+# checksums, and a multi-arch image on GHCR. Runs from .github/workflows/release.yaml.
+# Try it locally: mise exec -- goreleaser release --snapshot --clean
+version: 2
+
+project_name: pagewright
+
+before:
+  hooks:
+    # The binary embeds web/admin/dist (-tags embedadmin).
+    - pnpm --dir web/admin install --frozen-lockfile
+    - pnpm --dir web/admin build
+
+builds:
+  - id: pagewright
+    main: ./cmd/pagewright
+    binary: pagewright
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    tags:
+      - embedadmin
+    ldflags:
+      - -s -w
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - docs/install.md
+      - deploy/compose.yaml
+      - deploy/.env.example
+      - deploy/caddy/Caddyfile
+      - deploy/nginx/90-pagewright-reload.sh
+      - deploy/nginx/templates/*
+      - deploy/postgres/init/*
+
+checksum:
+  name_template: checksums.txt
+
+dockers_v2:
+  - id: pagewright
+    ids: [pagewright]
+    images:
+      - ghcr.io/kom3da/pagewright
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .Prerelease }}{{ .Major }}.{{ .Minor }}{{ end }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    dockerfile: Dockerfile
+    # The "release" stage copies the binary built above instead of compiling again.
+    flags:
+      - --target=release
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: Pagewright
+      org.opencontainers.image.description: 日本語に強い、セルフホストのCMS
+      org.opencontainers.image.source: https://github.com/kom3da/pagewright
+      org.opencontainers.image.licenses: AGPL-3.0-only
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^Merge "
+
+release:
+  prerelease: auto

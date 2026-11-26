@@ -1,0 +1,11 @@
+# HTTPS の証明書（Let's Encrypt）を自動で取得・更新し、nginx へ中継する。
+# ドメインは .env の PAGEWRIGHT_SITE_DOMAIN と PAGEWRIGHT_ADMIN_DOMAIN。
+
+{$PAGEWRIGHT_SITE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy nginx:8080
+}
+
+{$PAGEWRIGHT_ADMIN_DOMAIN} {
+	reverse_proxy nginx:8080
+}
