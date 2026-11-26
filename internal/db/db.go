@@ -69,10 +69,28 @@ func (d *DB) Close() {
 	d.pool.Close()
 }
 
+// Pool returns the underlying pool, for River and tests. Queries on tenant
+// data still belong in InTenant; without a tenant set, RLS hides all rows.
+func (d *DB) Pool() *pgxpool.Pool {
+	return d.pool
+}
+
+// Queries returns queries that run without a tenant, for the auth
+// functions that are looked up before a site is chosen.
+func (d *DB) Queries() *dbgen.Queries {
+	return dbgen.New(d.pool)
+}
+
 // InTenant runs fn in a transaction scoped to the tenant in ctx. The
 // setting is transaction-local, so it never leaks to the next user of the
 // pooled connection. fn's error rolls the transaction back.
 func (d *DB) InTenant(ctx context.Context, fn func(q *dbgen.Queries) error) error {
+	return d.InTenantTx(ctx, func(_ pgx.Tx, q *dbgen.Queries) error { return fn(q) })
+}
+
+// InTenantTx is InTenant that also hands fn the transaction, for work that
+// must commit together with the queries (e.g. inserting a River job).
+func (d *DB) InTenantTx(ctx context.Context, fn func(tx pgx.Tx, q *dbgen.Queries) error) error {
 	tenantID, ok := TenantFrom(ctx)
 	if !ok {
 		return ErrNoTenant
@@ -81,7 +99,7 @@ func (d *DB) InTenant(ctx context.Context, fn func(q *dbgen.Queries) error) erro
 		if _, err := tx.Exec(ctx, "SELECT set_config('app.tenant_id', $1, true)", tenantID.String()); err != nil {
 			return fmt.Errorf("set tenant: %w", err)
 		}
-		return fn(dbgen.New(tx))
+		return fn(tx, dbgen.New(tx))
 	})
 }
 

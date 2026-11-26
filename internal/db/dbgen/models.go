@@ -62,6 +62,14 @@ type ContentTag struct {
 	TagID     int64
 }
 
+type LoginToken struct {
+	TokenHash []byte
+	UserID    uuid.UUID
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	CreatedAt time.Time
+}
+
 type Medium struct {
 	TenantID    uuid.UUID
 	ID          int64
@@ -92,6 +100,14 @@ type Route struct {
 	CategoryID *int64
 	TagID      *int64
 	CreatedAt  time.Time
+}
+
+type Session struct {
+	TokenHash []byte
+	UserID    uuid.UUID
+	TenantID  *uuid.UUID
+	ExpiresAt time.Time
+	CreatedAt time.Time
 }
 
 type Tag struct {

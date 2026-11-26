@@ -230,7 +230,7 @@ LEFT JOIN LATERAL (
   WHERE content_id = c.id ORDER BY id DESC LIMIT 1
 ) r ON true
 WHERE c.type = $1
-ORDER BY c.number
+ORDER BY c.number DESC
 `
 
 type ListContentsRow struct {
