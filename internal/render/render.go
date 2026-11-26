@@ -413,7 +413,8 @@ func (r *renderer) closeMark(m mark) {
 }
 
 // safeURL accepts http(s) URLs, relative URLs and, when allowMailto is set,
-// mailto: links. Anything else (javascript:, data:, ...) is refused.
+// mailto: and tel: links. Anything else (javascript:, data:, ...) is
+// refused.
 func safeURL(s string, allowMailto bool) (string, bool) {
 	s = strings.TrimSpace(s)
 	if s == "" || strings.ContainsFunc(s, func(c rune) bool { return c < 0x20 || c == 0x7f }) {
@@ -426,7 +427,7 @@ func safeURL(s string, allowMailto bool) (string, bool) {
 	switch strings.ToLower(u.Scheme) {
 	case "", "http", "https":
 		return s, true
-	case "mailto":
+	case "mailto", "tel":
 		return s, allowMailto
 	}
 	return "", false

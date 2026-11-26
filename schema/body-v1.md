@@ -32,7 +32,7 @@
 | `bold` | なし | `<strong>` |
 | `italic` | なし | `<em>` |
 | `code` | なし | `<code>` |
-| `link` | `href`（必須）、`target`（`_blank` のみ許可） | `<a>`。`_blank` のときは `rel="noopener noreferrer"` を付ける |
+| `link` | `href`（必須。`https://`・`http://`・`/` で始まるサイト内のパス・`#`・`mailto:`・`tel:`（数字と + ( ) - . 空白）だけ）、`target`（`_blank` のみ許可） | `<a>`。`_blank` のときは `rel="noopener noreferrer"` を付ける |
 | `ruby` | `rt`（必須、ふりがな） | `<ruby>本文<rp>(</rp><rt>ふりがな</rt><rp>)</rp></ruby>` |
 
 色・文字サイズのマークは持たない（テーマで決める）。

@@ -28,6 +28,8 @@ func TestParse(t *testing.T) {
 		{"text at top", `{"type":"doc","content":[{"type":"text","text":"x"}]}`, true},
 		{"image without alt", `{"type":"doc","content":[{"type":"image","attrs":{"src":"/media/a.jpg","alt":" "}}]}`, true},
 		{"javascript link", `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"link","attrs":{"href":"javascript:alert(1)"}}]}]}]}`, true},
+		{"tel link", `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"link","attrs":{"href":"tel:03-1234-5678"}}]}]}]}`, false},
+		{"tel link with text", `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"link","attrs":{"href":"tel:call-me"}}]}]}]}`, true},
 		{"color mark", `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"textStyle","attrs":{"color":"red"}}]}]}]}`, true},
 		{"ruby without rt", `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"ruby","attrs":{"rt":""}}]}]}]}`, true},
 		{"embed other site", `{"type":"doc","content":[{"type":"embed","attrs":{"provider":"vimeo","url":"https://vimeo.com/1"}}]}`, true},

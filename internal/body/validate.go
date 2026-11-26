@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -232,7 +233,7 @@ func httpsURL(s string) bool {
 	return err == nil && u.Scheme == "https" && u.Host != ""
 }
 
-// safeHref allows http(s), mailto and site-relative links.
+// safeHref allows http(s), mailto, tel and site-relative links.
 func safeHref(s string) bool {
 	if s == "" {
 		return false
@@ -252,6 +253,11 @@ func safeHref(s string) bool {
 		return u.Host != ""
 	case "mailto":
 		return u.Opaque != ""
+	case "tel":
+		return telNumber.MatchString(u.Opaque)
 	}
 	return false
 }
+
+// telNumber is what a tel: link may hold: digits and phone punctuation.
+var telNumber = regexp.MustCompile(`^\+?[0-9][0-9()\-. ]{0,29}$`)
