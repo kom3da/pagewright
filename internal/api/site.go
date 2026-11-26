@@ -59,6 +59,10 @@ type themeJSON struct {
 	Title       string              `json:"title"`
 	Description string              `json:"description"`
 	Settings    []build.SettingDecl `json:"settings"`
+	// SettingsTitle and SettingsDescription head the theme's settings
+	// (empty: the admin's default heading).
+	SettingsTitle       string `json:"settingsTitle"`
+	SettingsDescription string `json:"settingsDescription"`
 }
 
 const maxMenuItems = 20
@@ -74,7 +78,8 @@ func loadSite(ctx context.Context, q *dbgen.Queries) (siteSettingsJSON, error) {
 		Name: row.Name, LogoMediaID: row.LogoMediaID, Settings: site.Parse(row.Settings), Menu: []menuItemJSON{},
 	}, Themes: []themeJSON{}}
 	for _, t := range build.Themes() {
-		out.Themes = append(out.Themes, themeJSON{Name: t.Name, Title: t.Title, Description: t.Description, Settings: nonNil(t.Settings)})
+		out.Themes = append(out.Themes, themeJSON{Name: t.Name, Title: t.Title, Description: t.Description, Settings: nonNil(t.Settings),
+			SettingsTitle: t.SettingsTitle, SettingsDescription: t.SettingsDescription})
 	}
 	if row.LogoMediaID != nil {
 		m, err := q.GetMedia(ctx, *row.LogoMediaID)

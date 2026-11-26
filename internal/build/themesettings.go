@@ -49,6 +49,8 @@ func (m Manifest) checkSettings() error {
 type ThemeInfo struct {
 	Name, Title, Description string
 	Settings                 []SettingDecl
+	// SettingsTitle and SettingsDescription head the settings in the admin.
+	SettingsTitle, SettingsDescription string
 }
 
 // Themes lists the built-in themes. Themes that fail to load are left out.
@@ -73,7 +75,8 @@ func ThemeByName(name string) (ThemeInfo, error) {
 
 func (t *theme) info() ThemeInfo {
 	m := t.manifest
-	return ThemeInfo{Name: m.Name, Title: m.Title, Description: m.Description, Settings: m.Settings}
+	return ThemeInfo{Name: m.Name, Title: m.Title, Description: m.Description, Settings: m.Settings,
+		SettingsTitle: m.SettingsTitle, SettingsDescription: m.SettingsDescription}
 }
 
 // SettingError is a theme setting value that does not fit its declaration.

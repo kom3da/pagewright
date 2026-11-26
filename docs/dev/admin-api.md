@@ -174,6 +174,7 @@ type SiteSettings = {
 };
 type ThemeInfo = {
   name: string; title: string; description: string;
+  settingsTitle: string; settingsDescription: string; // 設定項目のまとまりの見出しと説明（空なら管理画面の既定）
   settings: { key: string; label: string; description: string; type: "text" | "tel" | "url" | "page"; maxLength: number }[];
 };
 ```

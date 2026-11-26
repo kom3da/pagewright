@@ -15,6 +15,8 @@
     "table": "表"
   },
   "dateFormat": "2006年1月2日",
+  "settingsTitle": "会社の連絡先",
+  "settingsDescription": "ページの下（フッター）と「お気軽にご相談ください」の帯に表示します。",
   "settings": [
     {
       "key": "address",

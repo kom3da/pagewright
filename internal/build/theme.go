@@ -156,6 +156,10 @@ type Manifest struct {
 	// Settings are extra fields the admin shows for this theme; their
 	// values reach templates as .Site.Theme.<key>.
 	Settings []SettingDecl `json:"settings"`
+	// SettingsTitle and SettingsDescription head the settings in the
+	// admin (e.g. "Company contact"). Optional; the admin has a default.
+	SettingsTitle       string `json:"settingsTitle"`
+	SettingsDescription string `json:"settingsDescription"`
 }
 
 // SettingDecl declares one theme setting.
