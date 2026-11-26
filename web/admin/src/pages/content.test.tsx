@@ -517,6 +517,7 @@ describe("editor", () => {
     expect(
       screen.getByRole("menuitem", { name: "公開日・URL・プレビューなどの設定へ移動" }),
     ).toBeInTheDocument();
+    await expectNoAxeViolations();
   });
 });
 

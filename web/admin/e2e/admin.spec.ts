@@ -138,8 +138,8 @@ test("editor is accessible and keyboard operable", async ({ page }) => {
   await page.goto("posts/3");
   const body = page.getByRole("textbox", { name: "本文" });
   await expect(body).toBeVisible();
-  await page.getByText("詳細設定").click();
   await expect(page.getByRole("checkbox", { name: "お知らせ" })).toBeChecked();
+  await expect(page.getByRole("group", { name: "公開日（日本時間）" })).toBeVisible();
   await expectAccessible(page);
 
   // The toolbar is a single Tab stop; arrow keys move between buttons.
@@ -150,6 +150,32 @@ test("editor is accessible and keyboard operable", async ({ page }) => {
   await expect(page.getByRole("button", { name: "大見出し" })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(body).toBeFocused();
+
+  // The 「その他」 menu works with the keyboard and is accessible while open.
+  await page.getByRole("button", { name: "その他" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menuitem", { name: "公開をやめる" })).toBeVisible();
+  await expectAccessible(page);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "その他" })).toBeFocused();
+});
+
+test("on a phone, the editor's actions stay in a slim bottom bar", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("posts/3");
+  const bar = page.getByRole("region", { name: "保存と公開" });
+  await expect(bar.getByRole("button", { name: "変更を公開する" })).toBeInViewport();
+  const box = await bar.boundingBox();
+  expect(box?.height).toBeLessThan(64);
+  expect((box?.y ?? 0) + (box?.height ?? 0)).toBeCloseTo(844, 0);
+  await expectAccessible(page);
+
+  // The settings follow the body; 「その他」 jumps there.
+  await bar.getByRole("button", { name: "その他" }).click();
+  await page.getByRole("menuitem", { name: "公開日・URL・プレビューなどの設定へ移動" }).click();
+  await expect(page.getByRole("heading", { name: "公開", exact: true })).toBeFocused();
+  await expect(page.getByRole("group", { name: "公開日（日本時間）" })).toBeInViewport();
+  await expect(bar.getByRole("button", { name: "変更を公開する" })).toBeInViewport();
 });
 
 test("Japanese IME composition is not broken by the editor", async ({ page }) => {
@@ -197,7 +223,8 @@ test("unsaved changes are confirmed before leaving", async ({ page }) => {
 
 test("scheduling a post is accessible and keyboard operable", async ({ page }) => {
   await page.goto("posts/1");
-  await page.getByRole("button", { name: "日時を指定して公開" }).click();
+  await page.getByRole("button", { name: "その他" }).click();
+  await page.getByRole("menuitem", { name: "日時を指定して公開" }).click();
   const dialog = page.getByRole("dialog", { name: "日時を指定して公開" });
   await expect(dialog.getByLabel("日付")).toBeVisible();
   await expectAccessible(page);
@@ -206,6 +233,7 @@ test("scheduling a post is accessible and keyboard operable", async ({ page }) =
   await dialog.getByLabel("時刻").fill("09:00");
   await dialog.getByLabel("時刻").press("Enter");
   await expect(dialog).toBeHidden();
+  await expect(page.getByRole("button", { name: "その他" })).toBeFocused();
   await expect(page.getByText("予約：2099年12月1日 9:00に公開")).toBeVisible();
   await expectAccessible(page);
 

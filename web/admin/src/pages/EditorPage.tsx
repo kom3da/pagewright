@@ -531,7 +531,9 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
             >
               {isPublic ? "変更を公開する" : "公開する"}
             </Button>
-            <Menu position={desktop ? "bottom-end" : "top-end"}>
+            {/* No focus placeholder: a focusable role="presentation" child breaks the menu
+                role's required children (axe). Opening with Enter focuses the first item. */}
+            <Menu position={desktop ? "bottom-end" : "top-end"} withInitialFocusPlaceholder={false}>
               <Menu.Target>
                 <Button
                   ref={moreButtonRef}
