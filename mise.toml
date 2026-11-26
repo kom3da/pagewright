@@ -56,6 +56,14 @@ run = [
 description = "sqlcでGoコードを生成する"
 run = "sqlc generate"
 
+[tasks."sample:load"]
+description = "コーポレートテーマのサンプル（架空の会社）を新しいサイトに入れる。先に mise run dev で本体を起動しておく"
+run = """
+url=$(go run ./cmd/pagewright init --site "みどり野設備株式会社" --email "${SAMPLE_EMAIL:-sample@example.com}" | tail -1)
+go run ./tools/sampleload -login "$url"
+echo "管理画面に入るときは: go run ./cmd/pagewright login-url --email ${SAMPLE_EMAIL:-sample@example.com}"
+"""
+
 [tasks.down]
 description = "開発用のDBとMailpitを止める"
 run = "docker compose -f deploy/compose.dev.yaml down"

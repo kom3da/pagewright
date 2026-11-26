@@ -34,6 +34,7 @@ mise exec -- go run ./cmd/pagewright init --site "サイトの名前" --email yo
 | 届いたメール（ログイン用リンク） | http://localhost:8025/ （Mailpit） |
 
 - 2回目からは、ログイン画面でメールアドレスを入れ、Mailpit に届いたリンクを開きます。`go run ./cmd/pagewright login-url --email ...` でもログイン用URLを出せます
+- コーポレートテーマのサンプル（架空の会社のページ9件・お知らせ12件・画像）を新しいサイトに入れる：`mise run sample:load`（中身は `themes/corporate/sample/`、管理APIだけを使って入れる）
 - WordPress の書き出しファイル（WXR）の取り込み：`go run ./cmd/pagewright import-wxr --site <サイトID> --author-email you@example.com [--dry-run] [--download-media] ファイル.xml`
 - テストと検査：`mise run test`、`mise run lint`。Go のテストは開発用の PostgreSQL を使うので、先に `mise run dev`（または `docker compose -f deploy/compose.dev.yaml up -d`）が必要です
 - 管理画面だけを開発するとき：`web/admin/README.md`
