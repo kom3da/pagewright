@@ -702,3 +702,75 @@ func TestLoginLinkRateLimit(t *testing.T) {
 	// Other addresses are not affected.
 	c.mustDo(http.MethodPost, "/api/auth/login-link", map[string]string{"email": "alice@example.com"}, nil, http.StatusNoContent)
 }
+
+type siteOut struct {
+	Name         string
+	LogoMediaID  *int64
+	PrimaryColor string
+	Font         string
+	Menu         []struct {
+		Label     *string
+		ContentID *int64
+		URL       *string
+	}
+	Logo *mediaOut
+}
+
+func TestSiteSettings(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	dave := e.login("dave@example.com")
+	bob := e.login("bob@example.com")
+
+	var s siteOut
+	alice.mustDo(http.MethodGet, "/api/site", nil, &s, http.StatusOK)
+	if s.Name != "サイトA" || len(s.Menu) != 0 {
+		t.Fatalf("site = %+v", s)
+	}
+
+	var logo mediaOut
+	alice.upload("logo.png", pngBytes(t), "サイトAのロゴ", &logo)
+	page := alice.newContent("page", "会社概要", true)
+	in := map[string]any{
+		"name": "サイトA（新）", "logoMediaId": logo.ID, "primaryColor": "#0a4f8f", "font": "mincho",
+		"menu": []map[string]any{{"contentId": page.ID}, {"label": "採用情報", "url": "https://example.com/jobs"}},
+	}
+	if got, _ := dave.errorCode(http.MethodPut, "/api/site", in); got != http.StatusForbidden {
+		t.Errorf("editor changing settings = %d, want 403", got)
+	}
+	alice.mustDo(http.MethodPut, "/api/site", in, &s, http.StatusOK)
+	if s.Name != "サイトA（新）" || s.Logo == nil || s.Logo.ID != logo.ID || s.Font != "mincho" || len(s.Menu) != 2 || *s.Menu[1].URL != "https://example.com/jobs" {
+		t.Errorf("after update = %+v", s)
+	}
+	if got, code := alice.errorCode(http.MethodDelete, fmt.Sprintf("/api/media/%d", logo.ID), nil); got != http.StatusConflict || code != "media_in_use" {
+		t.Errorf("deleting the logo = %d %s, want 409 media_in_use", got, code)
+	}
+
+	var out struct {
+		Error struct{ Code, Field string } `json:"error"`
+	}
+	in["primaryColor"] = "#a0c4ff"
+	if got := alice.do(http.MethodPut, "/api/site", in, &out); got != http.StatusUnprocessableEntity || out.Error.Field != "primaryColor" {
+		t.Errorf("low-contrast color = %d %+v, want 422 on primaryColor", got, out.Error)
+	}
+	in["primaryColor"] = "#0a4f8f"
+
+	// Another site's page and image cannot be used.
+	bPage := bob.newContent("page", "Bのページ", true)
+	var bLogo mediaOut
+	bob.upload("b.png", pngBytes(t), "B", &bLogo)
+	bad := []map[string]any{
+		{"name": "x", "menu": []map[string]any{{"contentId": bPage.ID}}},
+		{"name": "x", "logoMediaId": bLogo.ID},
+	}
+	for _, b := range bad {
+		if got, _ := alice.errorCode(http.MethodPut, "/api/site", b); got != http.StatusUnprocessableEntity {
+			t.Errorf("PUT %v from A = %d, want 422", b, got)
+		}
+	}
+	var bs siteOut
+	bob.mustDo(http.MethodGet, "/api/site", nil, &bs, http.StatusOK)
+	if bs.Name != "サイトB" || bs.Logo != nil {
+		t.Errorf("site B changed: %+v", bs)
+	}
+}

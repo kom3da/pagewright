@@ -19,6 +19,7 @@ type snapshot struct {
 	contentCats []dbgen.ListAllContentCategoriesRow
 	contentTags []dbgen.ListAllContentTagsRow
 	media       []dbgen.Medium
+	menu        []dbgen.ListMenuItemsRow
 }
 
 // load reads the tenant's site in one transaction. RLS limits every query
@@ -29,6 +30,9 @@ func load(ctx context.Context, d *db.DB) (*snapshot, error) {
 		var err error
 		if s.tenant, err = q.GetCurrentTenant(ctx); err != nil {
 			return fmt.Errorf("tenant: %w", err)
+		}
+		if s.menu, err = q.ListMenuItems(ctx); err != nil {
+			return fmt.Errorf("menu: %w", err)
 		}
 		if s.contents, err = q.ListPublishedContents(ctx); err != nil {
 			return fmt.Errorf("contents: %w", err)

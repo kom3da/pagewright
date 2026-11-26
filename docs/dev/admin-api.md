@@ -144,6 +144,23 @@ type Media = {
 
 ## サイト
 
+```ts
+type MenuItem = { label: string | null; contentId: number | null; url: string | null }; // contentId か url のどちらか一方
+type SiteSettings = {
+  name: string;
+  logoMediaId: number | null;
+  logo: Media | null;          // 出力だけ
+  primaryColor?: string;       // "#RRGGBB"。白とのコントラスト比 4.5:1 以上
+  footerColor?: string;        // "#RRGGBB"。同上（白い文字が乗る）
+  font?: "gothic" | "mincho";
+  timeZone?: string;           // 既定 "Asia/Tokyo"
+  contactEmail?: string;       // お問い合わせの送り先
+  menu: MenuItem[];            // 空なら、親のない固定ページとお知らせを自動で並べる
+};
+```
+
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
+| `GET /api/site` | | 200 `SiteSettings` |
+| `PUT /api/site` | `SiteSettings`（`logo` を除く。全体を置き換える） | 200 `SiteSettings`。管理者だけ（編集者は 403）。不正な値は 422、`field` に項目名（`primaryColor` など、メニューは `menu`）。再ビルドを予約する |
 | `POST /api/site/build` | なし | 202。全体ビルドを予約する（手動で再ビルドしたいとき） |

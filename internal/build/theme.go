@@ -29,6 +29,11 @@ type Site struct {
 	LegacyRedirects bool
 	// SearchURL is the search page, or empty when search is off.
 	SearchURL string
+	// LogoURL is the logo image, or empty to show the name as text.
+	LogoURL string
+	// StyleVars overrides theme CSS variables (colors, font) from the site
+	// settings, e.g. "--color-accent: #0a4f8f;". Values are validated.
+	StyleVars template.CSS
 }
 
 // Link is a titled URL path.
@@ -89,13 +94,12 @@ type theme struct {
 
 const assetsDir = "_assets"
 
-var jst = time.FixedZone("JST", 9*60*60)
-
 var themeFuncs = template.FuncMap{
-	// date formats a date the Japanese way: 2026年11月27日.
-	"date": func(t time.Time) string { return t.In(jst).Format("2006年1月2日") },
+	// date formats a date the Japanese way: 2026年11月27日. Times arrive
+	// already in the site's time zone.
+	"date": func(t time.Time) string { return t.Format("2006年1月2日") },
 	"isoDate": func(t time.Time) string {
-		return t.In(jst).Format("2006-01-02")
+		return t.Format("2006-01-02")
 	},
 	// current returns the aria-current value of a menu link on the page at
 	// path: "page" for the page itself, "true" for its section.

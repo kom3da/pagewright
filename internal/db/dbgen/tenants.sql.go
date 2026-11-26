@@ -10,7 +10,7 @@ import (
 )
 
 const getCurrentTenant = `-- name: GetCurrentTenant :one
-SELECT id, name, last_content_number, created_at FROM tenants WHERE id = app_current_tenant()
+SELECT id, name, last_content_number, created_at, settings, logo_media_id FROM tenants WHERE id = app_current_tenant()
 `
 
 func (q *Queries) GetCurrentTenant(ctx context.Context) (Tenant, error) {
@@ -21,6 +21,8 @@ func (q *Queries) GetCurrentTenant(ctx context.Context) (Tenant, error) {
 		&i.Name,
 		&i.LastContentNumber,
 		&i.CreatedAt,
+		&i.Settings,
+		&i.LogoMediaID,
 	)
 	return i, err
 }

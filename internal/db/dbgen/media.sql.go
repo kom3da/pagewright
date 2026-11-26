@@ -129,18 +129,20 @@ func (q *Queries) ListMedia(ctx context.Context) ([]Medium, error) {
 }
 
 const mediaInUse = `-- name: MediaInUse :one
-SELECT EXISTS (
+SELECT (EXISTS (
   SELECT FROM contents c
   JOIN content_revisions r ON r.content_id = c.id
   WHERE (r.id = c.published_revision_id OR r.id = c.scheduled_revision_id
          OR r.id = (SELECT max(l.id) FROM content_revisions l WHERE l.content_id = c.id))
     AND jsonb_path_exists(r.body, '$.** ? (@.type == "image" && @.attrs.mediaId == $id)',
                           jsonb_build_object('id', $1::bigint))
-)::boolean AS in_use
+) OR EXISTS (
+  SELECT FROM tenants t WHERE t.logo_media_id = $1::bigint
+))::boolean AS in_use
 `
 
-// Whether the latest, published or scheduled revision of any content shows
-// the image.
+// Whether the site logo is the image, or the latest, published or
+// scheduled revision of any content shows it.
 func (q *Queries) MediaInUse(ctx context.Context, mediaID int64) (bool, error) {
 	row := q.db.QueryRow(ctx, mediaInUse, mediaID)
 	var in_use bool

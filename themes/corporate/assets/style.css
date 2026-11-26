@@ -466,3 +466,9 @@ ruby rt {
     display: none;
   }
 }
+
+.site-logo {
+  display: block;
+  max-height: 3rem;
+  width: auto;
+}

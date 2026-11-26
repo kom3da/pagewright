@@ -91,6 +91,15 @@ type Membership struct {
 	CreatedAt time.Time
 }
 
+type MenuItem struct {
+	TenantID  uuid.UUID
+	ID        int64
+	Position  int64
+	Label     *string
+	ContentID *int64
+	Url       *string
+}
+
 type Route struct {
 	TenantID   uuid.UUID
 	ID         int64
@@ -123,6 +132,8 @@ type Tenant struct {
 	Name              string
 	LastContentNumber int64
 	CreatedAt         time.Time
+	Settings          []byte
+	LogoMediaID       *int64
 }
 
 type User struct {

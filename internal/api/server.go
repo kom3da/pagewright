@@ -24,6 +24,7 @@ import (
 	"github.com/kom3da/pagewright/internal/mail"
 	"github.com/kom3da/pagewright/internal/media"
 	"github.com/kom3da/pagewright/internal/routing"
+	"github.com/kom3da/pagewright/internal/site"
 )
 
 // Jobs schedules background work. Jobs are added in tx so they commit
@@ -108,6 +109,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/media/{id}", s.site(s.deleteMedia))
 
 	mux.Handle("POST /api/site/build", s.site(s.buildSite))
+	mux.Handle("GET /api/site", s.site(s.getSite))
+	mux.Handle("PUT /api/site", s.site(s.putSite))
 
 	mux.Handle("/api/", s.public(func(http.ResponseWriter, *http.Request, *session) error {
 		return errNotFound
@@ -184,7 +187,7 @@ func (s *Server) sessionByHash(ctx context.Context, h []byte) (*session, error) 
 func csrf(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Header.Get("X-Pagewright") != "1" {
-			writeJSON(w, http.StatusForbidden, errorBody("csrf", "画面を再読み込みしてから、もう一度お試しください"))
+			writeJSON(w, http.StatusForbidden, errorBody("csrf", "画面を再読み込みしてから、もう一度お試しください", ""))
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -199,7 +202,7 @@ func (s *Server) recoverer(next http.Handler) http.Handler {
 					panic(v)
 				}
 				s.Logger.Error("panic in handler", "method", r.Method, "path", r.URL.Path, "panic", v)
-				writeJSON(w, http.StatusInternalServerError, errorBody("internal", "サーバーでエラーが起きました"))
+				writeJSON(w, http.StatusInternalServerError, errorBody("internal", "サーバーでエラーが起きました", ""))
 			}
 		}()
 		w.Header().Set("Cache-Control", "no-store")
@@ -233,6 +236,8 @@ func (s *Server) finish(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	var ae *apiError
 	var be *body.Error
+	var se *site.FieldError
+	field := ""
 	var pe *pgconn.PgError
 	switch {
 	case errors.As(err, &ae):
@@ -242,6 +247,8 @@ func (s *Server) finish(w http.ResponseWriter, r *http.Request, err error) {
 		ae = invalid("reserved_slug", "「posts」と「media」はサイトの仕組みで使っているため、いちばん上の固定ページのURLには使えません")
 	case errors.As(err, &be):
 		ae = invalid("invalid_body", be.Message)
+	case errors.As(err, &se):
+		ae, field = invalid("invalid_setting", se.Message), se.Field
 	case errors.Is(err, pgx.ErrNoRows):
 		ae = errNotFound
 	case errors.As(err, &pe) && pe.Code == "23505":
@@ -254,13 +261,16 @@ func (s *Server) finish(w http.ResponseWriter, r *http.Request, err error) {
 		s.Logger.Error("api error", "method", r.Method, "path", r.URL.Path, "err", err)
 		ae = &apiError{http.StatusInternalServerError, "internal", "サーバーでエラーが起きました。時間をおいてもう一度お試しください"}
 	}
-	writeJSON(w, ae.Status, errorBody(ae.Code, ae.Message))
+	if field == "" {
+		field = errorFields[ae.Code]
+	}
+	writeJSON(w, ae.Status, errorBody(ae.Code, ae.Message, field))
 }
 
-func errorBody(code, msg string) any {
+func errorBody(code, msg, field string) any {
 	e := map[string]string{"code": code, "message": msg}
-	if f, ok := errorFields[code]; ok {
-		e["field"] = f
+	if field != "" {
+		e["field"] = field
 	}
 	return map[string]any{"error": e}
 }
@@ -279,6 +289,8 @@ var errorFields = map[string]string{
 	"invalid_parent":     "parentId",
 	"invalid_name":       "name",
 	"invalid_publish_at": "publishAt",
+	"invalid_menu":       "menu",
+	"invalid_logo":       "logoMediaId",
 	"alt_required":       "altText",
 	"file_required":      "file",
 	"unsupported_type":   "file",

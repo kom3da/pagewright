@@ -55,6 +55,8 @@ type generator struct {
 	postsOfTag map[int64][]*item
 	sitemap    []sitemapURL
 	redirects  []redirect
+	loc        *time.Location // site time zone for dates
+	logoKey    string         // storage key of the logo, copied with the media
 }
 
 type sitemapURL struct {
@@ -285,6 +287,11 @@ func (g *generator) buildSite() {
 	if g.opts.Pagefind != "" {
 		g.site.SearchURL = searchPath
 	}
+	g.applySettings()
+	if len(g.snap.menu) > 0 {
+		g.site.Menu = g.configuredMenu()
+		return
+	}
 	var pages []*item
 	for _, it := range g.items {
 		if it.row.Type == "page" && it.row.ParentID == nil && it.path != "/" {
@@ -359,10 +366,10 @@ func (g *generator) posts() []*item {
 	return out
 }
 
-func postItems(list []*item) []PostItem {
+func (g *generator) postItems(list []*item) []PostItem {
 	out := make([]PostItem, 0, len(list))
 	for _, it := range list {
-		out = append(out, PostItem{Title: title(it), URL: it.path, PublishedAt: *it.row.PublishedAt, Categories: it.cats})
+		out = append(out, PostItem{Title: title(it), URL: it.path, PublishedAt: it.row.PublishedAt.In(g.loc), Categories: it.cats})
 	}
 	return out
 }
@@ -372,7 +379,7 @@ func (g *generator) content(it *item) *Content {
 		Type:        it.row.Type,
 		Title:       title(it),
 		Body:        it.body.HTML,
-		PublishedAt: *it.row.PublishedAt,
+		PublishedAt: it.row.PublishedAt.In(g.loc),
 		Categories:  it.cats,
 		Tags:        it.tags,
 	}
@@ -387,7 +394,7 @@ func (g *generator) writeHome() error {
 		lastmod = it.row.RevisionCreatedAt
 	}
 	posts := g.posts()
-	pg.Posts = postItems(posts[:min(homePosts, len(posts))])
+	pg.Posts = g.postItems(posts[:min(homePosts, len(posts))])
 	return g.writePage("home", "home page", pg, lastmod)
 }
 
@@ -430,7 +437,7 @@ func (g *generator) writeList(kind, base, heading, who string, crumbs []Link, li
 			pg.Title = fmt.Sprintf("%s（%dページ目）", heading, n)
 		}
 		pg.Breadcrumbs = append(slices.Clone(crumbs), Link{Title: heading})
-		pg.Posts = postItems(list[(n-1)*PostsPerPage : min(n*PostsPerPage, len(list))])
+		pg.Posts = g.postItems(list[(n-1)*PostsPerPage : min(n*PostsPerPage, len(list))])
 		pag := &Pagination{Current: n, Total: total}
 		if n > 1 {
 			pag.Prev = pagePath(base, n-1)
@@ -505,6 +512,9 @@ func (g *generator) copyMedia() error {
 		byKey[m.StorageKey] = m
 	}
 	used := map[string]dbgen.Medium{}
+	if m, ok := byKey[g.logoKey]; ok {
+		used[m.StorageKey] = m
+	}
 	for _, it := range g.items {
 		for _, id := range it.body.MediaIDs {
 			if m, ok := byID[id]; ok {
