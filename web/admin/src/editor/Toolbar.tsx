@@ -1,5 +1,4 @@
 import { type Editor, useEditorState } from "@tiptap/react";
-import { clsx } from "clsx";
 import {
   Bold,
   Code,
@@ -24,6 +23,7 @@ import { type KeyboardEvent, type ReactNode, useLayoutEffect, useRef, useState }
 import { LinkDialog } from "./LinkDialog";
 import { MediaDialog } from "./MediaDialog";
 import { RubyDialog } from "./RubyDialog";
+import classes from "./Toolbar.module.css";
 
 type ButtonProps = {
   label: string;
@@ -49,11 +49,7 @@ function ToolButton({ label, icon: Icon, text, pressed, disabled, onClick }: But
       onClick={() => {
         if (!disabled) onClick();
       }}
-      className={clsx(
-        "inline-flex min-h-9 min-w-9 items-center justify-center gap-1 rounded px-2 text-sm font-semibold",
-        pressed ? "bg-blue-100 text-blue-900" : "text-slate-800 hover:bg-slate-200",
-        disabled && "cursor-not-allowed text-slate-500 hover:bg-transparent",
-      )}
+      className={classes.button}
     >
       {Icon && <Icon aria-hidden="true" size={18} />}
       {text}
@@ -62,7 +58,7 @@ function ToolButton({ label, icon: Icon, text, pressed, disabled, onClick }: But
 }
 
 function Separator() {
-  return <span aria-hidden="true" className="mx-1 h-6 w-px bg-slate-300" />;
+  return <span aria-hidden="true" className={classes.separator} />;
 }
 
 /** Arrow-key navigation between toolbar buttons with a single Tab stop. */
@@ -154,7 +150,7 @@ export function Toolbar({ editor }: { editor: Editor }) {
         role="toolbar"
         aria-label="本文の書式"
         onKeyDown={roving.onKeyDown}
-        className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 border-b border-slate-300 bg-slate-50 p-1"
+        className={classes.toolbar}
       >
         <ToolButton
           label="本文（段落）"

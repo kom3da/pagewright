@@ -60,9 +60,9 @@ describe("content list", () => {
     failWith("get", "/api/contents", 500, "internal", "サーバーでエラーが起きました。");
     renderApp("/posts");
     // 5xx errors are retried twice with backoff before being shown.
-    expect(
-      await screen.findByText("サーバーでエラーが起きました。", {}, { timeout: 5000 }),
-    ).toHaveAttribute("role", "alert");
+    expect(await screen.findByRole("alert", {}, { timeout: 5000 })).toHaveTextContent(
+      "サーバーでエラーが起きました。",
+    );
   });
 });
 

@@ -1,9 +1,9 @@
+import { Button, Fieldset, Group, SimpleGrid, Stack, Text } from "@mantine/core";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { defaultScheduleInputs, fromJapanInputs, toJapanInputs } from "../lib/datetime";
-import { Button } from "./ui/Button";
 import { Dialog } from "./ui/Dialog";
-import { inputClass } from "./ui/Field";
-import { ErrorMessage } from "./ui/misc";
+import { Form } from "./ui/Form";
+import { ErrorMessage } from "./ui/feedback";
 
 export type ScheduleError = { message: string; field: boolean };
 
@@ -78,69 +78,70 @@ function ScheduleForm({
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
   const describedBy = fieldError ? `${hintId} ${errorId}` : hintId;
+  // The hint and the error belong to both inputs, so they are shown once for the group.
   const control = {
     "aria-describedby": describedBy,
     "aria-invalid": fieldError ? true : undefined,
-    "aria-required": true,
     required: true,
-    className: inputClass,
+    className: "pw-input",
   } as const;
 
   return (
-    <form noValidate onSubmit={submit} className="space-y-4">
-      <fieldset className="space-y-3">
-        <legend className="font-semibold">公開する日時（日本時間）</legend>
-        <p id={hintId} className="text-sm text-slate-700">
-          その日時になると、いまの内容が自動で公開されます。今から1分以上あとの日時にしてください。
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1">
-            <label htmlFor={`${id}-date`} className="block font-semibold">
-              日付
-            </label>
-            <input
-              {...control}
-              id={`${id}-date`}
-              ref={dateRef}
-              type="date"
-              value={date}
-              onChange={(e) => {
-                setDate(e.target.value);
-                setLocalError(undefined);
-                setShowServerError(false);
-              }}
-            />
-          </div>
-          <div className="space-y-1">
-            <label htmlFor={`${id}-time`} className="block font-semibold">
-              時刻
-            </label>
-            <input
-              {...control}
-              id={`${id}-time`}
-              type="time"
-              value={time}
-              onChange={(e) => {
-                setTime(e.target.value);
-                setLocalError(undefined);
-                setShowServerError(false);
-              }}
-            />
-          </div>
-        </div>
-        {fieldError && (
-          <p id={errorId} className="text-sm font-semibold text-red-700">
-            {fieldError}
-          </p>
-        )}
-      </fieldset>
+    <Form onSubmit={submit} gap="md">
+      <Fieldset legend="公開する日時（日本時間）" variant="unstyled">
+        <Stack gap="sm">
+          <Text id={hintId} size="sm" c="dimmed">
+            その日時になると、いまの内容が自動で公開されます。今から1分以上あとの日時にしてください。
+          </Text>
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+            <div>
+              <label htmlFor={`${id}-date`} className="pw-label">
+                日付
+              </label>
+              <input
+                {...control}
+                id={`${id}-date`}
+                ref={dateRef}
+                type="date"
+                value={date}
+                onChange={(e) => {
+                  setDate(e.target.value);
+                  setLocalError(undefined);
+                  setShowServerError(false);
+                }}
+              />
+            </div>
+            <div>
+              <label htmlFor={`${id}-time`} className="pw-label">
+                時刻
+              </label>
+              <input
+                {...control}
+                id={`${id}-time`}
+                type="time"
+                value={time}
+                onChange={(e) => {
+                  setTime(e.target.value);
+                  setLocalError(undefined);
+                  setShowServerError(false);
+                }}
+              />
+            </div>
+          </SimpleGrid>
+          {fieldError && (
+            <Text id={errorId} size="sm" fw={700} c="red.7">
+              {fieldError}
+            </Text>
+          )}
+        </Stack>
+      </Fieldset>
       {error && !error.field && <ErrorMessage>{error.message}</ErrorMessage>}
-      <div className="flex flex-wrap justify-end gap-3">
+      <Group justify="flex-end" gap="sm">
         <Button onClick={onCancel}>キャンセル</Button>
-        <Button type="submit" variant="primary" disabled={busy}>
-          {busy ? "予約しています…" : "この日時で予約する"}
+        <Button type="submit" variant="filled" loading={busy}>
+          この日時で予約する
         </Button>
-      </div>
-    </form>
+      </Group>
+    </Form>
   );
 }

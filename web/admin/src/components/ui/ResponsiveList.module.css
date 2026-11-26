@@ -1,0 +1,38 @@
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fields {
+  display: grid;
+  gap: 4px;
+  margin: var(--mantine-spacing-xs) 0 0;
+}
+
+.label {
+  flex: 0 0 6.5rem;
+}
+
+.value {
+  min-width: 0;
+  margin: 0;
+}
+
+.tableWrap {
+  overflow: hidden;
+}
+
+.tableWrap thead {
+  background: var(--mantine-color-gray-0);
+}
+
+.tableWrap th {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-gray-7);
+  white-space: nowrap;
+}
+
+.nowrap {
+  white-space: nowrap;
+}

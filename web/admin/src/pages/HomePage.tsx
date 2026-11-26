@@ -1,9 +1,11 @@
+import { Card, Group, SimpleGrid, Text, ThemeIcon } from "@mantine/core";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { FileText, FolderTree, Inbox, Newspaper, Settings, Tags } from "lucide-react";
 import { meQuery } from "../api/queries";
 import { NewContentButton } from "../components/NewContentButton";
-import { PageHeading } from "../components/ui/misc";
+import { AnchorLink } from "../components/ui/AnchorLink";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Section } from "../components/ui/Section";
 import { useIsAdmin } from "../lib/useIsAdmin";
 
 const links = [
@@ -31,42 +33,40 @@ export function HomePage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const isAdmin = useIsAdmin();
   return (
-    <div className="space-y-8">
-      <PageHeading title="ホーム">
-        ようこそ、{me.user.displayName || me.user.email} さん
-      </PageHeading>
-      <section aria-labelledby="quick-start" className="space-y-3">
-        <h2 id="quick-start" className="text-lg font-bold">
-          すぐに始める
-        </h2>
-        <div className="flex flex-wrap gap-3">
-          <NewContentButton type="post" label="記事を書く" />
-          <NewContentButton type="page" label="固定ページを作る" />
-        </div>
-      </section>
-      <section aria-labelledby="menu" className="space-y-3">
-        <h2 id="menu" className="text-lg font-bold">
-          メニュー
-        </h2>
-        <ul className="grid gap-3 sm:grid-cols-2">
+    <>
+      <PageHeader
+        title={`ようこそ、${me.user.displayName || me.user.email} さん`}
+        documentTitle="ホーム"
+        actions={
+          <>
+            <NewContentButton type="page" label="固定ページを作る" />
+            <NewContentButton type="post" label="記事を書く" primary />
+          </>
+        }
+      />
+      <Section title="メニュー" variant="plain">
+        <SimpleGrid component="ul" cols={{ base: 1, sm: 2 }} spacing="sm" m={0} p={0}>
           {links
             .filter((l) => isAdmin || !("adminOnly" in l))
             .map(({ to, label, icon: Icon, text }) => (
-              <li key={to}>
-                <Link
-                  to={to}
-                  className="flex items-start gap-3 rounded-lg border border-slate-300 bg-white p-4 hover:border-blue-700"
-                >
-                  <Icon aria-hidden="true" className="mt-1 text-blue-700" />
-                  <span>
-                    <span className="block font-bold text-blue-800 underline">{label}</span>
-                    <span className="text-sm text-slate-700">{text}</span>
-                  </span>
-                </Link>
-              </li>
+              <Card component="li" key={to} padding="md" style={{ listStyle: "none" }}>
+                <Group gap="sm" wrap="nowrap" align="flex-start">
+                  <ThemeIcon variant="light" size="lg" aria-hidden="true">
+                    <Icon size={18} />
+                  </ThemeIcon>
+                  <div>
+                    <AnchorLink to={to} fw={700}>
+                      {label}
+                    </AnchorLink>
+                    <Text size="sm" c="dimmed">
+                      {text}
+                    </Text>
+                  </div>
+                </Group>
+              </Card>
             ))}
-        </ul>
-      </section>
-    </div>
+        </SimpleGrid>
+      </Section>
+    </>
   );
 }

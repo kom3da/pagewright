@@ -1,10 +1,15 @@
+import { MantineProvider } from "@mantine/core";
+import { DatesProvider } from "@mantine/dates";
+import { ModalsProvider } from "@mantine/modals";
+import { Notifications } from "@mantine/notifications";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type RouterHistory, RouterProvider } from "@tanstack/react-router";
 import { useState } from "react";
+import "dayjs/locale/ja";
 import { meQuery } from "./api/queries";
-import { Toaster } from "./components/Toaster";
 import { createQueryClient } from "./queryClient";
 import { createAppRouter } from "./router";
+import { theme } from "./theme";
 
 export function createApp(history?: RouterHistory) {
   let router: ReturnType<typeof createAppRouter>;
@@ -23,10 +28,20 @@ export function createApp(history?: RouterHistory) {
 export function App({ history }: { history?: RouterHistory }) {
   const [{ queryClient, router }] = useState(() => createApp(history));
   return (
-    <QueryClientProvider client={queryClient}>
-      <Toaster>
-        <RouterProvider router={router} />
-      </Toaster>
-    </QueryClientProvider>
+    // Light only for now; `env="test"` turns off transitions and portals in Vitest.
+    <MantineProvider
+      theme={theme}
+      forceColorScheme="light"
+      env={import.meta.env.MODE === "test" ? "test" : "default"}
+    >
+      <DatesProvider settings={{ locale: "ja", firstDayOfWeek: 0, labelSeparator: "〜" }}>
+        <QueryClientProvider client={queryClient}>
+          <ModalsProvider>
+            <Notifications position="bottom-right" limit={3} />
+            <RouterProvider router={router} />
+          </ModalsProvider>
+        </QueryClientProvider>
+      </DatesProvider>
+    </MantineProvider>
   );
 }

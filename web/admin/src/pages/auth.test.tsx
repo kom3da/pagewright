@@ -51,7 +51,7 @@ describe("verify", () => {
     db.loggedIn = false;
     const { user } = renderApp("/login/verify?token=old");
     await user.click(await screen.findByRole("button", { name: "ログイン" }));
-    expect(await screen.findByText(/期限が切れています/)).toHaveAttribute("role", "alert");
+    expect(await screen.findByRole("alert")).toHaveTextContent(/期限が切れています/);
   });
 });
 
@@ -84,15 +84,16 @@ describe("session and sites", () => {
     expect(await screen.findByRole("heading", { name: "サイトを選ぶ" })).toBeInTheDocument();
   });
 
-  it("switches sites from the header and logs out", async () => {
+  it("switches sites from the sidebar and logs out", async () => {
     const { user } = renderApp("/");
     await screen.findByRole("heading", { name: /ようこそ/ });
-    await user.selectOptions(screen.getByLabelText("サイト"), "山田カフェ");
-    await user.click(screen.getByRole("button", { name: "切り替える" }));
+    await user.click(screen.getByRole("button", { name: /山田工務店.*サイトを切り替える/ }));
+    await user.click(await screen.findByRole("menuitem", { name: "山田カフェ" }));
     await waitFor(() => expect(db.me.currentSiteId).toBe(db.me.sites[1].id));
     expect(await screen.findByText("「山田カフェ」に切り替えました。")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "ログアウト" }));
+    await user.click(screen.getByRole("button", { name: /アカウントのメニュー/ }));
+    await user.click(await screen.findByRole("menuitem", { name: "ログアウト" }));
     expect(await screen.findByRole("heading", { name: "ログイン" })).toBeInTheDocument();
     expect(db.loggedIn).toBe(false);
   });
@@ -101,10 +102,11 @@ describe("session and sites", () => {
     db.me.sites = [db.me.sites[0]];
     renderApp("/");
     await screen.findByRole("heading", { name: /ようこそ/ });
-    expect(screen.queryByLabelText("サイト")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /サイトを切り替える/ })).not.toBeInTheDocument();
+    expect(screen.getByText("管理中のサイト")).toBeInTheDocument();
   });
 
-  it("starts a site build from the header", async () => {
+  it("starts a site build from the sidebar", async () => {
     const { user } = renderApp("/");
     await user.click(await screen.findByRole("button", { name: "サイトを更新" }));
     expect(await screen.findByText(/サイトの更新を始めました/)).toBeInTheDocument();

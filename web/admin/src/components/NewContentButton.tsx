@@ -1,16 +1,24 @@
+import { Button } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { api, errorMessage } from "../api/client";
 import type { ContentType } from "../api/types";
-import { useNotify } from "./Toaster";
-import { Button } from "./ui/Button";
+import { notify } from "./ui/notify";
 
 /** Creates an empty post/page and opens it in the editor. */
-export function NewContentButton({ type, label }: { type: ContentType; label: string }) {
+export function NewContentButton({
+  type,
+  label,
+  primary,
+}: {
+  type: ContentType;
+  label: string;
+  /** The screen's primary action (filled). Only one per screen. */
+  primary?: boolean;
+}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const notify = useNotify();
   const create = useMutation({
     mutationFn: () => api.createContent(type),
     onSuccess: (content) => {
@@ -24,8 +32,12 @@ export function NewContentButton({ type, label }: { type: ContentType; label: st
     onError: (e) => notify(errorMessage(e), "error"),
   });
   return (
-    <Button variant="primary" onClick={() => create.mutate()} disabled={create.isPending}>
-      <Plus aria-hidden="true" size={18} />
+    <Button
+      variant={primary ? "filled" : "default"}
+      leftSection={<Plus aria-hidden="true" size={18} />}
+      onClick={() => create.mutate()}
+      loading={create.isPending}
+    >
       {label}
     </Button>
   );

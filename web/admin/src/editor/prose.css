@@ -1,0 +1,104 @@
+/* Body editor content (Tiptap). Close to how the public theme shows the body. */
+.pw-prose {
+  min-height: 20rem;
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  font-size: 1rem;
+  line-height: 2;
+}
+.pw-prose:focus-visible {
+  outline-offset: -2px;
+}
+.pw-prose > * {
+  margin: 0;
+}
+.pw-prose > * + * {
+  margin-top: var(--mantine-spacing-sm);
+}
+.pw-prose h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.pw-prose h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.pw-prose h4 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.pw-prose ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+}
+.pw-prose ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+}
+.pw-prose blockquote {
+  margin-inline: 0;
+  padding-left: var(--mantine-spacing-md);
+  border-left: 4px solid var(--mantine-color-gray-3);
+  color: var(--mantine-color-gray-7);
+}
+.pw-prose hr {
+  margin-block: var(--mantine-spacing-lg);
+  border: 0;
+  border-top: 1px solid var(--mantine-color-gray-3);
+}
+.pw-prose a {
+  color: var(--mantine-color-anchor);
+  text-decoration: underline;
+}
+.pw-prose code {
+  padding: 0 0.25rem;
+  border-radius: var(--mantine-radius-xs);
+  background: var(--mantine-color-gray-1);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.875em;
+}
+.pw-prose ruby rt {
+  font-size: 0.75rem;
+  color: var(--mantine-color-gray-7);
+  user-select: none;
+}
+.pw-prose img {
+  max-height: 24rem;
+  max-width: 100%;
+  border-radius: var(--mantine-radius-xs);
+}
+.pw-prose img.ProseMirror-selectednode,
+.pw-prose .ProseMirror-selectednode {
+  outline: 3px solid var(--mantine-primary-color-filled);
+}
+.pw-prose table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.pw-prose th,
+.pw-prose td {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--mantine-color-gray-4);
+  vertical-align: top;
+}
+.pw-prose th {
+  background: var(--mantine-color-gray-1);
+  font-weight: 700;
+}
+.pw-prose .selectedCell {
+  background: var(--mantine-color-brand-0);
+}
+.pw-prose .pw-placeholder-block {
+  padding: var(--mantine-spacing-sm);
+  border: 2px dashed var(--mantine-color-gray-4);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-gray-0);
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-gray-7);
+}
+.pw-prose .pw-placeholder-title {
+  font-weight: 700;
+  color: var(--mantine-color-black);
+}

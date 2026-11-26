@@ -1,5 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { File as NodeFile } from "node:buffer";
+import { modals } from "@mantine/modals";
+import { notifications } from "@mantine/notifications";
 import { cleanup } from "@testing-library/react";
 import { getResponse, type RequestHandler } from "msw";
 import { afterAll, afterEach, beforeAll } from "vitest";
@@ -51,6 +53,45 @@ Range.prototype.getBoundingClientRect = emptyRect;
 Range.prototype.getClientRects = emptyRects as unknown as () => DOMRectList;
 Element.prototype.getClientRects ??= emptyRects as unknown as () => DOMRectList;
 document.elementFromPoint = () => null;
+Element.prototype.scrollIntoView = () => {};
+
+// Mantine needs matchMedia and ResizeObserver, which jsdom lacks. Media queries are
+// evaluated against window.innerWidth (1024 in jsdom), so tests see the desktop layout
+// (tables, sidebar). Set window.innerWidth = 390 before rendering to test the phone layout.
+const matches = (query: string) =>
+  query.split(",").some(
+    (part) =>
+      [...part.matchAll(/\((min|max)-width:\s*([\d.]+)(px|em|rem)\)/g)].every(
+        ([, kind, n, unit]) => {
+          const px = Number(n) * (unit === "px" ? 1 : 16);
+          return kind === "min" ? window.innerWidth >= px : window.innerWidth <= px;
+        },
+      ) && /width/.test(part),
+  );
+window.matchMedia = (query: string) =>
+  ({
+    matches: matches(query),
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }) as MediaQueryList;
+window.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+// Textarea's autosize listens for web fonts loading.
+if (!("fonts" in document)) {
+  Object.defineProperty(document, "fonts", {
+    value: { addEventListener() {}, removeEventListener() {}, ready: Promise.resolve() },
+  });
+}
+const { getComputedStyle } = window;
+window.getComputedStyle = (elt) => getComputedStyle(elt);
 
 beforeAll(() => {
   server.listen({ onUnhandledFrame: "error" });
@@ -58,6 +99,11 @@ beforeAll(() => {
 });
 afterEach(() => {
   cleanup();
+  // Mantine keeps notifications and modals in module-level stores.
+  notifications.clean();
+  notifications.cleanQueue();
+  modals.closeAll();
+  window.innerWidth = 1024;
   server.resetHandlers();
   server.events.removeAllListeners();
   resetDb();

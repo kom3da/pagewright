@@ -1,9 +1,21 @@
+import {
+  Box,
+  Button,
+  Group,
+  NativeSelect,
+  Paper,
+  Radio,
+  Stack,
+  Text,
+  TextInput,
+  VisuallyHidden,
+} from "@mantine/core";
 import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import type { ContentSummary, MenuItem } from "../api/types";
-import { Button } from "./ui/Button";
 import { Dialog } from "./ui/Dialog";
-import { Field, inputClass, TextField } from "./ui/Field";
+import { Form } from "./ui/Form";
+import { Notice } from "./ui/feedback";
 
 export type MenuRow = MenuItem & { key: number };
 
@@ -98,38 +110,40 @@ export function MenuEditor({ items, onChange, contents, error, errorId }: Props)
   };
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-slate-700">
+    <Stack gap="sm">
+      <Text size="sm" c="dimmed">
         公開サイトのいちばん上に並ぶリンクです。上下のボタンで順番を変えられます。公開していないページや記事は、メニューに入れてもサイトには表示されません。
-      </p>
+      </Text>
       {items.length === 0 && (
-        <p className="rounded-md border border-slate-300 bg-slate-100 p-3">
+        <Notice>
           いまはメニューに何も登録していません。この場合、親のない固定ページと「お知らせ」（記事の一覧）が自動で並びます。
-        </p>
+        </Notice>
       )}
       {error && (
-        <p
-          id={errorId}
-          tabIndex={-1}
-          data-error-focus=""
-          className="text-sm font-semibold text-red-700"
-        >
+        <Text id={errorId} tabIndex={-1} data-error-focus="" size="sm" fw={700} c="red.7">
           {error}
-        </p>
+        </Text>
       )}
       {items.length > 0 && (
-        <ol className="divide-y divide-slate-200 rounded-lg border border-slate-300 bg-white">
+        <Paper withBorder component="ol" p={0} m={0} style={{ listStyle: "none" }}>
           {items.map((it, i) => {
             const name = title(it);
             const c = it.contentId !== null ? byId.get(it.contentId) : undefined;
             return (
-              <li key={it.key} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <span aria-hidden="true" className="w-6 text-right font-semibold text-slate-700">
+              <Group
+                component="li"
+                key={it.key}
+                gap="sm"
+                px="md"
+                py="sm"
+                style={i > 0 ? { borderTop: "1px solid var(--mantine-color-gray-2)" } : undefined}
+              >
+                <Text component="span" aria-hidden="true" fw={700} c="dimmed" w="1.5rem" ta="right">
                   {i + 1}.
-                </span>
-                <div className="min-w-48 flex-1">
-                  <p className="font-semibold">{name}</p>
-                  <p className="text-sm text-slate-700">
+                </Text>
+                <Box miw="12rem" style={{ flex: 1 }}>
+                  <Text fw={700}>{name}</Text>
+                  <Text size="sm" c="dimmed">
                     {it.url !== null
                       ? `URL：${it.url}`
                       : c
@@ -139,66 +153,69 @@ export function MenuEditor({ items, onChange, contents, error, errorId }: Props)
                               : "（公開していないため、いまはサイトに出ません）"
                           }`
                         : "リンク先のページが見つかりません。削除されたか、編集で選び直してください。"}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-1">
+                  </Text>
+                </Box>
+                <Group gap={4}>
                   <Button
                     ref={setButton(`${it.key}-up`)}
-                    variant="ghost"
+                    size="sm"
+                    variant="subtle"
+                    color="gray"
                     disabled={i === 0}
                     onClick={() => move(i, -1)}
                     aria-label={`「${name}」を上へ移動`}
+                    leftSection={<ArrowUp aria-hidden="true" size={16} />}
                   >
-                    <ArrowUp aria-hidden="true" size={16} />
                     上へ
                   </Button>
                   <Button
                     ref={setButton(`${it.key}-down`)}
-                    variant="ghost"
+                    size="sm"
+                    variant="subtle"
+                    color="gray"
                     disabled={i === items.length - 1}
                     onClick={() => move(i, 1)}
                     aria-label={`「${name}」を下へ移動`}
+                    leftSection={<ArrowDown aria-hidden="true" size={16} />}
                   >
-                    <ArrowDown aria-hidden="true" size={16} />
                     下へ
                   </Button>
-                  <Button onClick={() => setEditing(it)} aria-label={`「${name}」を編集`}>
+                  <Button size="sm" onClick={() => setEditing(it)} aria-label={`「${name}」を編集`}>
                     編集
                   </Button>
                   <Button
                     ref={setButton(`${it.key}-delete`)}
-                    variant="ghost"
-                    className="text-red-700"
+                    size="sm"
+                    variant="subtle"
+                    color="red"
                     onClick={() => remove(i)}
                     aria-label={`「${name}」をメニューから外す`}
                   >
                     外す
                   </Button>
-                </div>
-              </li>
+                </Group>
+              </Group>
             );
           })}
-        </ol>
+        </Paper>
       )}
-      <div className="flex flex-wrap items-center gap-3">
+      <Group gap="sm">
         <Button
           ref={addRef}
           onClick={() => setEditing("new")}
           disabled={items.length >= MAX_MENU_ITEMS}
           aria-describedby={items.length >= MAX_MENU_ITEMS ? "menu-limit" : undefined}
+          leftSection={<Plus aria-hidden="true" size={16} />}
         >
-          <Plus aria-hidden="true" size={16} />
           メニューに項目を追加
         </Button>
         {items.length >= MAX_MENU_ITEMS && (
-          <p id="menu-limit" className="text-sm text-slate-700">
+          <Text id="menu-limit" size="sm" c="dimmed">
             メニューは{MAX_MENU_ITEMS}項目までです。
-          </p>
+          </Text>
         )}
-      </div>
-      <p role="status" className="sr-only">
-        {announce}
-      </p>
+      </Group>
+      <VisuallyHidden role="status">{announce}</VisuallyHidden>
       <Dialog
         open={editing !== null}
         onOpenChange={(o) => !o && setEditing(null)}
@@ -213,7 +230,7 @@ export function MenuEditor({ items, onChange, contents, error, errorId }: Props)
           />
         )}
       </Dialog>
-    </div>
+    </Stack>
   );
 }
 
@@ -273,50 +290,37 @@ function MenuItemForm({
   );
 
   return (
-    <form ref={formRef} noValidate onSubmit={submit} className="space-y-4">
-      <fieldset className="space-y-2">
-        <legend className="font-semibold">リンク先</legend>
-        {(
-          [
-            ["content", "このサイトのページや記事"],
-            ["url", "URLを入力する（ほかのサイトなど）"],
-          ] as const
-        ).map(([value, text]) => (
-          <label key={value} className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="menu-kind"
-              value={value}
-              checked={kind === value}
-              onChange={() => {
-                setKind(value);
-                setErrors({});
-              }}
-              className="size-5"
-            />
-            {text}
-          </label>
-        ))}
-      </fieldset>
+    <Form ref={formRef} onSubmit={submit} gap="md">
+      <Radio.Group
+        label="リンク先"
+        name="menu-kind"
+        value={kind}
+        onChange={(v) => {
+          setKind(v as "content" | "url");
+          setErrors({});
+        }}
+      >
+        <Stack gap="xs" mt="xs">
+          <Radio value="content" label="このサイトのページや記事" />
+          <Radio value="url" label="URLを入力する（ほかのサイトなど）" />
+        </Stack>
+      </Radio.Group>
       {kind === "content" ? (
-        <Field label="ページや記事" error={errors.contentId} required>
-          {(ids) => (
-            <select
-              {...ids}
-              value={contentId}
-              onChange={(e) => setContentId(e.target.value)}
-              className={inputClass}
-            >
-              <option value="">選んでください</option>
-              {pages.length > 0 && <optgroup label="固定ページ">{pages.map(option)}</optgroup>}
-              {posts.length > 0 && <optgroup label="記事">{posts.map(option)}</optgroup>}
-            </select>
-          )}
-        </Field>
+        <NativeSelect
+          label="ページや記事"
+          error={errors.contentId}
+          required
+          value={contentId}
+          onChange={(e) => setContentId(e.currentTarget.value)}
+        >
+          <option value="">選んでください</option>
+          {pages.length > 0 && <optgroup label="固定ページ">{pages.map(option)}</optgroup>}
+          {posts.length > 0 && <optgroup label="記事">{posts.map(option)}</optgroup>}
+        </NativeSelect>
       ) : (
-        <TextField
+        <TextInput
           label="URL"
-          hint="ほかのサイトは https:// から、このサイトの中は / から入力します。"
+          description="ほかのサイトは https:// から、このサイトの中は / から入力します。"
           required
           type="url"
           inputMode="url"
@@ -327,9 +331,9 @@ function MenuItemForm({
           error={errors.url}
         />
       )}
-      <TextField
+      <TextInput
         label="メニューに表示する名前"
-        hint={
+        description={
           kind === "content"
             ? `空欄なら、ページや記事のタイトルを表示します。${MAX_LABEL}文字まで。`
             : `${MAX_LABEL}文字まで。`
@@ -339,12 +343,12 @@ function MenuItemForm({
         onChange={(e) => setLabel(e.target.value)}
         error={errors.label}
       />
-      <div className="flex flex-wrap justify-end gap-3">
+      <Group justify="flex-end" gap="sm">
         <Button onClick={onCancel}>キャンセル</Button>
-        <Button type="submit" variant="primary">
+        <Button type="submit" variant="filled">
           {initial ? "変更する" : "追加する"}
         </Button>
-      </div>
-    </form>
+      </Group>
+    </Form>
   );
 }

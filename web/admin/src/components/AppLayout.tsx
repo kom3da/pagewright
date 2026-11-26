@@ -1,115 +1,189 @@
+import {
+  AppShell,
+  Box,
+  Burger,
+  Button,
+  Group,
+  Menu,
+  NavLink,
+  ScrollArea,
+  Stack,
+  Text,
+  UnstyledButton,
+  VisuallyHidden,
+} from "@mantine/core";
+import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { Link, Outlet, useNavigate } from "@tanstack/react-router";
-import { LogOut, RefreshCw } from "lucide-react";
-import { type FormEvent, useId, useState } from "react";
+import { Link, Outlet, useLocation, useMatchRoute, useNavigate } from "@tanstack/react-router";
+import {
+  Check,
+  ChevronsUpDown,
+  ExternalLink,
+  FileText,
+  FolderTree,
+  House,
+  Inbox,
+  LogOut,
+  type LucideIcon,
+  Newspaper,
+  RefreshCw,
+  Settings,
+  Tags,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { api, errorMessage } from "../api/client";
 import { meQuery } from "../api/queries";
+import { publicSiteOrigin } from "../config";
 import { useIsAdmin } from "../lib/useIsAdmin";
-import { useNotify } from "./Toaster";
-import { Button } from "./ui/Button";
+import { DESKTOP_QUERY } from "../theme";
+import classes from "./AppLayout.module.css";
+import { notify } from "./ui/notify";
 
-const navItems = [
-  { to: "/", label: "ホーム", exact: true },
-  { to: "/posts", label: "記事" },
-  { to: "/pages", label: "固定ページ" },
-  { to: "/categories", label: "カテゴリ" },
-  { to: "/tags", label: "タグ" },
-  { to: "/inquiries", label: "お問い合わせ", adminOnly: true },
-  { to: "/settings", label: "サイトの設定", adminOnly: true },
-] as const;
+type NavItem = {
+  to: "/" | "/posts" | "/pages" | "/categories" | "/tags" | "/inquiries" | "/settings";
+  label: string;
+  icon: LucideIcon;
+  exact?: boolean;
+  adminOnly?: boolean;
+};
 
+/** The sidebar's main menu, in order. Groups are separated by a small gap. */
+const navGroups: NavItem[][] = [
+  [{ to: "/", label: "ホーム", icon: House, exact: true }],
+  [
+    { to: "/posts", label: "記事", icon: Newspaper },
+    { to: "/pages", label: "固定ページ", icon: FileText },
+    { to: "/categories", label: "カテゴリ", icon: FolderTree },
+    { to: "/tags", label: "タグ", icon: Tags },
+  ],
+  [
+    { to: "/inquiries", label: "お問い合わせ", icon: Inbox, adminOnly: true },
+    { to: "/settings", label: "サイトの設定", icon: Settings, adminOnly: true },
+  ],
+];
+
+const NAVBAR_ID = "pw-sidebar";
+
+/**
+ * The app shell: a sidebar (site, main menu, 「サイトを更新」, user) and the main area.
+ * On phones the sidebar is a drawer opened from the top bar's menu button.
+ */
 export function AppLayout() {
   const { data: me } = useSuspenseQuery(meQuery);
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const notify = useNotify();
-  const isAdmin = useIsAdmin();
-
-  const logout = useMutation({
-    mutationFn: api.logout,
-    onSuccess: async () => {
-      await navigate({ to: "/login" });
-      queryClient.clear();
-    },
-    onError: (e) => notify(errorMessage(e), "error"),
-  });
-
-  const build = useMutation({
-    mutationFn: api.buildSite,
-    onSuccess: () =>
-      notify("サイトの更新を始めました。公開サイトに反映されるまで少しお待ちください。"),
-    onError: (e) => notify(errorMessage(e), "error"),
-  });
-
+  const [opened, { toggle, close }] = useDisclosure(false);
+  const { pathname } = useLocation();
   const site = me.sites.find((s) => s.id === me.currentSiteId);
+  const desktop = useMediaQuery(DESKTOP_QUERY, true, { getInitialValueInEffect: false });
+
+  // Close the drawer after moving to another screen.
+  useEffect(() => {
+    if (pathname) close();
+  }, [pathname, close]);
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <a
-        href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded focus:bg-white focus:p-2"
-      >
+    <>
+      <a href="#main" className="pw-skip-link">
         本文へ移動
       </a>
-      <header className="border-b border-slate-300 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-          <p className="font-bold">
-            {site?.name ?? "サイト"}
-            <span className="ml-2 text-sm font-normal text-slate-700">の管理画面</span>
-          </p>
-          <div className="ml-auto flex flex-wrap items-center gap-3">
-            <Button
-              variant="primary"
-              onClick={() => build.mutate()}
-              disabled={build.isPending}
-              aria-describedby="build-help"
-            >
-              <RefreshCw aria-hidden="true" size={16} />
-              {build.isPending ? "更新しています…" : "サイトを更新"}
-            </Button>
-            <span id="build-help" className="sr-only">
-              公開サイト全体を作り直します。ふだんは公開するたびに自動で更新されます。
-            </span>
-            {me.sites.length > 1 && <SiteSwitcher />}
-            <span className="text-sm text-slate-700">{me.user.displayName || me.user.email}</span>
-            <Button variant="ghost" onClick={() => logout.mutate()} disabled={logout.isPending}>
-              <LogOut aria-hidden="true" size={16} />
-              ログアウト
-            </Button>
-          </div>
-        </div>
-        <nav aria-label="メインメニュー" className="mx-auto max-w-6xl px-4">
-          <ul className="flex flex-wrap gap-1">
-            {navItems
-              .filter((item) => isAdmin || !("adminOnly" in item))
-              .map((item) => (
-                <li key={item.to}>
-                  <Link
-                    to={item.to}
-                    activeOptions={{ exact: "exact" in item }}
-                    className="block border-b-4 border-transparent px-3 py-2 font-semibold text-slate-800 hover:bg-slate-100 aria-[current=page]:border-blue-700 aria-[current=page]:text-blue-800"
-                  >
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
-          </ul>
-        </nav>
-      </header>
-      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-        <Outlet />
-      </main>
-    </div>
+      <AppShell
+        header={{ height: { base: 56, sm: 0 } }}
+        navbar={{ width: 256, breakpoint: "sm", collapsed: { mobile: !opened } }}
+      >
+        <AppShell.Header hiddenFrom="sm" px="md">
+          <Group h="100%" gap="sm" wrap="nowrap">
+            <Burger
+              opened={opened}
+              onClick={toggle}
+              size="sm"
+              aria-label={opened ? "メニューを閉じる" : "メニューを開く"}
+              aria-expanded={opened}
+              aria-controls={NAVBAR_ID}
+            />
+            <Text fw={700} truncate>
+              {site?.name ?? "サイト"}
+            </Text>
+          </Group>
+        </AppShell.Header>
+
+        <AppShell.Navbar
+          id={NAVBAR_ID}
+          aria-label="メインメニュー"
+          className={classes.navbar}
+          // The closed drawer is only moved off screen: keep it out of the Tab order.
+          inert={!desktop && !opened}
+        >
+          <AppShell.Section p="sm" pb={0}>
+            <SiteSwitcher />
+          </AppShell.Section>
+          <AppShell.Section grow component={ScrollArea} p="sm">
+            <MainMenu />
+          </AppShell.Section>
+          <AppShell.Section p="sm" className={classes.footer}>
+            <BuildButton />
+            <NavLink
+              href={publicSiteOrigin}
+              target="_blank"
+              rel="noopener noreferrer"
+              label={
+                <>
+                  公開サイトを見る
+                  <VisuallyHidden>（新しいタブで開きます）</VisuallyHidden>
+                </>
+              }
+              leftSection={<ExternalLink aria-hidden="true" size={18} />}
+              className={classes.link}
+            />
+            <UserMenu />
+          </AppShell.Section>
+        </AppShell.Navbar>
+
+        <AppShell.Main id="main" tabIndex={-1} className={classes.main}>
+          <Box className={classes.content}>
+            <Outlet />
+          </Box>
+        </AppShell.Main>
+      </AppShell>
+    </>
   );
 }
 
+function MainMenu() {
+  const isAdmin = useIsAdmin();
+  const matchRoute = useMatchRoute();
+  return (
+    <Stack gap="md">
+      {navGroups.map((group) => {
+        const items = group.filter((item) => isAdmin || !item.adminOnly);
+        if (items.length === 0) return null;
+        return (
+          <Stack key={items[0].to} gap={2} component="ul" className={classes.list}>
+            {items.map(({ to, label, icon: Icon, exact }) => (
+              <li key={to}>
+                <NavLink
+                  component={Link}
+                  to={to}
+                  activeOptions={{ exact: !!exact }}
+                  active={!!matchRoute({ to, fuzzy: !exact })}
+                  label={label}
+                  leftSection={<Icon aria-hidden="true" size={18} />}
+                  className={classes.link}
+                />
+              </li>
+            ))}
+          </Stack>
+        );
+      })}
+    </Stack>
+  );
+}
+
+/** Site name at the top of the sidebar; a menu to switch when the user has several sites. */
 function SiteSwitcher() {
   const { data: me } = useSuspenseQuery(meQuery);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const notify = useNotify();
-  const id = useId();
-  const [siteId, setSiteId] = useState(me.currentSiteId ?? "");
+  const site = me.sites.find((s) => s.id === me.currentSiteId);
+  const name = site?.name ?? "サイト";
 
   const select = useMutation({
     mutationFn: api.selectSite,
@@ -122,31 +196,130 @@ function SiteSwitcher() {
     onError: (e) => notify(errorMessage(e), "error"),
   });
 
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (siteId && siteId !== me.currentSiteId) select.mutate(siteId);
-  };
+  const label = (
+    <Box miw={0}>
+      <Text size="xs" c="dimmed">
+        管理中のサイト
+      </Text>
+      <Text fw={700} truncate>
+        {name}
+      </Text>
+    </Box>
+  );
+
+  if (me.sites.length <= 1) return <Box px="xs">{label}</Box>;
 
   return (
-    <form onSubmit={onSubmit} className="flex items-center gap-2">
-      <label htmlFor={id} className="text-sm font-semibold">
-        サイト
-      </label>
-      <select
-        id={id}
-        value={siteId}
-        onChange={(e) => setSiteId(e.target.value)}
-        className="rounded-md border border-slate-500 bg-white px-2 py-2 text-sm"
+    <Menu position="bottom-start" width="target">
+      <Menu.Target>
+        <UnstyledButton className={classes.siteButton} disabled={select.isPending}>
+          <Group gap="xs" wrap="nowrap" justify="space-between">
+            {label}
+            <VisuallyHidden>（サイトを切り替える）</VisuallyHidden>
+            <ChevronsUpDown aria-hidden="true" size={16} />
+          </Group>
+        </UnstyledButton>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Label>サイトを切り替える</Menu.Label>
+        {me.sites.map((s) => {
+          const current = s.id === me.currentSiteId;
+          return (
+            <Menu.Item
+              key={s.id}
+              leftSection={
+                current ? <Check aria-hidden="true" size={16} /> : <Box w={16} aria-hidden />
+              }
+              onClick={() => !current && select.mutate(s.id)}
+            >
+              {s.name}
+              {current && <VisuallyHidden>（選択中）</VisuallyHidden>}
+            </Menu.Item>
+          );
+        })}
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
+
+/** Rebuilds the whole public site. Normally publishing does this automatically. */
+function BuildButton() {
+  const [startedAt, setStartedAt] = useState<string | null>(null);
+  const build = useMutation({
+    mutationFn: api.buildSite,
+    onSuccess: () => {
+      setStartedAt(
+        new Intl.DateTimeFormat("ja-JP", { timeStyle: "short", timeZone: "Asia/Tokyo" }).format(
+          new Date(),
+        ),
+      );
+      notify("サイトの更新を始めました。公開サイトに反映されるまで少しお待ちください。");
+    },
+    onError: (e) => notify(errorMessage(e), "error"),
+  });
+  return (
+    <Box mb="xs">
+      <Button
+        fullWidth
+        size="sm"
+        justify="flex-start"
+        leftSection={<RefreshCw aria-hidden="true" size={16} />}
+        onClick={() => build.mutate()}
+        loading={build.isPending}
+        aria-describedby="build-help"
       >
-        {me.sites.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-          </option>
-        ))}
-      </select>
-      <Button type="submit" disabled={select.isPending || siteId === me.currentSiteId}>
-        切り替える
+        サイトを更新
       </Button>
-    </form>
+      <Text id="build-help" size="xs" c="dimmed" mt={6} px={4}>
+        {startedAt
+          ? `${startedAt}に更新を始めました。`
+          : "公開サイト全体を作り直します。ふだんは公開するたびに自動で更新されます。"}
+      </Text>
+    </Box>
+  );
+}
+
+function UserMenu() {
+  const { data: me } = useSuspenseQuery(meQuery);
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const name = me.user.displayName || me.user.email;
+
+  const logout = useMutation({
+    mutationFn: api.logout,
+    onSuccess: async () => {
+      await navigate({ to: "/login" });
+      queryClient.clear();
+    },
+    onError: (e) => notify(errorMessage(e), "error"),
+  });
+
+  return (
+    <Menu position="top-start" width="target">
+      <Menu.Target>
+        <UnstyledButton className={classes.userButton}>
+          <Box miw={0}>
+            <Text size="sm" fw={600} truncate>
+              {name}
+            </Text>
+            {me.user.displayName && (
+              <Text size="xs" c="dimmed" truncate>
+                {me.user.email}
+              </Text>
+            )}
+            <VisuallyHidden>（アカウントのメニュー）</VisuallyHidden>
+          </Box>
+        </UnstyledButton>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item
+          leftSection={<LogOut aria-hidden="true" size={16} />}
+          onClick={() => logout.mutate()}
+          disabled={logout.isPending}
+        >
+          ログアウト
+        </Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
   );
 }

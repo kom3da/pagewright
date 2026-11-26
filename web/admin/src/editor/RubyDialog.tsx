@@ -1,8 +1,8 @@
+import { Button, Group, Text, TextInput } from "@mantine/core";
 import type { Editor } from "@tiptap/react";
 import { type FormEvent, useState } from "react";
-import { Button } from "../components/ui/Button";
 import { Dialog } from "../components/ui/Dialog";
-import { TextField } from "../components/ui/Field";
+import { Form } from "../components/ui/Form";
 
 type Props = { editor: Editor; open: boolean; onClose: () => void };
 
@@ -46,29 +46,32 @@ function RubyForm({ editor, onClose }: { editor: Editor; onClose: () => void }) 
   };
 
   return (
-    <form noValidate onSubmit={onSubmit} className="space-y-4">
-      <p>
-        対象の文字：<strong className="text-lg">{base}</strong>
-      </p>
-      <TextField
+    <Form onSubmit={onSubmit} gap="md">
+      <Text>
+        対象の文字：
+        <Text component="strong" fw={700} size="lg">
+          {base}
+        </Text>
+      </Text>
+      <TextInput
         label="ふりがな"
-        hint="例：とうきょう"
+        description="例：とうきょう"
         required
         value={rt}
         onChange={(e) => setRt(e.target.value)}
         error={error}
       />
-      <div className="flex flex-wrap justify-end gap-3">
+      <Group justify="flex-end" gap="sm">
         {isRuby && (
-          <Button variant="danger" onClick={remove} className="mr-auto">
+          <Button variant="subtle" color="red" onClick={remove} mr="auto">
             ルビを外す
           </Button>
         )}
         <Button onClick={onClose}>キャンセル</Button>
-        <Button type="submit" variant="primary">
+        <Button type="submit" variant="filled">
           {isRuby ? "変更する" : "ルビをつける"}
         </Button>
-      </div>
-    </form>
+      </Group>
+    </Form>
   );
 }

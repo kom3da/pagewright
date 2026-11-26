@@ -1,11 +1,20 @@
+import {
+  Button,
+  Checkbox,
+  Fieldset,
+  Group,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Text,
+  TextInput,
+} from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type KeyboardEvent, useRef, useState } from "react";
 import { api, errorField, errorMessage } from "../api/client";
 import { tagsQuery } from "../api/queries";
 import { slugProblem } from "../lib/slug";
-import { Button } from "./ui/Button";
-import { TextField } from "./ui/Field";
-import { ErrorMessage, Loading } from "./ui/misc";
+import { ErrorMessage, Loading } from "./ui/feedback";
 
 type Props = { value: number[]; onChange: (ids: number[]) => void };
 
@@ -20,45 +29,44 @@ export function TagPicker({ value, onChange }: Props) {
   );
 
   return (
-    <fieldset className="space-y-3">
-      <legend className="font-semibold">タグ</legend>
-      {isPending ? (
-        <Loading />
-      ) : error ? (
-        <ErrorMessage>{errorMessage(error)}</ErrorMessage>
-      ) : (
-        <>
-          {data.length > 10 && (
-            <TextField
-              label="タグを絞り込む"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="max-w-sm"
-            />
-          )}
-          {data.length === 0 ? (
-            <p className="text-sm text-slate-700">タグはまだありません。</p>
-          ) : (
-            <ul className="flex flex-wrap gap-x-5 gap-y-1">
-              {shown.map((t) => (
-                <li key={t.id}>
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="size-5"
+    <Fieldset legend="タグ" variant="unstyled">
+      <Stack gap="sm">
+        {isPending ? (
+          <Loading />
+        ) : error ? (
+          <ErrorMessage>{errorMessage(error)}</ErrorMessage>
+        ) : (
+          <>
+            {data.length > 10 && (
+              <TextInput
+                label="タグを絞り込む"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                maw="24rem"
+              />
+            )}
+            {data.length === 0 ? (
+              <Text size="sm" c="dimmed">
+                タグはまだありません。
+              </Text>
+            ) : (
+              <Group component="ul" gap="lg" m={0} p={0} style={{ listStyle: "none" }}>
+                {shown.map((t) => (
+                  <li key={t.id}>
+                    <Checkbox
+                      label={t.name}
                       checked={value.includes(t.id)}
-                      onChange={(e) => toggle(t.id, e.target.checked)}
+                      onChange={(e) => toggle(t.id, e.currentTarget.checked)}
                     />
-                    {t.name}
-                  </label>
-                </li>
-              ))}
-            </ul>
-          )}
-          <NewTag onCreated={(id) => onChange([...value, id])} />
-        </>
-      )}
-    </fieldset>
+                  </li>
+                ))}
+              </Group>
+            )}
+            <NewTag onCreated={(id) => onChange([...value, id])} />
+          </>
+        )}
+      </Stack>
+    </Fieldset>
   );
 }
 
@@ -107,37 +115,41 @@ function NewTag({ onCreated }: { onCreated: (id: number) => void }) {
   };
 
   return (
-    <div className="space-y-3 rounded-md border border-slate-300 p-3">
-      <p className="font-semibold">新しいタグを追加</p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <TextField
-          label="タグの名前"
-          ref={nameRef}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={onEnter}
-          error={errors.name}
-        />
-        <TextField
-          label="タグのURL（英数字）"
-          ref={slugRef}
-          hint="例：event"
-          value={slug}
-          onChange={(e) => {
-            setSlug(e.target.value);
-            setErrors({ ...errors, slug: undefined });
-          }}
-          onKeyDown={onEnter}
-          // Guidance appears while typing (e.g. as soon as Japanese is entered).
-          error={errors.slug ?? (slug ? (slugProblem(slug) ?? undefined) : undefined)}
-          autoCapitalize="none"
-          spellCheck={false}
-        />
-      </div>
-      {errors.form && <ErrorMessage>{errors.form}</ErrorMessage>}
-      <Button onClick={submit} disabled={create.isPending}>
-        タグを追加して選ぶ
-      </Button>
-    </div>
+    <Paper withBorder p="sm">
+      <Stack gap="sm">
+        <Text fw={700}>新しいタグを追加</Text>
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+          <TextInput
+            label="タグの名前"
+            ref={nameRef}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={onEnter}
+            error={errors.name}
+          />
+          <TextInput
+            label="タグのURL（英数字）"
+            ref={slugRef}
+            description="例：event"
+            value={slug}
+            onChange={(e) => {
+              setSlug(e.target.value);
+              setErrors({ ...errors, slug: undefined });
+            }}
+            onKeyDown={onEnter}
+            // Guidance appears while typing (e.g. as soon as Japanese is entered).
+            error={errors.slug ?? (slug ? (slugProblem(slug) ?? undefined) : undefined)}
+            autoCapitalize="none"
+            spellCheck={false}
+          />
+        </SimpleGrid>
+        {errors.form && <ErrorMessage>{errors.form}</ErrorMessage>}
+        <Group>
+          <Button onClick={submit} loading={create.isPending}>
+            タグを追加して選ぶ
+          </Button>
+        </Group>
+      </Stack>
+    </Paper>
   );
 }

@@ -1,7 +1,7 @@
+import { Box, Button, Fieldset, Group, Stack, Text } from "@mantine/core";
 import { useId } from "react";
 import { contrast, formatRatio, isHexColor, MIN_CONTRAST } from "../lib/color";
-import { Button } from "./ui/Button";
-import { inputClass } from "./ui/Field";
+import classes from "./ColorField.module.css";
 
 type Props = {
   label: string;
@@ -45,70 +45,68 @@ export function ColorField({ label, hint, value, defaultColor, error, onChange }
   const describedBy = [ids.hint, ids.ratio, error && ids.error].filter(Boolean).join(" ");
 
   return (
-    <fieldset className="space-y-2">
-      <legend className="font-semibold">{label}</legend>
-      <p id={ids.hint} className="text-sm text-slate-700">
-        {hint}
-        {value === "" && `いまは標準の色（${defaultColor}）を使っています。`}
-      </p>
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <label htmlFor={ids.picker} className="block text-sm font-semibold">
-            色を選ぶ
-          </label>
-          <input
-            id={ids.picker}
-            type="color"
-            value={shown ?? defaultColor}
-            onChange={(e) => onChange(e.target.value)}
-            aria-describedby={describedBy}
-            className="block h-11 w-16 cursor-pointer rounded-md border border-slate-500 bg-white p-1"
-          />
-        </div>
-        <div className="space-y-1">
-          <label htmlFor={ids.text} className="block text-sm font-semibold">
-            色コード（例：#1a73e8）
-          </label>
-          <input
-            id={ids.text}
-            type="text"
-            value={value}
-            placeholder={defaultColor}
-            maxLength={7}
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            onChange={(e) => onChange(e.target.value.trim())}
-            aria-describedby={describedBy}
-            aria-invalid={error ? true : undefined}
-            className={`${inputClass} w-36 font-mono`}
-          />
-        </div>
-        {value !== "" && <Button onClick={() => onChange("")}>標準の色に戻す</Button>}
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        {shown && (
-          <div
-            aria-hidden="true"
-            className="rounded-md border border-slate-400 px-4 py-2 font-semibold text-white"
-            style={{ backgroundColor: shown }}
-          >
-            白い文字の見え方
-          </div>
+    <Fieldset legend={label} variant="unstyled">
+      <Stack gap="sm">
+        <Text id={ids.hint} size="sm" c="dimmed">
+          {hint}
+          {value === "" && `いまは標準の色（${defaultColor}）を使っています。`}
+        </Text>
+        <Group align="flex-end" gap="sm">
+          <Box>
+            <label htmlFor={ids.picker} className="pw-label">
+              色を選ぶ
+            </label>
+            <input
+              id={ids.picker}
+              type="color"
+              value={shown ?? defaultColor}
+              onChange={(e) => onChange(e.target.value)}
+              aria-describedby={describedBy}
+              className={classes.picker}
+            />
+          </Box>
+          <Box w="13rem">
+            <label htmlFor={ids.text} className="pw-label">
+              色コード（例：#1a73e8）
+            </label>
+            <input
+              id={ids.text}
+              type="text"
+              value={value}
+              placeholder={defaultColor}
+              maxLength={7}
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              onChange={(e) => onChange(e.target.value.trim())}
+              aria-describedby={describedBy}
+              aria-invalid={error ? true : undefined}
+              className="pw-input"
+              style={{ fontFamily: "var(--mantine-font-family-monospace)" }}
+            />
+          </Box>
+          {value !== "" && <Button onClick={() => onChange("")}>標準の色に戻す</Button>}
+        </Group>
+        <Group gap="sm">
+          {shown && (
+            <Box aria-hidden="true" className={classes.preview} style={{ backgroundColor: shown }}>
+              白い文字の見え方
+            </Box>
+          )}
+          <Text id={ids.ratio} size="sm">
+            {ratio === null
+              ? "色コードを読み取れないため、見え方を表示できません。"
+              : `白い文字とのコントラスト比：${formatRatio(ratio)}（${
+                  ratio >= MIN_CONTRAST ? "基準の 4.5:1 以上です" : "基準の 4.5:1 に足りません"
+                }）`}
+          </Text>
+        </Group>
+        {error && (
+          <Text id={ids.error} size="sm" fw={700} c="red.7">
+            {error}
+          </Text>
         )}
-        <p id={ids.ratio} className="text-sm">
-          {ratio === null
-            ? "色コードを読み取れないため、見え方を表示できません。"
-            : `白い文字とのコントラスト比：${formatRatio(ratio)}（${
-                ratio >= MIN_CONTRAST ? "基準の 4.5:1 以上です" : "基準の 4.5:1 に足りません"
-              }）`}
-        </p>
-      </div>
-      {error && (
-        <p id={ids.error} className="text-sm font-semibold text-red-700">
-          {error}
-        </p>
-      )}
-    </fieldset>
+      </Stack>
+    </Fieldset>
   );
 }

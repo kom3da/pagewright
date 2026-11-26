@@ -1,12 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Button, Group, NativeSelect, SimpleGrid, TextInput } from "@mantine/core";
 import type { ReactNode } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { errorField, isApiError } from "../api/client";
 import { slugSchema } from "../lib/slug";
-import { Button } from "./ui/Button";
-import { Field, inputClass, TextField } from "./ui/Field";
-import { ErrorMessage } from "./ui/misc";
+import { Form } from "./ui/Form";
+import { ErrorMessage } from "./ui/feedback";
 
 const schema = z.object({
   name: z.string().trim().min(1, "名前を入力してください。"),
@@ -62,17 +62,17 @@ export function NameSlugForm({
   });
 
   return (
-    <form noValidate onSubmit={submit} className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <TextField
+    <Form onSubmit={submit} gap="md">
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+        <TextInput
           label={`${noun}の名前`}
           required
           error={errors.name?.message}
           {...form.register("name")}
         />
-        <TextField
+        <TextInput
           label={`${noun}のURL（英数字）`}
-          hint={`英小文字・数字・ハイフン（-）。例：${slugExample}`}
+          description={`英小文字・数字・ハイフン（-）。例：${slugExample}`}
           required
           autoCapitalize="none"
           autoComplete="off"
@@ -85,35 +85,31 @@ export function NameSlugForm({
             control={form.control}
             name="parentId"
             render={({ field, fieldState }) => (
-              <Field label="親カテゴリ" error={fieldState.error?.message}>
-                {(ids) => (
-                  <select
-                    {...ids}
-                    ref={field.ref}
-                    value={field.value}
-                    onChange={field.onChange}
-                    className={inputClass}
-                  >
-                    <option value="">なし（いちばん上の階層）</option>
-                    {parents.map((p) => (
-                      <option key={p.id} value={String(p.id)}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
+              <NativeSelect
+                label="親カテゴリ"
+                ref={field.ref}
+                value={field.value}
+                onChange={(e) => field.onChange(e.currentTarget.value)}
+                error={fieldState.error?.message}
+              >
+                <option value="">なし（いちばん上の階層）</option>
+                {parents.map((p) => (
+                  <option key={p.id} value={String(p.id)}>
+                    {p.label}
+                  </option>
+                ))}
+              </NativeSelect>
             )}
           />
         )}
-      </div>
+      </SimpleGrid>
       {errors.root && <ErrorMessage>{errors.root.message}</ErrorMessage>}
-      <div className="flex flex-wrap justify-end gap-3">
+      <Group justify="flex-end" gap="sm">
         {extraButtons}
-        <Button type="submit" variant="primary" disabled={isSubmitting}>
+        <Button type="submit" variant="filled" loading={isSubmitting}>
           {submitLabel}
         </Button>
-      </div>
-    </form>
+      </Group>
+    </Form>
   );
 }

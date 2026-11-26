@@ -1,24 +1,24 @@
-import * as AlertDialog from "@radix-ui/react-alert-dialog";
-import * as RadixDialog from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
-import type { ReactNode } from "react";
-import { Button, buttonClass } from "./Button";
-
-const overlayClass = "fixed inset-0 z-40 bg-slate-900/50";
-const contentClass =
-  "fixed top-1/2 left-1/2 z-50 max-h-[90vh] w-[min(92vw,40rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg bg-white p-6 shadow-xl";
+import { Modal, Text } from "@mantine/core";
+import { type KeyboardEvent, type ReactNode, useEffect, useRef } from "react";
 
 type DialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
+  /** One or two sentences under the title explaining what the dialog is for. */
   description?: ReactNode;
   children: ReactNode;
+  /** Wider dialog for lists, image pickers and side-by-side comparisons. */
   wide?: boolean;
   /** Called instead of returning focus to the previously focused element. */
   onCloseFocus?: () => void;
 };
 
+/**
+ * A modal dialog for a task (a form, a picker). For yes/no questions use `confirm()`.
+ * Closes on Escape, the × button and a click outside; focus is trapped inside and returns
+ * to the button that opened it.
+ */
 export function Dialog({
   open,
   onOpenChange,
@@ -28,91 +28,40 @@ export function Dialog({
   wide,
   onCloseFocus,
 }: DialogProps) {
-  return (
-    <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
-      <RadixDialog.Portal>
-        <RadixDialog.Overlay className={overlayClass} />
-        <RadixDialog.Content
-          className={contentClass}
-          onCloseAutoFocus={
-            onCloseFocus
-              ? (e) => {
-                  e.preventDefault();
-                  onCloseFocus();
-                }
-              : undefined
-          }
-          style={wide ? { width: "min(94vw, 56rem)" } : undefined}
-          {...(description ? {} : { "aria-describedby": undefined })}
-        >
-          <div className="mb-4 flex items-start justify-between gap-4">
-            <RadixDialog.Title className="text-xl font-bold">{title}</RadixDialog.Title>
-            <RadixDialog.Close className={buttonClass("ghost", "px-2")} aria-label="閉じる">
-              <X aria-hidden="true" size={20} />
-            </RadixDialog.Close>
-          </div>
-          {description && (
-            <RadixDialog.Description className="mb-4 text-slate-700">
-              {description}
-            </RadixDialog.Description>
-          )}
-          {children}
-        </RadixDialog.Content>
-      </RadixDialog.Portal>
-    </RadixDialog.Root>
-  );
-}
+  // Escape is handled here instead of by Mantine, whose window listener would also close
+  // this dialog when Escape is pressed in a confirm() opened on top of it.
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== "Escape" || e.nativeEvent.isComposing) return;
+    // Ignore Escape from a confirmation nested inside this dialog: it closes only itself.
+    const own = e.currentTarget.querySelector("section");
+    const from = (e.target as Element).closest("[role=dialog], [role=alertdialog]");
+    if (from !== own) return;
+    e.stopPropagation();
+    onOpenChange(false);
+  };
 
-type ConfirmProps = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  title: string;
-  description: ReactNode;
-  confirmLabel: string;
-  cancelLabel?: string;
-  danger?: boolean;
-  busy?: boolean;
-  onConfirm: () => void;
-};
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (wasOpen.current && !open && onCloseFocus) setTimeout(onCloseFocus);
+    wasOpen.current = open;
+  }, [open, onCloseFocus]);
 
-/** Accessible replacement for window.confirm. Focus starts on the cancel button. */
-export function ConfirmDialog({
-  open,
-  onOpenChange,
-  title,
-  description,
-  confirmLabel,
-  cancelLabel = "キャンセル",
-  danger,
-  busy,
-  onConfirm,
-}: ConfirmProps) {
   return (
-    <AlertDialog.Root open={open} onOpenChange={onOpenChange}>
-      <AlertDialog.Portal>
-        <AlertDialog.Overlay className={overlayClass} />
-        <AlertDialog.Content className={contentClass}>
-          <AlertDialog.Title className="mb-3 text-xl font-bold">{title}</AlertDialog.Title>
-          <AlertDialog.Description className="mb-6 text-slate-700">
-            {description}
-          </AlertDialog.Description>
-          <div className="flex flex-wrap justify-end gap-3">
-            <AlertDialog.Cancel className={buttonClass("secondary")}>
-              {cancelLabel}
-            </AlertDialog.Cancel>
-            <Button
-              variant={danger ? "danger" : "primary"}
-              disabled={busy}
-              onClick={(e) => {
-                e.preventDefault();
-                onConfirm();
-              }}
-            >
-              {confirmLabel}
-            </Button>
-          </div>
-        </AlertDialog.Content>
-      </AlertDialog.Portal>
-    </AlertDialog.Root>
+    <Modal
+      opened={open}
+      onClose={() => onOpenChange(false)}
+      title={title}
+      size={wide ? "56rem" : "lg"}
+      closeOnEscape={false}
+      returnFocus={!onCloseFocus}
+      onKeyDown={onKeyDown}
+    >
+      {description && (
+        <Text c="dimmed" mb="md">
+          {description}
+        </Text>
+      )}
+      {children}
+    </Modal>
   );
 }

@@ -1,0 +1,115 @@
+/*
+ * App-wide styles on top of Mantine. Component styles live in CSS modules next to the
+ * component (`*.module.css`); use Mantine variables (`var(--mantine-…)`) for every value.
+ */
+
+body {
+  background: var(--mantine-color-white);
+  color: var(--mantine-color-black);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "palt" 0;
+  overflow-wrap: anywhere;
+}
+
+/* Japanese body text reads better with a little letter spacing. */
+p,
+li,
+dd,
+td {
+  letter-spacing: 0.02em;
+}
+
+/* Keyboard focus is clearly visible everywhere (WCAG 2.4.7), mouse focus is not. */
+:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}
+
+/* Headings and regions that receive programmatic focus (after navigation, after an
+   action removed the focused button) must not draw a ring. */
+[tabindex="-1"]:focus {
+  outline: none;
+}
+
+/* Required fields: Mantine draws " *"; show a readable 「必須」 tag instead. The span is
+   aria-hidden; the input itself carries `required`, which screen readers announce. */
+label[data-required] > span[aria-hidden="true"]:last-child {
+  font-size: 0;
+}
+label[data-required] > span[aria-hidden="true"]:last-child::after {
+  content: "必須";
+  display: inline-block;
+  margin-inline-start: var(--mantine-spacing-xs);
+  padding: 0 0.375rem;
+  border-radius: var(--mantine-radius-xs);
+  background: var(--mantine-color-red-0);
+  color: var(--mantine-color-red-8);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 700;
+  line-height: 1.6;
+  vertical-align: 0.1em;
+}
+
+/* Labels are bold enough to scan a long form. */
+.mantine-InputWrapper-label,
+.mantine-Fieldset-legend {
+  font-weight: 700;
+}
+
+/* Inputs: 40px tall (md) instead of Mantine's 42px, the same height as md buttons. */
+.mantine-Input-wrapper,
+.mantine-Button-root {
+  --input-height-md: 2.5rem;
+  --button-height-md: 2.5rem;
+}
+
+/*
+ * A native <input> that looks like Mantine's TextInput. Only for the rare control whose
+ * ARIA wiring Mantine cannot express (one hint and error shared by two inputs, e.g. date +
+ * time, or the color picker + color code). Label it yourself and set aria-describedby.
+ */
+.pw-input {
+  display: block;
+  width: 100%;
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--mantine-color-gray-4);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-white);
+  color: var(--mantine-color-black);
+  font: inherit;
+  font-size: var(--mantine-font-size-md);
+}
+.pw-input:focus {
+  border-color: var(--mantine-primary-color-filled);
+  outline: none;
+}
+.pw-input:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 0;
+}
+.pw-input[aria-invalid="true"] {
+  border-color: var(--mantine-color-error);
+}
+.pw-label {
+  display: inline-block;
+  margin-bottom: 4px;
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 700;
+}
+
+/* Visible on keyboard focus only: the skip link. */
+.pw-skip-link {
+  position: absolute;
+  inset-inline-start: var(--mantine-spacing-sm);
+  top: var(--mantine-spacing-sm);
+  z-index: 1000;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-white);
+  box-shadow: var(--mantine-shadow-md);
+  transform: translateY(-200%);
+}
+.pw-skip-link:focus {
+  transform: none;
+}

@@ -1,19 +1,21 @@
+import { Box, Stack, Text } from "@mantine/core";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
-  Link,
   Outlet,
   type RouterHistory,
   redirect,
 } from "@tanstack/react-router";
-import { lazy } from "react";
+import { lazy, type ReactNode } from "react";
 import { errorMessage, isApiError } from "./api/client";
 import { meQuery } from "./api/queries";
 import type { ContentType } from "./api/types";
 import { AppLayout } from "./components/AppLayout";
-import { ErrorMessage, Loading, PageHeading } from "./components/ui/misc";
+import { AnchorLink } from "./components/ui/AnchorLink";
+import { ErrorMessage, Loading } from "./components/ui/feedback";
+import { PageTitle } from "./components/ui/PageHeader";
 import { CategoriesPage } from "./pages/CategoriesPage";
 import { ContentListPage } from "./pages/ContentListPage";
 import { HomePage } from "./pages/HomePage";
@@ -40,27 +42,32 @@ async function loadMe(queryClient: QueryClient) {
   }
 }
 
+/** Errors and "not found" outside the app shell (it may be what failed). */
+function StandaloneMessage({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Box component="main" id="main" maw={720} mx="auto" p="xl">
+      <Stack gap="md">
+        <PageTitle documentTitle={title}>{title}</PageTitle>
+        {children}
+        <AnchorLink to="/">ホームに戻る</AnchorLink>
+      </Stack>
+    </Box>
+  );
+}
+
 function RouteError({ error }: { error: unknown }) {
   return (
-    <main id="main" className="mx-auto max-w-3xl space-y-4 p-6">
-      <PageHeading title="エラー">エラーが起きました</PageHeading>
+    <StandaloneMessage title="エラーが起きました">
       <ErrorMessage>{errorMessage(error)}</ErrorMessage>
-      <Link to="/" className="text-blue-700 underline">
-        ホームに戻る
-      </Link>
-    </main>
+    </StandaloneMessage>
   );
 }
 
 function NotFound() {
   return (
-    <main id="main" className="mx-auto max-w-3xl space-y-4 p-6">
-      <PageHeading title="ページが見つかりません">ページが見つかりません</PageHeading>
-      <p>URLが間違っているか、削除された可能性があります。</p>
-      <Link to="/" className="text-blue-700 underline">
-        ホームに戻る
-      </Link>
-    </main>
+    <StandaloneMessage title="ページが見つかりません">
+      <Text>URLが間違っているか、削除された可能性があります。</Text>
+    </StandaloneMessage>
   );
 }
 

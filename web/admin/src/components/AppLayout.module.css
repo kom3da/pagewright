@@ -1,0 +1,58 @@
+.navbar {
+  background: var(--mantine-color-gray-0);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Sidebar links: 40px tall, the active one in the accent color with a tinted background. */
+.link {
+  min-height: 2.5rem;
+  border-radius: var(--mantine-radius-sm);
+  font-weight: 600;
+  color: var(--mantine-color-gray-8);
+}
+.link:where(:hover) {
+  background: var(--mantine-color-gray-1);
+}
+.link[data-active] {
+  background: var(--mantine-color-brand-1);
+  color: var(--mantine-color-brand-9);
+}
+
+.siteButton,
+.userButton {
+  display: block;
+  width: 100%;
+  padding: var(--mantine-spacing-xs);
+  border-radius: var(--mantine-radius-sm);
+}
+.siteButton:hover,
+.userButton:hover {
+  background: var(--mantine-color-gray-1);
+}
+
+.footer {
+  border-top: 1px solid var(--mantine-color-gray-2);
+}
+
+.main {
+  background: var(--mantine-color-white);
+}
+.main:focus {
+  outline: none;
+}
+
+/* Content column: readable width, generous side padding on desktop. */
+.content {
+  max-width: 72rem;
+  padding: var(--mantine-spacing-lg) var(--mantine-spacing-md) var(--mantine-spacing-xl);
+}
+@media (min-width: 48em) {
+  .content {
+    padding: var(--mantine-spacing-xl) 2.5rem 3rem;
+  }
+}

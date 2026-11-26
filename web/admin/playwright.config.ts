@@ -12,6 +12,8 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${port}/admin/`,
     locale: "ja-JP",
+    // Mantine skips transitions then, so axe never sees a half-faded dialog.
+    reducedMotion: "reduce",
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

@@ -1,12 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Button, Stack, Text, TextInput } from "@mantine/core";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { api, errorMessage } from "../api/client";
 import { AuthLayout } from "../components/AuthLayout";
-import { Button } from "../components/ui/Button";
-import { TextField } from "../components/ui/Field";
-import { ErrorMessage } from "../components/ui/misc";
+import { Form } from "../components/ui/Form";
+import { ErrorMessage } from "../components/ui/feedback";
 
 const schema = z.object({
   email: z
@@ -25,15 +25,15 @@ export function LoginPage() {
   if (send.isSuccess) {
     return (
       <AuthLayout title="メールを送りました">
-        <div role="status" className="space-y-3">
-          <p>
+        <Stack role="status" gap="sm">
+          <Text>
             <strong>{send.variables.email}</strong>{" "}
             あてに、ログイン用のリンクを送りました。メールを開いてリンクを押してください。
-          </p>
-          <p className="text-sm text-slate-700">
+          </Text>
+          <Text size="sm" c="dimmed">
             リンクの有効期限は15分です。メールが届かないときは、迷惑メールのフォルダも確認してください。
-          </p>
-        </div>
+          </Text>
+        </Stack>
         <Button onClick={() => send.reset()}>別のメールアドレスで送り直す</Button>
       </AuthLayout>
     );
@@ -41,9 +41,11 @@ export function LoginPage() {
 
   return (
     <AuthLayout title="ログイン">
-      <p>登録したメールアドレスを入力してください。ログイン用のリンクをメールでお送りします。</p>
-      <form noValidate onSubmit={form.handleSubmit((v) => send.mutate(v))} className="space-y-4">
-        <TextField
+      <Text>
+        登録したメールアドレスを入力してください。ログイン用のリンクをメールでお送りします。
+      </Text>
+      <Form onSubmit={form.handleSubmit((v) => send.mutate(v))} gap="md">
+        <TextInput
           label="メールアドレス"
           type="email"
           autoComplete="email"
@@ -52,10 +54,10 @@ export function LoginPage() {
           {...form.register("email")}
         />
         {send.isError && <ErrorMessage>{errorMessage(send.error)}</ErrorMessage>}
-        <Button type="submit" variant="primary" className="w-full" disabled={send.isPending}>
-          {send.isPending ? "送信しています…" : "ログイン用のリンクを送る"}
+        <Button type="submit" variant="filled" fullWidth loading={send.isPending}>
+          ログイン用のリンクを送る
         </Button>
-      </form>
+      </Form>
     </AuthLayout>
   );
 }

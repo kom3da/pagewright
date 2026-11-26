@@ -1,0 +1,47 @@
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tile {
+  display: block;
+  width: 100%;
+  padding: 4px;
+  border: 2px solid var(--mantine-color-gray-3);
+  border-radius: var(--mantine-radius-sm);
+}
+.tile:hover {
+  border-color: var(--mantine-color-gray-5);
+}
+.tile[aria-pressed="true"] {
+  border-color: var(--mantine-primary-color-filled);
+  background: var(--mantine-color-brand-0);
+}
+
+.thumb {
+  aspect-ratio: 1;
+  width: 100%;
+  object-fit: cover;
+}
+
+/* Native file input, styled like a default button. */
+.file {
+  display: block;
+  width: 100%;
+  font: inherit;
+  font-size: var(--mantine-font-size-sm);
+}
+.file::file-selector-button {
+  margin-inline-end: var(--mantine-spacing-sm);
+  padding: 0.5rem 0.875rem;
+  border: 1px solid var(--mantine-color-gray-4);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-white);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.file[aria-invalid="true"]::file-selector-button {
+  border-color: var(--mantine-color-error);
+}

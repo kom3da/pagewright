@@ -1,0 +1,15 @@
+.root {
+  margin-bottom: var(--mantine-spacing-lg);
+  padding-bottom: var(--mantine-spacing-md);
+  border-bottom: 1px solid var(--mantine-color-gray-2);
+}
+
+.crumbs {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 47.99em) {
+  .actions {
+    width: 100%;
+  }
+}

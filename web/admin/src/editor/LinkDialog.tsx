@@ -1,8 +1,8 @@
+import { Button, Checkbox, Group, TextInput } from "@mantine/core";
 import type { Editor } from "@tiptap/react";
 import { type FormEvent, useState } from "react";
-import { Button } from "../components/ui/Button";
 import { Dialog } from "../components/ui/Dialog";
-import { TextField } from "../components/ui/Field";
+import { Form } from "../components/ui/Form";
 
 type Props = { editor: Editor; open: boolean; onClose: () => void };
 
@@ -64,9 +64,9 @@ function LinkForm({ editor, onClose }: { editor: Editor; onClose: () => void }) 
   };
 
   return (
-    <form noValidate onSubmit={onSubmit} className="space-y-4">
+    <Form onSubmit={onSubmit} gap="md">
       {needsText && (
-        <TextField
+        <TextInput
           label="表示する文字"
           required
           value={text}
@@ -74,9 +74,9 @@ function LinkForm({ editor, onClose }: { editor: Editor; onClose: () => void }) 
           error={errors.text}
         />
       )}
-      <TextField
+      <TextInput
         label="リンク先のURL"
-        hint="例：https://example.jp/ 、サイト内なら /company/"
+        description="例：https://example.jp/ 、サイト内なら /company/"
         required
         type="url"
         inputMode="url"
@@ -84,26 +84,22 @@ function LinkForm({ editor, onClose }: { editor: Editor; onClose: () => void }) 
         onChange={(e) => setHref(e.target.value)}
         error={errors.href}
       />
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={newTab}
-          onChange={(e) => setNewTab(e.target.checked)}
-          className="size-5"
-        />
-        新しいタブで開く
-      </label>
-      <div className="flex flex-wrap justify-end gap-3">
+      <Checkbox
+        label="新しいタブで開く"
+        checked={newTab}
+        onChange={(e) => setNewTab(e.currentTarget.checked)}
+      />
+      <Group justify="flex-end" gap="sm">
         {isLink && (
-          <Button variant="danger" onClick={remove} className="mr-auto">
+          <Button variant="subtle" color="red" onClick={remove} mr="auto">
             リンクを外す
           </Button>
         )}
         <Button onClick={onClose}>キャンセル</Button>
-        <Button type="submit" variant="primary">
+        <Button type="submit" variant="filled">
           {isLink ? "変更する" : "リンクにする"}
         </Button>
-      </div>
-    </form>
+      </Group>
+    </Form>
   );
 }

@@ -1,21 +1,26 @@
+import { Button, Group, Image, NativeSelect, Radio, Stack, Text, TextInput } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
-import { type FormEvent, type ReactNode, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { api, errorField, errorMessage, isApiError } from "../api/client";
 import { contentsQuery, meQuery, siteQuery } from "../api/queries";
 import type { Media, SiteFont, SiteSettings, SiteSettingsInput } from "../api/types";
 import { AdminOnly } from "../components/AdminOnly";
 import { ColorField, colorProblem } from "../components/ColorField";
 import { MenuEditor, type MenuRow, menuItemProblem, toMenuRows } from "../components/MenuEditor";
-import { useNotify } from "../components/Toaster";
-import { Button } from "../components/ui/Button";
-import { ConfirmDialog, Dialog } from "../components/ui/Dialog";
-import { Field, inputClass, TextField } from "../components/ui/Field";
-import { ErrorMessage, Loading, PageHeading } from "../components/ui/misc";
+import { confirm } from "../components/ui/confirm";
+import { Dialog } from "../components/ui/Dialog";
+import { Form } from "../components/ui/Form";
+import { ErrorMessage, Loading } from "../components/ui/feedback";
+import { notify } from "../components/ui/notify";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Section } from "../components/ui/Section";
 import { MediaPicker, UploadForm } from "../editor/MediaDialog";
 import { DEFAULT_FOOTER_COLOR, DEFAULT_PRIMARY_COLOR, isHexColor } from "../lib/color";
 
 const TITLE = "サイトの設定";
+const DESCRIPTION =
+  "公開サイト全体に関わる設定です。保存すると、公開サイトが自動で作り直されます。";
 
 /** A short list of common zones; a saved zone outside the list is added to the choices. */
 const timeZones: [string, string][] = [
@@ -121,7 +126,7 @@ function SiteSettingsLoader() {
   if (isPending) {
     return (
       <>
-        <PageHeading title={TITLE}>{TITLE}</PageHeading>
+        <PageHeader title={TITLE} description={DESCRIPTION} />
         <Loading />
       </>
     );
@@ -129,7 +134,7 @@ function SiteSettingsLoader() {
   if (error) {
     return (
       <>
-        <PageHeading title={TITLE}>{TITLE}</PageHeading>
+        <PageHeader title={TITLE} description={DESCRIPTION} />
         <ErrorMessage>{errorMessage(error)}</ErrorMessage>
       </>
     );
@@ -137,23 +142,8 @@ function SiteSettingsLoader() {
   return <SiteSettingsForm initial={data} />;
 }
 
-function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
-  return (
-    <section
-      aria-labelledby={id}
-      className="space-y-4 rounded-lg border border-slate-300 bg-white p-4 sm:p-6"
-    >
-      <h2 id={id} className="text-lg font-bold">
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
 function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
   const queryClient = useQueryClient();
-  const notify = useNotify();
   const [saved, setSaved] = useState(() => toForm(initial));
   const [form, setForm] = useState(saved);
   const [errors, setErrors] = useState<Errors>({});
@@ -170,6 +160,17 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
     enableBeforeUnload: () => dirtyRef.current,
     withResolver: true,
   });
+  const blocked = blocker.status === "blocked";
+  useEffect(() => {
+    if (!blocked) return;
+    void confirm({
+      title: "保存していない変更があります",
+      message: "このまま移動すると、保存していない設定の変更は失われます。",
+      cancelLabel: "このページにとどまる",
+      confirmLabel: "変更を捨てて移動する",
+      danger: true,
+    }).then((ok) => (ok ? blocker.proceed?.() : blocker.reset?.()));
+  }, [blocked, blocker]);
 
   // Low contrast is shown as soon as a complete color is entered; other checks run on save.
   const liveColor = (label: string, v: string) =>
@@ -232,49 +233,55 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
     : [...timeZones, [form.timeZone, form.timeZone] as [string, string]];
 
   return (
-    <div className="space-y-6">
-      <PageHeading title={TITLE}>{TITLE}</PageHeading>
-      <p>公開サイト全体に関わる設定です。保存すると、公開サイトが自動で作り直されます。</p>
-      <form ref={formRef} noValidate onSubmit={onSubmit} className="space-y-6">
+    <>
+      <PageHeader title={TITLE} description={DESCRIPTION} />
+      <Form ref={formRef} onSubmit={onSubmit} gap="lg">
         <Section id="site-basic" title="基本">
-          <TextField
+          <TextInput
             label="サイトの名前"
-            hint="公開サイトのいちばん上や、ブラウザのタブに表示されます。"
+            description="公開サイトのいちばん上や、ブラウザのタブに表示されます。"
             required
             value={form.name}
             onChange={(e) => set("name", e.target.value)}
             error={shown.name}
           />
-          <div className="space-y-2">
-            <p className="font-semibold">ロゴ</p>
-            <p className="text-sm text-slate-700" id="logo-hint">
+          <Stack gap="xs">
+            <Text fw={700}>ロゴ</Text>
+            <Text size="sm" c="dimmed" id="logo-hint">
               ロゴの画像を設定すると、サイトの名前の代わりに表示されます。画像の説明（代替テキスト）にはサイトの名前が使われます。
-            </p>
+            </Text>
             {form.logo ? (
-              <img
+              <Image
                 src={form.logo.previewUrl}
                 alt={`いまのロゴ：${form.logo.altText || form.logo.filename}`}
-                className="max-h-24 max-w-xs rounded border border-slate-300 bg-slate-100 p-2"
+                mah={96}
+                maw={320}
+                w="auto"
+                fit="contain"
+                p="xs"
+                bg="gray.1"
+                radius="sm"
+                style={{ border: "1px solid var(--mantine-color-gray-3)" }}
               />
             ) : (
-              <p className="text-sm">ロゴは設定していません（サイトの名前を文字で表示します）。</p>
+              <Text size="sm">ロゴは設定していません（サイトの名前を文字で表示します）。</Text>
             )}
-            <div className="flex flex-wrap gap-3">
+            <Group gap="sm">
               <Button onClick={() => setLogoOpen(true)} aria-describedby="logo-hint">
                 {form.logo ? "ロゴの画像を変える" : "ロゴの画像を選ぶ"}
               </Button>
               {form.logo && (
-                <Button variant="ghost" className="text-red-700" onClick={() => set("logo", null)}>
+                <Button variant="subtle" color="red" onClick={() => set("logo", null)}>
                   ロゴを外す
                 </Button>
               )}
-            </div>
+            </Group>
             {shown.logoMediaId && (
-              <p tabIndex={-1} data-error-focus="" className="text-sm font-semibold text-red-700">
+              <Text tabIndex={-1} data-error-focus="" size="sm" fw={700} c="red.7">
                 {shown.logoMediaId}
-              </p>
+              </Text>
             )}
-          </div>
+          </Stack>
         </Section>
 
         <Section id="site-look" title="見た目">
@@ -294,61 +301,52 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
             error={shown.footerColor}
             onChange={(v) => set("footerColor", v)}
           />
-          <fieldset className="space-y-2">
-            <legend className="font-semibold">文字の書体</legend>
-            {(
-              [
-                ["gothic", "ゴシック体（標準）", "sans-serif"],
-                ["mincho", "明朝体", "serif"],
-              ] as const
-            ).map(([value, text, family]) => (
-              <label key={value} className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="font"
+          <Radio.Group
+            label="文字の書体"
+            name="font"
+            value={form.font}
+            onChange={(v) => set("font", v as SiteFont)}
+            error={shown.font}
+          >
+            <Stack gap="xs" mt="xs">
+              {(
+                [
+                  ["gothic", "ゴシック体（標準）", "sans-serif"],
+                  ["mincho", "明朝体", "serif"],
+                ] as const
+              ).map(([value, text, family]) => (
+                <Radio
+                  key={value}
                   value={value}
-                  checked={form.font === value}
-                  onChange={() => set("font", value)}
-                  className="size-5"
+                  label={<span style={{ fontFamily: family }}>{text}</span>}
+                  data-error-focus={shown.font && value === form.font ? "" : undefined}
                 />
-                <span style={{ fontFamily: family }}>{text}</span>
-              </label>
-            ))}
-            {shown.font && (
-              <p tabIndex={-1} data-error-focus="" className="text-sm font-semibold text-red-700">
-                {shown.font}
-              </p>
-            )}
-          </fieldset>
+              ))}
+            </Stack>
+          </Radio.Group>
         </Section>
 
         <Section id="site-time" title="日付と時刻">
-          <Field
+          <NativeSelect
             label="タイムゾーン"
-            hint="公開サイトに表示する日付や、予約公開の時刻の基準になる地域です。日本のサイトなら「日本（東京）」のままにしてください。"
+            description="公開サイトに表示する日付や、予約公開の時刻の基準になる地域です。日本のサイトなら「日本（東京）」のままにしてください。"
             error={shown.timeZone}
+            value={form.timeZone}
+            onChange={(e) => set("timeZone", e.currentTarget.value)}
+            maw="24rem"
           >
-            {(ids) => (
-              <select
-                {...ids}
-                value={form.timeZone}
-                onChange={(e) => set("timeZone", e.target.value)}
-                className={`${inputClass} sm:w-96`}
-              >
-                {zoneChoices.map(([z, label]) => (
-                  <option key={z} value={z}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Field>
+            {zoneChoices.map(([z, label]) => (
+              <option key={z} value={z}>
+                {label}
+              </option>
+            ))}
+          </NativeSelect>
         </Section>
 
         <Section id="site-contact" title="お問い合わせ">
-          <TextField
+          <TextInput
             label="お問い合わせの送り先メールアドレス"
-            hint="お問い合わせフォームから届いた内容を、このアドレスにメールで知らせます。空欄にすると、このサイトの管理者全員に届きます。"
+            description="お問い合わせフォームから届いた内容を、このアドレスにメールで知らせます。空欄にすると、このサイトの管理者全員に届きます。"
             type="email"
             inputMode="email"
             autoComplete="email"
@@ -374,19 +372,19 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
         </Section>
 
         {shown.root && <ErrorMessage>{shown.root}</ErrorMessage>}
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <p className="text-sm text-slate-700" aria-live="polite">
+        <Group justify="flex-end" gap="sm">
+          <Text size="sm" c="dimmed" aria-live="polite">
             {dirty ? "保存していない変更があります" : ""}
-          </p>
-          <Button type="submit" variant="primary" disabled={save.isPending}>
-            {save.isPending ? "保存しています…" : "設定を保存する"}
+          </Text>
+          <Button type="submit" variant="filled" loading={save.isPending}>
+            設定を保存する
           </Button>
-        </div>
-      </form>
+        </Group>
+      </Form>
 
       <Dialog open={logoOpen} onOpenChange={setLogoOpen} title="ロゴの画像を選ぶ" wide>
         {logoOpen && (
-          <div className="space-y-8">
+          <Stack gap="xl">
             <UploadForm
               defaultAlt={form.name}
               submitLabel="アップロードしてロゴにする"
@@ -405,20 +403,9 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
                 setLogoOpen(false);
               }}
             />
-          </div>
+          </Stack>
         )}
       </Dialog>
-
-      <ConfirmDialog
-        open={blocker.status === "blocked"}
-        onOpenChange={(o) => !o && blocker.reset?.()}
-        title="保存していない変更があります"
-        description="このまま移動すると、保存していない設定の変更は失われます。"
-        cancelLabel="このページにとどまる"
-        confirmLabel="変更を捨てて移動する"
-        danger
-        onConfirm={() => blocker.proceed?.()}
-      />
-    </div>
+    </>
   );
 }

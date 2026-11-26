@@ -1,8 +1,19 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Box,
+  Button,
+  Code,
+  Group,
+  NativeSelect,
+  Paper,
+  Stack,
+  Text,
+  Textarea,
+  TextInput,
+} from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, ExternalLink } from "lucide-react";
-import { type KeyboardEvent, type Ref, useRef, useState } from "react";
+import { useBlocker, useNavigate } from "@tanstack/react-router";
+import { type KeyboardEvent, type Ref, useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { api, errorField, errorMessage, isApiError } from "../api/client";
@@ -18,37 +29,36 @@ import { CategoryCheckboxes } from "../components/CategoryCheckboxes";
 import { PreviewLinksDialog } from "../components/PreviewLinksDialog";
 import { ScheduleDialog, type ScheduleError } from "../components/ScheduleDialog";
 import { TagPicker } from "../components/TagPicker";
-import { useNotify } from "../components/Toaster";
-import { Button } from "../components/ui/Button";
-import { ConfirmDialog, Dialog } from "../components/ui/Dialog";
-import { Field, inputClass } from "../components/ui/Field";
-import {
-  ErrorMessage,
-  formatDateTime,
-  Loading,
-  PageHeading,
-  ScheduledUpdateBadge,
-  StatusBadge,
-  UnpublishedBadge,
-} from "../components/ui/misc";
+import { confirm } from "../components/ui/confirm";
+import { Dialog } from "../components/ui/Dialog";
+import { ExternalLink } from "../components/ui/ExternalLink";
+import { ErrorMessage, Loading } from "../components/ui/feedback";
+import { notify } from "../components/ui/notify";
+import { PageHeader } from "../components/ui/PageHeader";
+import { ContentStatusBadges } from "../components/ui/StatusBadge";
 import { publicUrl } from "../config";
 import { BodyEditor, useBodyEditor } from "../editor/BodyEditor";
 import { editorContent, normalizeBody } from "../editor/normalize";
-import { formatJapanDateTime } from "../lib/datetime";
+import { formatDateTime, formatJapanDateTime } from "../lib/datetime";
 import { descendantPageIds, pageRows } from "../lib/pageTree";
 import { optionalSlugSchema } from "../lib/slug";
+import classes from "./EditorPage.module.css";
 
 const typeLabels = { post: "記事", page: "固定ページ" } as const;
+const listCrumb = (type: ContentType) =>
+  type === "post"
+    ? { label: "記事の一覧", to: "/posts" as const }
+    : { label: "固定ページの一覧", to: "/pages" as const };
 
 export function EditorPage({ type, id }: { type: ContentType; id: number }) {
   const { data, isPending, error } = useQuery(contentQuery(id));
   if (isPending) return <Loading />;
   if (error) {
     return (
-      <div className="space-y-4">
-        <PageHeading title={`${typeLabels[type]}の編集`}>{typeLabels[type]}の編集</PageHeading>
+      <>
+        <PageHeader title={`${typeLabels[type]}の編集`} breadcrumbs={[listCrumb(type)]} />
         <ErrorMessage>{errorMessage(error)}</ErrorMessage>
-      </div>
+      </>
     );
   }
   return <EditorForm content={data} />;
@@ -91,7 +101,6 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   const label = typeLabels[type];
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const notify = useNotify();
   // Latest server state (status, URL…). Editable values live in local state below.
   const content = useQuery({ ...contentQuery(id), initialData: initial }).data;
 
@@ -122,7 +131,6 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
 
   const [busy, setBusy] = useState<Busy>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<"unpublish" | "delete" | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleError, setScheduleError] = useState<ScheduleError | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -311,16 +319,30 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       notify("予約を取り消しました。");
     });
 
-  const unpublish = () =>
-    run("unpublish", async () => {
-      setConfirm(null);
+  const unpublish = async () => {
+    const ok = await confirm({
+      title: "公開をやめますか？",
+      message: content.scheduledAt
+        ? `この${label}は公開サイトから見えなくなります。${formatJapanDateTime(content.scheduledAt)}の更新の予約も取り消されます。内容は下書きとして残ります。`
+        : `この${label}は公開サイトから見えなくなります。内容は下書きとして残ります。`,
+      confirmLabel: "公開をやめる",
+    });
+    if (!ok) return;
+    await run("unpublish", async () => {
       update(await api.unpublish(id));
       notify("公開をやめました。");
     });
+  };
 
-  const remove = () =>
-    run("delete", async () => {
-      setConfirm(null);
+  const remove = async () => {
+    const ok = await confirm({
+      title: `この${label}を削除しますか？`,
+      message: `「${title || "（タイトルなし）"}」を削除します。元に戻せません。`,
+      confirmLabel: "削除する",
+      danger: true,
+    });
+    if (!ok) return;
+    await run("delete", async () => {
       await api.deleteContent(id);
       leaving.current = true;
       queryClient.removeQueries({ queryKey: contentQuery(id).queryKey });
@@ -328,6 +350,20 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       notify(`${label}を削除しました。`);
       await navigate({ to: type === "post" ? "/posts" : "/pages" });
     });
+  };
+
+  // Leaving with unsaved changes (in-app navigation): ask first.
+  const blocked = blocker.status === "blocked";
+  useEffect(() => {
+    if (!blocked) return;
+    void confirm({
+      title: "保存していない変更があります",
+      message: "このまま移動すると、保存していない変更は失われます。",
+      cancelLabel: "このページにとどまる",
+      confirmLabel: "変更を捨てて移動する",
+      danger: true,
+    }).then((ok) => (ok ? blocker.proceed?.() : blocker.reset?.()));
+  }, [blocked, blocker]);
 
   // Edit conflict: either discard local edits and load the latest revision, or save the
   // local edits on top of it.
@@ -372,91 +408,67 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   const pages = useQuery({ ...contentsQuery("page"), enabled: type === "page" }).data ?? [];
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: Ctrl+S shortcut for the whole editor area.
-    <div className="space-y-6" onKeyDown={onKeyDown}>
-      <Link
-        to={type === "post" ? "/posts" : "/pages"}
-        className="inline-flex items-center gap-1 text-blue-700 underline"
-      >
-        <ArrowLeft aria-hidden="true" size={16} />
-        {label}の一覧へ
-      </Link>
+    <Stack gap="lg" onKeyDown={onKeyDown}>
+      <PageHeader
+        title={`${label}の編集`}
+        breadcrumbs={[listCrumb(type)]}
+        meta={
+          <>
+            <ContentStatusBadges {...content} revisionId={content.revision.id} />
+            {content.url && (
+              <ExternalLink href={publicUrl(content.url)} size="sm">
+                公開中のページを見る
+              </ExternalLink>
+            )}
+            <Text size="sm" c="dimmed">
+              最終更新：{formatDateTime(content.updatedAt)}
+            </Text>
+          </>
+        }
+      />
 
-      <div className="space-y-2">
-        <PageHeading title={`${label}の編集`}>{label}の編集</PageHeading>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <StatusBadge status={content.status} />
-          {isPublic && content.scheduledAt && <ScheduledUpdateBadge />}
-          {isPublic &&
-            content.hasUnpublishedChanges &&
-            content.scheduledRevisionId !== content.revision.id && <UnpublishedBadge />}
-          {content.url && (
-            <a
-              href={publicUrl(content.url)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-blue-700 underline"
-            >
-              公開中のページを見る
-              <ExternalLink aria-hidden="true" size={14} />
-              <span className="sr-only">（新しいタブで開きます）</span>
-            </a>
-          )}
-          <span className="text-slate-700">最終更新：{formatDateTime(content.updatedAt)}</span>
-        </div>
-      </div>
-
-      <Field label="タイトル" error={titleError}>
-        {(ids) => (
-          <input
-            {...ids}
-            ref={titleRef}
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value);
-              setTitleError(undefined);
-            }}
-            className={`${inputClass} text-xl font-bold`}
-          />
-        )}
-      </Field>
+      <TextInput
+        label="タイトル"
+        ref={titleRef}
+        value={title}
+        onChange={(e) => {
+          setTitle(e.target.value);
+          setTitleError(undefined);
+        }}
+        error={titleError}
+        size="lg"
+        classNames={{ input: classes.titleInput }}
+      />
 
       <BodyEditor editor={editor} />
 
       <details
         open={detailsOpen}
         onToggle={(e) => setDetailsOpen(e.currentTarget.open)}
-        className="rounded-md border border-slate-300 bg-white"
+        className={classes.details}
       >
-        <summary className="cursor-pointer px-4 py-3 font-semibold">詳細設定</summary>
-        <div className="space-y-6 border-t border-slate-300 p-4">
-          <Field
+        <summary className={classes.summary}>詳細設定</summary>
+        <Stack gap="lg" p="md" className={classes.detailsBody}>
+          <TextInput
             label="ページのURL（英数字）"
-            hint={
+            description={
               <>
                 英小文字・数字・ハイフン（-）で入力します。例：company-profile
                 <br />
                 空のままなら番号で決まります。URL：
-                <code>{urlPreview(type, slug || String(content.number), parentId, pages)}</code>
+                <Code>{urlPreview(type, slug || String(content.number), parentId, pages)}</Code>
               </>
             }
             error={form.formState.errors.slug?.message}
-          >
-            {(ids) => (
-              <input
-                {...ids}
-                {...form.register("slug")}
-                className={inputClass}
-                autoCapitalize="none"
-                autoComplete="off"
-                spellCheck={false}
-              />
-            )}
-          </Field>
+            {...form.register("slug")}
+            autoCapitalize="none"
+            autoComplete="off"
+            spellCheck={false}
+          />
           {isPublic && (
-            <p className="text-sm text-slate-700">
+            <Text size="sm" c="dimmed">
               公開中にURLを変えると、古いURLは新しいURLへ自動で転送されます。
-            </p>
+            </Text>
           )}
           {type === "page" && (
             <Controller
@@ -490,90 +502,80 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
               />
             </>
           )}
-        </div>
+        </Stack>
       </details>
 
-      <div className="sticky bottom-0 z-10 -mx-4 space-y-3 border-t border-slate-300 bg-slate-50/95 px-4 py-3">
-        {actionError && <ErrorMessage>{actionError}</ErrorMessage>}
-        {content.scheduledAt && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-amber-700 bg-amber-50 px-3 py-2">
-            <div>
-              <p className="font-semibold text-amber-900">
-                {isPublic ? "更新の予約" : "予約"}：{formatJapanDateTime(content.scheduledAt)}
-                に公開
-              </p>
-              {scheduleOutdated && (
-                <p className="text-sm text-slate-800">
-                  予約したあとに保存した変更は、この予約に含まれていません。含めるには予約し直してください。
-                </p>
-              )}
-            </div>
-            <Button onClick={unschedule} disabled={busy !== null}>
-              {busy === "unschedule" ? "取り消しています…" : "予約を取り消す"}
-            </Button>
-          </div>
-        )}
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="secondary" onClick={save} disabled={busy !== null}>
-            {busy === "save" ? "保存しています…" : "下書き保存"}
-          </Button>
-          <Button variant="primary" onClick={publish} disabled={busy !== null}>
-            {busy === "publish"
-              ? "公開しています…"
-              : content.status === "published"
-                ? "変更を公開する"
-                : "公開する"}
-          </Button>
-          <Button onClick={openSchedule} disabled={busy !== null}>
-            {content.scheduledAt ? "予約し直す" : "日時を指定して公開"}
-          </Button>
-          <Button
-            ref={previewButtonRef}
-            onClick={() => setPreviewOpen(true)}
-            disabled={busy !== null}
-          >
-            プレビュー用のリンク
-          </Button>
-          {isPublic && (
-            <Button onClick={() => setConfirm("unpublish")} disabled={busy !== null}>
-              公開をやめる
-            </Button>
+      <Box className={classes.actionBar}>
+        <Stack gap="sm">
+          {actionError && <ErrorMessage>{actionError}</ErrorMessage>}
+          {content.scheduledAt && (
+            <Paper withBorder bg="orange.0" px="sm" py="xs">
+              <Group justify="space-between" gap="sm">
+                <div>
+                  <Text fw={700} c="orange.9">
+                    {isPublic ? "更新の予約" : "予約"}：{formatJapanDateTime(content.scheduledAt)}
+                    に公開
+                  </Text>
+                  {scheduleOutdated && (
+                    <Text size="sm">
+                      予約したあとに保存した変更は、この予約に含まれていません。含めるには予約し直してください。
+                    </Text>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  onClick={unschedule}
+                  disabled={busy !== null}
+                  loading={busy === "unschedule"}
+                >
+                  予約を取り消す
+                </Button>
+              </Group>
+            </Paper>
           )}
-          <p aria-live="polite" className="text-sm text-slate-700">
-            {dirty ? "保存していない変更があります" : ""}
-          </p>
-          <Button
-            variant="danger"
-            className="ml-auto"
-            onClick={() => setConfirm("delete")}
-            disabled={busy !== null}
-          >
-            削除
-          </Button>
-        </div>
-      </div>
+          <Group gap="sm">
+            <Button onClick={save} disabled={busy !== null} loading={busy === "save"}>
+              下書き保存
+            </Button>
+            <Button
+              variant="filled"
+              onClick={publish}
+              disabled={busy !== null}
+              loading={busy === "publish"}
+            >
+              {content.status === "published" ? "変更を公開する" : "公開する"}
+            </Button>
+            <Button onClick={openSchedule} disabled={busy !== null}>
+              {content.scheduledAt ? "予約し直す" : "日時を指定して公開"}
+            </Button>
+            <Button
+              ref={previewButtonRef}
+              onClick={() => setPreviewOpen(true)}
+              disabled={busy !== null}
+            >
+              プレビュー用のリンク
+            </Button>
+            {isPublic && (
+              <Button onClick={unpublish} disabled={busy !== null}>
+                公開をやめる
+              </Button>
+            )}
+            <Text size="sm" c="dimmed" aria-live="polite">
+              {dirty ? "保存していない変更があります" : ""}
+            </Text>
+            <Button
+              variant="subtle"
+              color="red"
+              ml="auto"
+              onClick={remove}
+              disabled={busy !== null}
+            >
+              削除
+            </Button>
+          </Group>
+        </Stack>
+      </Box>
 
-      <ConfirmDialog
-        open={confirm === "unpublish"}
-        onOpenChange={(o) => !o && setConfirm(null)}
-        title="公開をやめますか？"
-        description={
-          content.scheduledAt
-            ? `この${label}は公開サイトから見えなくなります。${formatJapanDateTime(content.scheduledAt)}の更新の予約も取り消されます。内容は下書きとして残ります。`
-            : `この${label}は公開サイトから見えなくなります。内容は下書きとして残ります。`
-        }
-        confirmLabel="公開をやめる"
-        onConfirm={unpublish}
-      />
-      <ConfirmDialog
-        open={confirm === "delete"}
-        onOpenChange={(o) => !o && setConfirm(null)}
-        title={`この${label}を削除しますか？`}
-        description={`「${title || "（タイトルなし）"}」を削除します。元に戻せません。`}
-        confirmLabel="削除する"
-        danger
-        onConfirm={remove}
-      />
       <ScheduleDialog
         open={scheduleOpen}
         onOpenChange={setScheduleOpen}
@@ -600,17 +602,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         onLoadLatest={loadLatest}
         onOverwrite={overwrite}
       />
-      <ConfirmDialog
-        open={blocker.status === "blocked"}
-        onOpenChange={(o) => !o && blocker.reset?.()}
-        title="保存していない変更があります"
-        description="このまま移動すると、保存していない変更は失われます。"
-        cancelLabel="このページにとどまる"
-        confirmLabel="変更を捨てて移動する"
-        danger
-        onConfirm={() => blocker.proceed?.()}
-      />
-    </div>
+    </Stack>
   );
 }
 
@@ -639,33 +631,35 @@ function ConflictDialog({
       description={`この${label}を編集しているあいだに、別の画面やほかの人が新しい内容を保存しました。どちらの内容を残すか選んでください。`}
       wide
     >
-      <div className="space-y-6">
-        <Field
+      <Stack gap="lg">
+        <Textarea
           label="あなたの編集内容"
-          hint="まだ保存されていません。念のため、コピーして控えておくこともできます。"
-        >
-          {(ids) => <textarea {...ids} readOnly rows={8} value={myText} className={inputClass} />}
-        </Field>
-        <div className="space-y-2">
-          <Button variant="primary" onClick={onOverwrite} disabled={busy}>
+          description="まだ保存されていません。念のため、コピーして控えておくこともできます。"
+          readOnly
+          autosize={false}
+          rows={8}
+          value={myText}
+        />
+        <Stack gap={4} align="flex-start">
+          <Button variant="filled" onClick={onOverwrite} disabled={busy}>
             自分の内容で上書きする
           </Button>
-          <p className="text-sm text-slate-700">
+          <Text size="sm" c="dimmed">
             ほかの人が保存した内容は、あなたの編集内容に置き換わります。
-          </p>
-        </div>
-        <div className="space-y-2">
-          <Button variant="danger" onClick={onLoadLatest} disabled={busy}>
+          </Text>
+        </Stack>
+        <Stack gap={4} align="flex-start">
+          <Button variant="outline" color="red" onClick={onLoadLatest} disabled={busy}>
             最新の内容を読み込む
           </Button>
-          <p className="text-sm font-semibold text-red-700">
+          <Text size="sm" fw={700} c="red.7">
             注意：あなたの編集内容は捨てられ、元に戻せません。
-          </p>
-        </div>
-        <div className="flex justify-end">
+          </Text>
+        </Stack>
+        <Group justify="flex-end">
           <Button onClick={onClose}>閉じて編集を続ける</Button>
-        </div>
-      </div>
+        </Group>
+      </Stack>
     </Dialog>
   );
 }
@@ -695,28 +689,21 @@ function ParentSelect({
   const excluded = descendantPageIds(pages, self);
   const choices = pageRows(pages).filter((p) => !excluded.has(p.id));
   return (
-    <Field
+    <NativeSelect
+      ref={ref}
       label="親ページ"
-      hint="選ぶと、URLが「/親ページのURL/このページのURL/」になります。"
+      description="選ぶと、URLが「/親ページのURL/このページのURL/」になります。"
       error={error}
+      value={value}
+      onChange={(e) => onChange(e.currentTarget.value)}
     >
-      {(ids) => (
-        <select
-          {...ids}
-          ref={ref}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className={inputClass}
-        >
-          <option value="">なし（いちばん上の階層）</option>
-          {choices.map((p) => (
-            <option key={p.id} value={String(p.id)}>
-              {"　".repeat(p.depth)}
-              {p.title || "（タイトルなし）"}
-            </option>
-          ))}
-        </select>
-      )}
-    </Field>
+      <option value="">なし（いちばん上の階層）</option>
+      {choices.map((p) => (
+        <option key={p.id} value={String(p.id)}>
+          {"　".repeat(p.depth)}
+          {p.title || "（タイトルなし）"}
+        </option>
+      ))}
+    </NativeSelect>
   );
 }

@@ -1,15 +1,28 @@
+import {
+  Button,
+  Group,
+  Image,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Text,
+  Textarea,
+  Title,
+  UnstyledButton,
+} from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "@tiptap/react";
-import { clsx } from "clsx";
 import { type FormEvent, useRef, useState } from "react";
 import { api, errorField, errorMessage } from "../api/client";
 import { mediaQuery } from "../api/queries";
 import type { Media } from "../api/types";
-import { useNotify } from "../components/Toaster";
-import { Button } from "../components/ui/Button";
-import { ConfirmDialog, Dialog } from "../components/ui/Dialog";
-import { Field, inputClass } from "../components/ui/Field";
-import { ErrorMessage, Loading } from "../components/ui/misc";
+import { confirm } from "../components/ui/confirm";
+import { Dialog } from "../components/ui/Dialog";
+import { Field } from "../components/ui/Field";
+import { Form } from "../components/ui/Form";
+import { ErrorMessage, Loading } from "../components/ui/feedback";
+import { notify } from "../components/ui/notify";
+import classes from "./MediaDialog.module.css";
 
 type Props = { editor: Editor; open: boolean; onClose: () => void };
 
@@ -32,10 +45,10 @@ export function MediaDialog({ editor, open, onClose }: Props) {
       onCloseFocus={() => editor.commands.focus()}
     >
       {open && (
-        <div className="space-y-8">
+        <Stack gap="xl">
           <UploadForm onUploaded={insert} />
           <MediaPicker onPick={insert} inBody={(id) => bodyUsesMedia(editor, id)} />
-        </div>
+        </Stack>
       )}
     </Dialog>
   );
@@ -88,14 +101,14 @@ export function UploadForm({
   };
 
   return (
-    <section aria-labelledby="upload-heading" className="space-y-3">
-      <h3 id="upload-heading" className="text-lg font-bold">
+    <Stack component="section" aria-labelledby="upload-heading" gap="sm">
+      <Title order={3} id="upload-heading">
         新しい画像をアップロード
-      </h3>
-      <form noValidate onSubmit={onSubmit} className="space-y-4">
+      </Title>
+      <Form onSubmit={onSubmit} gap="md">
         <Field
           label="画像ファイル"
-          hint="JPEG・PNG・GIF・WebP、10MBまで"
+          description="JPEG・PNG・GIF・WebP、10MBまで"
           error={errors.file}
           required
         >
@@ -106,30 +119,29 @@ export function UploadForm({
               type="file"
               accept={ACCEPT.join(",")}
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm file:mr-3 file:rounded-md file:border file:border-slate-500 file:bg-white file:px-3 file:py-2 file:font-semibold"
+              className={classes.file}
             />
           )}
         </Field>
-        <Field label="画像の説明（代替テキスト）" hint={altHint} error={errors.alt} required>
-          {(ids) => (
-            <textarea
-              {...ids}
-              ref={altRef}
-              rows={2}
-              value={alt}
-              onChange={(e) => setAlt(e.target.value)}
-              className={inputClass}
-            />
-          )}
-        </Field>
+        <Textarea
+          ref={altRef}
+          label="画像の説明（代替テキスト）"
+          description={altHint}
+          error={errors.alt}
+          required
+          value={alt}
+          onChange={(e) => setAlt(e.currentTarget.value)}
+        />
         {upload.isError && !errorField(upload.error) && (
           <ErrorMessage>{errorMessage(upload.error)}</ErrorMessage>
         )}
-        <Button type="submit" variant="primary" disabled={upload.isPending}>
-          {upload.isPending ? "アップロードしています…" : submitLabel}
-        </Button>
-      </form>
-    </section>
+        <Group>
+          <Button type="submit" variant="filled" loading={upload.isPending}>
+            {submitLabel}
+          </Button>
+        </Group>
+      </Form>
+    </Stack>
   );
 }
 
@@ -159,12 +171,10 @@ export function MediaPicker({
   inUseMessage?: string;
 }) {
   const queryClient = useQueryClient();
-  const notify = useNotify();
   const { data, isPending, error } = useQuery(mediaQuery);
   const [selected, setSelected] = useState<Media | null>(null);
   const [alt, setAlt] = useState("");
   const [altError, setAltError] = useState<string>();
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const choose = (m: Media) => {
@@ -177,26 +187,30 @@ export function MediaPicker({
   const remove = useMutation({
     mutationFn: (m: Media) => api.deleteMedia(m.id),
     onSuccess: (_, m) => {
-      setConfirmDelete(false);
       setSelected(null);
       void queryClient.invalidateQueries({ queryKey: mediaQuery.queryKey });
       notify(`画像「${m.altText || m.filename}」を削除しました。`);
     },
     onError: (e) => {
-      setConfirmDelete(false);
       // 409 media_in_use: the message tells the user to remove it from the body first.
       setDeleteError(errorMessage(e));
     },
   });
 
-  const askDelete = () => {
+  const askDelete = async () => {
     if (!selected) return;
     if (inBody(selected.id)) {
       setDeleteError(inUseMessage);
       return;
     }
     setDeleteError(null);
-    setConfirmDelete(true);
+    const ok = await confirm({
+      title: "この画像を削除しますか？",
+      message: `「${selected.altText || selected.filename}」を削除します。元に戻せません。記事やページで使っている画像は削除できません。`,
+      confirmLabel: "削除する",
+      danger: true,
+    });
+    if (ok) remove.mutate(selected);
   };
 
   const onSubmit = (e: FormEvent) => {
@@ -211,77 +225,65 @@ export function MediaPicker({
   };
 
   return (
-    <section aria-labelledby="library-heading" className="space-y-3">
-      <h3 id="library-heading" className="text-lg font-bold">
+    <Stack component="section" aria-labelledby="library-heading" gap="sm">
+      <Title order={3} id="library-heading">
         アップロード済みの画像から選ぶ
-      </h3>
+      </Title>
       {isPending ? (
         <Loading />
       ) : error ? (
         <ErrorMessage>{errorMessage(error)}</ErrorMessage>
       ) : data.length === 0 ? (
-        <p>まだ画像がありません。</p>
+        <Text c="dimmed">まだ画像がありません。</Text>
       ) : (
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <SimpleGrid component="ul" cols={{ base: 2, sm: 4 }} spacing="sm" className={classes.grid}>
           {data.map((m) => (
             <li key={m.id}>
-              <button
-                type="button"
+              <UnstyledButton
                 aria-pressed={selected?.id === m.id}
                 onClick={() => choose(m)}
-                className={clsx(
-                  "block w-full rounded-md border-2 p-1 text-left",
-                  selected?.id === m.id ? "border-blue-700 bg-blue-50" : "border-slate-300",
-                )}
+                className={classes.tile}
               >
-                <img
+                <Image
                   src={m.previewUrl}
                   alt=""
-                  className="aspect-square w-full rounded object-cover"
+                  radius="xs"
+                  className={classes.thumb}
                   loading="lazy"
                 />
-                <span className="mt-1 block truncate text-sm">{m.altText || m.filename}</span>
-              </button>
+                <Text size="sm" mt={4} truncate>
+                  {m.altText || m.filename}
+                </Text>
+              </UnstyledButton>
             </li>
           ))}
-        </ul>
+        </SimpleGrid>
       )}
       {selected && (
-        <form noValidate onSubmit={onSubmit} className="space-y-4 rounded-md bg-slate-100 p-4">
-          {withAlt && (
-            <Field label="画像の説明（代替テキスト）" hint={altHint} error={altError} required>
-              {(ids) => (
-                <textarea
-                  {...ids}
-                  rows={2}
-                  value={alt}
-                  onChange={(e) => setAlt(e.target.value)}
-                  className={inputClass}
-                />
-              )}
-            </Field>
-          )}
-          {deleteError && <ErrorMessage>{deleteError}</ErrorMessage>}
-          <div className="flex flex-wrap gap-3">
-            <Button type="submit" variant="primary">
-              {pickLabel}
-            </Button>
-            <Button variant="ghost" className="ml-auto text-red-700" onClick={askDelete}>
-              この画像を削除
-            </Button>
-          </div>
-        </form>
+        <Paper bg="gray.0" p="md">
+          <Form onSubmit={onSubmit} gap="md">
+            {withAlt && (
+              <Textarea
+                label="画像の説明（代替テキスト）"
+                description={altHint}
+                error={altError}
+                required
+                value={alt}
+                onChange={(e) => setAlt(e.currentTarget.value)}
+              />
+            )}
+            {deleteError && <ErrorMessage>{deleteError}</ErrorMessage>}
+            <Group gap="sm">
+              <Button type="submit" variant="filled">
+                {pickLabel}
+              </Button>
+              <Button variant="subtle" color="red" ml="auto" onClick={askDelete}>
+                この画像を削除
+              </Button>
+            </Group>
+          </Form>
+        </Paper>
       )}
-      <ConfirmDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        title="この画像を削除しますか？"
-        description={`「${selected?.altText || selected?.filename || ""}」を削除します。元に戻せません。記事やページで使っている画像は削除できません。`}
-        confirmLabel="削除する"
-        danger
-        busy={remove.isPending}
-        onConfirm={() => selected && remove.mutate(selected)}
-      />
-    </section>
+    </Stack>
   );
 }

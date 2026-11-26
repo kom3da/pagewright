@@ -1,3 +1,4 @@
+import { Box, Paper, Text } from "@mantine/core";
 import { type Editor, EditorContent, useEditor } from "@tiptap/react";
 import { useRef } from "react";
 import type { BodyNode } from "../api/types";
@@ -34,17 +35,17 @@ export function useBodyEditor(body: BodyNode | null | undefined, onChange: () =>
 
 export function BodyEditor({ editor }: { editor: Editor }) {
   return (
-    <div className="space-y-1">
-      <p id={labelId} className="font-semibold">
+    <Box>
+      <Text id={labelId} fw={700}>
         本文
-      </p>
-      <p id={helpId} className="text-sm text-slate-700">
+      </Text>
+      <Text id={helpId} size="sm" c="dimmed" mb={4}>
         Shift＋Enterで段落の中で改行します。ツールバーの中は左右の矢印キーで移動できます。
-      </p>
-      <div className="rounded-md border border-slate-500 bg-white">
+      </Text>
+      <Paper withBorder radius="sm" style={{ borderColor: "var(--mantine-color-gray-4)" }}>
         <Toolbar editor={editor} />
         <EditorContent editor={editor} />
-      </div>
-    </div>
+      </Paper>
+    </Box>
   );
 }

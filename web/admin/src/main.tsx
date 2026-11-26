@@ -1,7 +1,11 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import "./index.css";
+import "@mantine/core/styles.css";
+import "@mantine/notifications/styles.css";
+import "@mantine/dates/styles.css";
+import "./styles/global.css";
+import "./editor/prose.css";
 
 async function start() {
   // `pnpm dev:mock` runs the admin without the Go server, using the MSW mock API.

@@ -14,6 +14,16 @@ const longFormat = new Intl.DateTimeFormat("ja-JP", {
 /** "2026年12月1日 9:00" in Japan time. */
 export const formatJapanDateTime = (iso: string) => longFormat.format(new Date(iso));
 
+const shortFormat = new Intl.DateTimeFormat("ja-JP", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Asia/Tokyo",
+});
+
+/** "2026/11/20 10:00" in Japan time, or "" for null. For lists and 「最終更新」. */
+export const formatDateTime = (iso: string | null) =>
+  iso ? shortFormat.format(new Date(iso)) : "";
+
 /** Splits an instant into Japan-time values for <input type="date"> and <input type="time">. */
 export function toJapanInputs(iso: string): { date: string; time: string } {
   const local = new Date(new Date(iso).getTime() + JST_OFFSET_MS).toISOString();

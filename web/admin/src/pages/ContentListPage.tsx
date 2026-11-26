@@ -1,28 +1,34 @@
+import { EmptyState, Stack, Text } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { ExternalLink } from "lucide-react";
+import { FileText, Newspaper } from "lucide-react";
 import { errorMessage } from "../api/client";
 import { contentsQuery } from "../api/queries";
 import type { ContentType } from "../api/types";
 import { NewContentButton } from "../components/NewContentButton";
-import {
-  ErrorMessage,
-  formatDateTime,
-  Loading,
-  PageHeading,
-  ScheduledUpdateBadge,
-  StatusBadge,
-  UnpublishedBadge,
-} from "../components/ui/misc";
+import { AnchorLink } from "../components/ui/AnchorLink";
+import { ExternalLink } from "../components/ui/ExternalLink";
+import { ErrorMessage, Loading } from "../components/ui/feedback";
+import { PageHeader } from "../components/ui/PageHeader";
+import { ResponsiveList } from "../components/ui/ResponsiveList";
+import { ContentStatusBadges } from "../components/ui/StatusBadge";
 import { publicUrl } from "../config";
-import { formatJapanDateTime } from "../lib/datetime";
+import { formatDateTime, formatJapanDateTime } from "../lib/datetime";
 import { type PageRow, pageRows } from "../lib/pageTree";
 
 const labels = {
-  post: { title: "記事", empty: "まだ記事がありません。「新規作成」から書き始めましょう。" },
+  post: {
+    title: "記事",
+    description: "お知らせやブログの記事です。新しい順に並びます。",
+    empty: "まだ記事がありません",
+    emptyText: "「新規作成」から最初の記事を書きましょう。",
+    icon: Newspaper,
+  },
   page: {
     title: "固定ページ",
-    empty: "まだ固定ページがありません。「新規作成」から作りましょう。",
+    description: "会社概要など、いつも置いておくページです。親ページの下に子ページが並びます。",
+    empty: "まだ固定ページがありません",
+    emptyText: "「新規作成」から最初のページを作りましょう。",
+    icon: FileText,
   },
 } as const;
 
@@ -36,98 +42,86 @@ export function ContentListPage({ type }: { type: ContentType }) {
       : (data ?? []).map((c) => ({ ...c, depth: 0, ancestors: [] }));
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <PageHeading title={`${label.title}の一覧`}>{label.title}の一覧</PageHeading>
-        <NewContentButton type={type} label="新規作成" />
-      </div>
+    <>
+      <PageHeader
+        title={`${label.title}の一覧`}
+        description={label.description}
+        actions={<NewContentButton type={type} label="新規作成" primary />}
+      />
       {isPending ? (
         <Loading />
       ) : error ? (
         <ErrorMessage>{errorMessage(error)}</ErrorMessage>
       ) : rows.length === 0 ? (
-        <p>{label.empty}</p>
+        <EmptyState
+          icon={<label.icon aria-hidden="true" />}
+          title={label.empty}
+          description={label.emptyText}
+        />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-300 bg-white">
-          <table className="w-full text-left">
-            <caption className="sr-only">
-              {label.title}の一覧（{type === "page" ? "親ページの下に子ページ" : "番号の新しい順"}）
-            </caption>
-            <thead className="border-b border-slate-300 bg-slate-100 text-sm">
-              <tr>
-                <th scope="col" className="px-4 py-2">
-                  タイトル
-                </th>
-                <th scope="col" className="px-4 py-2">
-                  状態
-                </th>
-                <th scope="col" className="px-4 py-2">
-                  公開中のURL
-                </th>
-                <th scope="col" className="px-4 py-2">
-                  最終更新
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((c) => (
-                <tr key={c.id} className="border-b border-slate-200 last:border-0">
-                  <td className="px-4 py-3" style={{ paddingLeft: `${1 + c.depth * 1.5}rem` }}>
-                    {c.ancestors.length > 0 && (
-                      <span className="mr-1 text-sm text-slate-700">
-                        {c.ancestors.map((a) => `${a.title || "（タイトルなし）"} › `).join("")}
-                      </span>
-                    )}
-                    <Link
-                      to={type === "post" ? "/posts/$id" : "/pages/$id"}
-                      params={{ id: String(c.id) }}
-                      className="font-semibold text-blue-700 underline"
-                    >
-                      {c.title || "（タイトルなし）"}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      <StatusBadge status={c.status} />
-                      {c.status === "published" && c.scheduledAt && <ScheduledUpdateBadge />}
-                      {/* With a scheduled update, the summary cannot tell whether the changes
-                          are part of it, so only the schedule is shown. */}
-                      {c.hasUnpublishedChanges && c.status === "published" && !c.scheduledAt && (
-                        <UnpublishedBadge />
-                      )}
-                    </div>
-                    {c.scheduledAt && (
-                      <p className="mt-1 text-sm whitespace-nowrap text-slate-800">
-                        {formatJapanDateTime(c.scheduledAt)}に
-                        {c.status === "published" ? "更新" : "公開"}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {c.url ? (
-                      <a
-                        href={publicUrl(c.url)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 break-all text-blue-700 underline"
-                      >
-                        {c.url}
-                        <ExternalLink aria-hidden="true" size={14} />
-                        <span className="sr-only">（新しいタブで開きます）</span>
-                      </a>
-                    ) : (
-                      <span className="text-slate-700">未公開</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm whitespace-nowrap">
-                    {formatDateTime(c.updatedAt)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ResponsiveList
+          items={rows}
+          getKey={(c) => c.id}
+          caption={`${label.title}の一覧（${type === "page" ? "親ページの下に子ページ" : "番号の新しい順"}）`}
+          columns={[
+            {
+              key: "title",
+              header: "タイトル",
+              render: (c) => (
+                <div style={{ paddingLeft: `${c.depth * 1.5}rem` }}>
+                  {c.ancestors.length > 0 && (
+                    <Text component="span" size="sm" c="dimmed" mr={4}>
+                      {c.ancestors.map((a) => `${a.title || "（タイトルなし）"} › `).join("")}
+                    </Text>
+                  )}
+                  <AnchorLink
+                    to={type === "post" ? "/posts/$id" : "/pages/$id"}
+                    params={{ id: String(c.id) }}
+                    fw={700}
+                  >
+                    {c.title || "（タイトルなし）"}
+                  </AnchorLink>
+                </div>
+              ),
+            },
+            {
+              key: "status",
+              header: "状態",
+              render: (c) => (
+                <Stack gap={4}>
+                  <ContentStatusBadges {...c} />
+                  {c.scheduledAt && (
+                    <Text size="sm" style={{ whiteSpace: "nowrap" }}>
+                      {formatJapanDateTime(c.scheduledAt)}に
+                      {c.status === "published" ? "更新" : "公開"}
+                    </Text>
+                  )}
+                </Stack>
+              ),
+            },
+            {
+              key: "url",
+              header: "公開中のURL",
+              render: (c) =>
+                c.url ? (
+                  <ExternalLink href={publicUrl(c.url)} size="sm">
+                    {c.url}
+                  </ExternalLink>
+                ) : (
+                  <Text size="sm" c="dimmed">
+                    未公開
+                  </Text>
+                ),
+            },
+            {
+              key: "updatedAt",
+              header: "最終更新",
+              nowrap: true,
+              render: (c) => <Text size="sm">{formatDateTime(c.updatedAt)}</Text>,
+            },
+          ]}
+        />
       )}
-    </div>
+    </>
   );
 }
