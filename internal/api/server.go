@@ -67,6 +67,7 @@ type Server struct {
 	formByIP     *limiter
 	formBySite   *limiter
 	autoReplyTo  *limiter
+	previewByIP  *limiter
 }
 
 const (
@@ -88,6 +89,8 @@ func New(o Options) *Server {
 		formByIP:     newLimiter(10, 10*time.Minute),
 		formBySite:   newLimiter(200, time.Hour),
 		autoReplyTo:  newLimiter(3, 24*time.Hour),
+		// A preview page renders the whole site and needs no login.
+		previewByIP: newLimiter(60, time.Minute),
 	}
 }
 

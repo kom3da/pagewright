@@ -95,7 +95,7 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 		in.Page = "/"
 	}
 	back := s.backLink(in.Page)
-	if !s.formByIP.allow(s.clientKey(r)) || !s.formBySite.allow(tenantID.String()) {
+	if !s.formByIP.allow(s.clientKey(r)) {
 		s.formPage(w, http.StatusTooManyRequests, "", "送信できませんでした", []string{"短い時間に多くの送信がありました。しばらく待ってからお試しください。"}, back)
 		return
 	}
@@ -114,6 +114,12 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 		}
 		s.Logger.Error("contact form: load site", "tenant_id", tenantID, "err", err)
 		s.formPage(w, http.StatusInternalServerError, "", "送信できませんでした", []string{"サーバーでエラーが起きました。時間をおいてもう一度お試しください。"}, back)
+		return
+	}
+	// Count per site only for sites that exist, so made-up ids cannot fill
+	// the limiter's table.
+	if !s.formBySite.allow(tenantID.String()) {
+		s.formPage(w, http.StatusTooManyRequests, "", "送信できませんでした", []string{"短い時間に多くの送信がありました。しばらく待ってからお試しください。"}, back)
 		return
 	}
 

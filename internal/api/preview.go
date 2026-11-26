@@ -144,6 +144,10 @@ func (s *Server) lookupPreview(r *http.Request) (dbgen.LookupPreviewLinkRow, boo
 }
 
 func (s *Server) previewPage(w http.ResponseWriter, r *http.Request) {
+	if !s.previewByIP.allow(s.clientKey(r)) {
+		s.formPage(w, http.StatusTooManyRequests, "", "しばらく待ってからお試しください", []string{"短い時間に多くの表示がありました。"}, "")
+		return
+	}
 	link, ok := s.lookupPreview(r)
 	if !ok {
 		s.formPage(w, http.StatusNotFound, "", "プレビューが見つかりません", []string{"このプレビュー用のリンクは、有効期限が切れたか、取り消されました。"}, "")
