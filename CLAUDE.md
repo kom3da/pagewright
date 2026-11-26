@@ -21,7 +21,7 @@
 
 ```sh
 mise install        # Go、Node.js、pnpm、sqlc、goose などを入れる
-mise run dev        # 開発用DB（PostgreSQL＋pg_bigm）とMailpitを起動し、本体を起動
+mise run dev        # 開発用DB（PostgreSQL）とMailpitを起動し、本体を起動
 mise run test
 mise run lint
 mise run gen        # sqlc のコード生成
