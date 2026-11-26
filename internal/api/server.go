@@ -2,6 +2,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -342,6 +343,30 @@ func decode(w http.ResponseWriter, r *http.Request, v any) error {
 	}
 	return nil
 }
+
+// decodeOptional is decode for endpoints whose body may be left out.
+func decodeOptional(w http.ResponseWriter, r *http.Request, v any) error {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxJSONBytes))
+	if err != nil {
+		return invalid("invalid_json", "送信された内容を読み取れませんでした")
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		return invalid("invalid_json", "送信された内容を読み取れませんでした")
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return invalid("invalid_json", "送信された内容を読み取れませんでした")
+	}
+	return nil
+}
+
+// errEditConflict answers a change based on a revision that is no longer
+// the latest.
+var errEditConflict = &apiError{http.StatusConflict, "edit_conflict", "ほかの人がこの内容を先に保存しました"}
 
 func pathID(r *http.Request) (int64, error) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)

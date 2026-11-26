@@ -86,9 +86,9 @@ type ContentDetail = ContentSummary & {
 | `GET /api/contents/{id}` | | 200 `ContentDetail` |
 | `PUT /api/contents/{id}/draft` | `{"title": "...", "body": {...}, "fields": {...}, "baseRevisionId": 12}`（`fields`・`baseRevisionId` は省略可） | 200 `ContentDetail`。保存のたびに新しい版を作る。`baseRevisionId`（編集を始めたときの `revision.id`）が最新の版と違えば、ほかの人が先に保存したので 409 `edit_conflict` |
 | `PATCH /api/contents/{id}` | `{"slug"?: string \| null, "parentId"?: number \| null, "categoryIds"?: number[], "tagIds"?: number[], "publishedAt"?: string}` | 200 `ContentDetail`。公開中に URL が変わったら、古い URL はリダイレクトとして残す。`publishedAt` はサイトに出る公開日（今より前の日時。未公開ならその日付で公開される）。先の日時は 422 `invalid_published_at` |
-| `POST /api/contents/{id}/publish` | なし | 200 `ContentDetail`。最新の版を公開し、サイトの再ビルドを予約する。公開の予約があれば取り消す |
+| `POST /api/contents/{id}/publish` | なし、または `{"baseRevisionId": 12}` | 200 `ContentDetail`。最新の版を公開し、サイトの再ビルドを予約する。公開の予約があれば取り消す。`baseRevisionId`（画面で見ていた版）が最新の版と違えば、ほかの人が先に保存したので 409 `edit_conflict` |
 | `POST /api/contents/{id}/unpublish` | なし | 200 `ContentDetail`。公開の予約があれば取り消す。再ビルドを予約する |
-| `POST /api/contents/{id}/schedule` | `{"publishAt": "RFC 3339"}`（今から 1 分以上あと） | 200 `ContentDetail`。最新の版をその日時に公開する。もう一度呼ぶと予約を置き換える。過去の日時は 422 `invalid_publish_at` |
+| `POST /api/contents/{id}/schedule` | `{"publishAt": "RFC 3339", "baseRevisionId"?: 12}`（今から 1 分以上あと） | 200 `ContentDetail`。最新の版をその日時に公開する。もう一度呼ぶと予約を置き換える。過去の日時は 422 `invalid_publish_at`。`baseRevisionId` は公開と同じ |
 | `DELETE /api/contents/{id}/schedule` | | 200 `ContentDetail`。予約を取り消す |
 | `DELETE /api/contents/{id}` | | 204。再ビルドを予約する |
 | `POST /api/contents/{id}/preview-links` | `{"days": 1〜30}`（本体は必須。`days` のキーを省くと 3） | 201 `PreviewLink`（`url` 付き）。ログインなしで見られるリンク。開くたびにその時点の最新の版を描く（作った時点の内容に固定しない）。`url` はこのときしか返らない（保存しているのはハッシュだけ）。範囲外は 422 `invalid_days`（`field: "days"`） |

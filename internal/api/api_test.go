@@ -705,6 +705,32 @@ func TestEditConflict(t *testing.T) {
 	alice.mustDo(http.MethodPut, path, map[string]any{"title": "私", "body": json.RawMessage(paragraph), "baseRevisionId": d.Revision.ID}, nil, http.StatusOK)
 }
 
+// TestPublishConflict refuses to publish or schedule a revision the
+// editor has not seen.
+func TestPublishConflict(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	d := alice.newContent("post", "最初", false)
+	seen := d.Revision.ID
+	// Someone else saves a newer revision.
+	alice.mustDo(http.MethodPut, fmt.Sprintf("/api/contents/%d/draft", d.ID), map[string]any{"title": "別の人の変更", "body": json.RawMessage(paragraph)}, &d, http.StatusOK)
+
+	stale := map[string]any{"baseRevisionId": seen}
+	if got, code := alice.errorCode(http.MethodPost, fmt.Sprintf("/api/contents/%d/publish", d.ID), stale); got != http.StatusConflict || code != "edit_conflict" {
+		t.Errorf("publish with a stale revision = %d %s, want 409 edit_conflict", got, code)
+	}
+	at := map[string]any{"publishAt": time.Now().Add(time.Hour), "baseRevisionId": seen}
+	if got, code := alice.errorCode(http.MethodPost, fmt.Sprintf("/api/contents/%d/schedule", d.ID), at); got != http.StatusConflict || code != "edit_conflict" {
+		t.Errorf("schedule with a stale revision = %d %s, want 409 edit_conflict", got, code)
+	}
+	alice.mustDo(http.MethodPost, fmt.Sprintf("/api/contents/%d/publish", d.ID), map[string]any{"baseRevisionId": d.Revision.ID}, &d, http.StatusOK)
+	if d.Status != "published" {
+		t.Errorf("publish with the latest revision: status = %s", d.Status)
+	}
+	// The body stays optional.
+	alice.mustDo(http.MethodPost, fmt.Sprintf("/api/contents/%d/publish", d.ID), nil, &d, http.StatusOK)
+}
+
 func TestTagEditAndMediaDelete(t *testing.T) {
 	e := newEnv(t)
 	alice := e.login("alice@example.com")

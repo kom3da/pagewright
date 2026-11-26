@@ -256,7 +256,7 @@ func (s *Server) saveDraft(w http.ResponseWriter, r *http.Request, sess *session
 			return err
 		}
 		if in.BaseRevisionID != nil && *in.BaseRevisionID != prev.ID {
-			return &apiError{http.StatusConflict, "edit_conflict", "ほかの人がこの内容を先に保存しました"}
+			return errEditConflict
 		}
 		if sess.role != "admin" {
 			prevDoc, err := body.Parse(prev.Body)
@@ -472,10 +472,18 @@ func (s *Server) setPublished(w http.ResponseWriter, r *http.Request, sess *sess
 	if err != nil {
 		return err
 	}
+	// baseRevisionId (optional) is the revision the editor saw: publishing
+	// refuses if someone saved a newer one meanwhile.
+	var in struct {
+		BaseRevisionID *int64 `json:"baseRevisionId"`
+	}
+	if err := decodeOptional(w, r, &in); err != nil {
+		return err
+	}
 	ctx := r.Context()
 	var d contentDetail
 	err = s.DB.InTenantTx(ctx, func(tx pgx.Tx, q *dbgen.Queries) error {
-		if _, err := q.GetContent(ctx, id); err != nil {
+		if _, err := q.LockContent(ctx, id); err != nil {
 			return err
 		}
 		var rev *int64
@@ -483,6 +491,9 @@ func (s *Server) setPublished(w http.ResponseWriter, r *http.Request, sess *sess
 			latest, err := q.GetLatestRevision(ctx, id)
 			if err != nil {
 				return err
+			}
+			if in.BaseRevisionID != nil && *in.BaseRevisionID != latest.ID {
+				return errEditConflict
 			}
 			rev = &latest.ID
 		}
@@ -558,7 +569,8 @@ func (s *Server) schedule(w http.ResponseWriter, r *http.Request, sess *session)
 		return err
 	}
 	var in struct {
-		PublishAt time.Time `json:"publishAt"`
+		PublishAt      time.Time `json:"publishAt"`
+		BaseRevisionID *int64    `json:"baseRevisionId"`
 	}
 	if err := decode(w, r, &in); err != nil {
 		return err
@@ -570,12 +582,15 @@ func (s *Server) schedule(w http.ResponseWriter, r *http.Request, sess *session)
 	ctx := r.Context()
 	var d contentDetail
 	err = s.DB.InTenantTx(ctx, func(tx pgx.Tx, q *dbgen.Queries) error {
-		if _, err := q.GetContent(ctx, id); err != nil {
+		if _, err := q.LockContent(ctx, id); err != nil {
 			return err
 		}
 		latest, err := q.GetLatestRevision(ctx, id)
 		if err != nil {
 			return err
+		}
+		if in.BaseRevisionID != nil && *in.BaseRevisionID != latest.ID {
+			return errEditConflict
 		}
 		if _, err := q.ScheduleRevision(ctx, dbgen.ScheduleRevisionParams{ContentID: id, RevisionID: &latest.ID, ScheduledAt: &at}); err != nil {
 			return err
