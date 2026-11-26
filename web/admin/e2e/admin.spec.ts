@@ -99,3 +99,22 @@ test("unsaved changes are confirmed before leaving", async ({ page }) => {
   await page.getByRole("link", { name: "タグ" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "タグ" })).toBeVisible();
 });
+
+test("scheduling a post is accessible and keyboard operable", async ({ page }) => {
+  await page.goto("posts/1");
+  await page.getByRole("button", { name: "日時を指定して公開" }).click();
+  const dialog = page.getByRole("dialog", { name: "日時を指定して公開" });
+  await expect(dialog.getByLabel("日付")).toBeVisible();
+  await expectAccessible(page);
+
+  await dialog.getByLabel("日付").fill("2099-12-01");
+  await dialog.getByLabel("時刻").fill("09:00");
+  await dialog.getByLabel("時刻").press("Enter");
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("予約：2099年12月1日 9:00に公開")).toBeVisible();
+  await expectAccessible(page);
+
+  await page.getByRole("button", { name: "予約を取り消す" }).click();
+  await expect(page.getByText("予約を取り消しました。")).toBeVisible();
+  await expect(page.getByText(/予約：/)).toBeHidden();
+});
