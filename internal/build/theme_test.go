@@ -159,3 +159,57 @@ func TestCheckThemeSettings(t *testing.T) {
 		}
 	}
 }
+
+// TestContentRelations checks the parent, child and sibling pages and the
+// neighboring posts given to themes, and the focusable table region.
+func TestContentRelations(t *testing.T) {
+	env := dbtest.New(t)
+	s := newSeeder(t, env, "Acme", "owner@example.com")
+	at := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+	page := func(slug, title string, parent *int64, body string) int64 {
+		c := s.content("page", ptr(slug), parent)
+		s.publish(c.ID, s.revision(c.ID, title, body).ID, at)
+		return c.ID
+	}
+	table := `{"type":"doc","content":[{"type":"table","content":[{"type":"tableRow","content":[{"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"x"}]}]}]}]}]}`
+	about := page("about", "About", nil, paragraph("a"))
+	page("history", "History", &about, table)
+	page("access", "Access", &about, paragraph("c"))
+	s.content("page", ptr("draft"), &about) // never published
+	for i, slug := range []string{"first", "second", "third"} {
+		c := s.content("post", ptr(slug), nil)
+		s.publish(c.ID, s.revision(c.ID, slug, paragraph("p")).ID, at.Add(time.Duration(i)*time.Hour))
+	}
+
+	opts := build.Options{OutDir: t.TempDir(), ThemeFS: os.DirFS("testdata/minimal-theme")}
+	if _, err := build.Build(context.Background(), env.DB, s.tenant(), opts); err != nil {
+		t.Fatal(err)
+	}
+	files := siteFiles(t, filepath.Join(opts.OutDir, s.tenant().String()))
+	checks := map[string][]string{
+		"/about/index.html": {`<ul class="children"><li><a href="/about/history/">History</a></li><li><a href="/about/access/">Access</a></li></ul>`},
+		"/about/history/index.html": {
+			`<p class="parent"><a href="/about/">About</a></p>`,
+			`<ul class="siblings"><li>History</li><li><a href="/about/access/">Access</a></li></ul>`,
+			`<div class="table-wrap" role="region" tabindex="0" aria-label="Table"><table>`,
+		},
+		"/posts/second/index.html": {`<a class="older" rel="prev" href="/posts/first/">first</a>`, `<a class="newer" rel="next" href="/posts/third/">third</a>`},
+	}
+	for file, wants := range checks {
+		for _, want := range wants {
+			if !strings.Contains(files[file], want) {
+				t.Errorf("%s lacks %q\n%s", file, want, files[file])
+			}
+		}
+	}
+	for file, unwanted := range map[string]string{
+		"/about/index.html":        `class="siblings"`,
+		"/posts/first/index.html":  `class="older"`,
+		"/posts/third/index.html":  `class="newer"`,
+		"/about/access/index.html": "draft",
+	} {
+		if strings.Contains(files[file], unwanted) {
+			t.Errorf("%s has %q", file, unwanted)
+		}
+	}
+}

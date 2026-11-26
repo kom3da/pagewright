@@ -11,7 +11,8 @@
     "pageHeading": "%s (page %d)",
     "search": "Search",
     "notFound": "Not found",
-    "feedDescription": "News from %s"
+    "feedDescription": "News from %s",
+    "table": "Table"
   },
   "dateFormat": "Jan 2, 2006"
 }

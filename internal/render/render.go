@@ -34,6 +34,10 @@ type Options struct {
 	// MediaPrefix replaces "/media/" at the start of image sources, for
 	// pages served from elsewhere than the site (previews).
 	MediaPrefix string
+	// TableLabel names the scrollable region around each table, so that
+	// keyboard users can focus and scroll wide tables. Empty leaves the
+	// wrapper unfocusable.
+	TableLabel string
 }
 
 // Result is a rendered body.
@@ -203,7 +207,11 @@ func (r *renderer) items(nodes []node, depth int) {
 }
 
 func (r *renderer) table(n node, depth int) {
-	r.w(`<div class="table-wrap"><table>`, "\n<tbody>\n")
+	if l := r.opts.TableLabel; l != "" {
+		r.w(`<div class="table-wrap" role="region" tabindex="0" aria-label="`, stdhtml.EscapeString(l), `"><table>`, "\n<tbody>\n")
+	} else {
+		r.w(`<div class="table-wrap"><table>`, "\n<tbody>\n")
+	}
 	for _, row := range n.Content {
 		if row.Type != "tableRow" {
 			r.warn("%q inside a table dropped", row.Type)

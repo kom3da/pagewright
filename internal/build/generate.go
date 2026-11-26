@@ -53,6 +53,9 @@ type generator struct {
 	itemByPath    map[string]*item
 	legacy        map[string]map[string]string // WordPress query param -> id -> path
 	treeByID      map[int64]dbgen.ListContentTreeRow
+	childPages    map[int64][]*item // published pages by parent id
+	postList      []*item           // published posts, newest first
+	postIndex     map[int64]int     // post id → index in postList
 	catPath       map[int64]string
 	tagPath       map[int64]string
 	postsOfCat    map[int64][]*item
@@ -168,7 +171,7 @@ func (g *generator) index() {
 	for _, m := range s.media {
 		mediaByID[m.ID] = m
 	}
-	renderOpts := render.Options{MediaSize: func(id int64) (int64, int64, bool) {
+	renderOpts := render.Options{TableLabel: g.theme.manifest.Labels.Table, MediaSize: func(id int64) (int64, int64, bool) {
 		m, ok := mediaByID[id]
 		if !ok || m.Width == nil || m.Height == nil {
 			return 0, 0, false
@@ -513,13 +516,66 @@ func (g *generator) postItems(list []*item) []PostItem {
 }
 
 func (g *generator) content(it *item) *Content {
-	return &Content{
+	c := &Content{
 		Type:        it.row.Type,
 		Title:       g.title(it),
 		Body:        it.body.HTML,
 		PublishedAt: it.row.PublishedAt.In(g.loc),
 		Categories:  it.cats,
 		Tags:        it.tags,
+	}
+	g.relate()
+	link := func(x *item) *Link { return &Link{Title: g.title(x), URL: x.path, Current: x == it} }
+	links := func(list []*item) []Link {
+		out := make([]Link, 0, len(list))
+		for _, x := range list {
+			out = append(out, *link(x))
+		}
+		return out
+	}
+	switch it.row.Type {
+	case "page":
+		if kids := g.childPages[it.row.ID]; len(kids) > 0 {
+			c.Children = links(kids)
+		}
+		if it.row.ParentID != nil {
+			if p := g.itemByID[*it.row.ParentID]; p != nil && p.row.Type == "page" {
+				c.Parent = link(p)
+				c.Parent.Current = false
+				c.Siblings = links(g.childPages[p.row.ID])
+			}
+		}
+	case "post":
+		if i, ok := g.postIndex[it.row.ID]; ok {
+			if i > 0 {
+				c.Newer = link(g.postList[i-1])
+			}
+			if i+1 < len(g.postList) {
+				c.Older = link(g.postList[i+1])
+			}
+		}
+	}
+	return c
+}
+
+// relate indexes child pages and post order for content pages, once.
+func (g *generator) relate() {
+	if g.postIndex != nil {
+		return
+	}
+	g.childPages = map[int64][]*item{}
+	g.postIndex = map[int64]int{}
+	g.postList = g.posts()
+	for i, it := range g.postList {
+		g.postIndex[it.row.ID] = i
+	}
+	for _, it := range g.items {
+		if it.row.Type == "page" && it.row.ParentID != nil {
+			g.childPages[*it.row.ParentID] = append(g.childPages[*it.row.ParentID], it)
+		}
+	}
+	for _, kids := range g.childPages {
+		slices.SortFunc(kids, func(a, b *item) int { return cmp.Compare(a.row.Number, b.row.Number) })
 	}
 }
 

@@ -84,6 +84,7 @@ func RenderPreview(ctx context.Context, d *db.DB, tenantID uuid.UUID, contentID 
 		ContactForm: g.contactForm(path),
 		PagePath:    path,
 		MediaPrefix: opts.SelfURL + "media/",
+		TableLabel:  th.manifest.Labels.Table,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("render preview: %w", err)

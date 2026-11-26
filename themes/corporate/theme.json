@@ -11,7 +11,8 @@
     "pageHeading": "%s（%dページ目）",
     "search": "サイト内検索",
     "notFound": "ページが見つかりません",
-    "feedDescription": "%sのお知らせ"
+    "feedDescription": "%sのお知らせ",
+    "table": "表"
   },
   "dateFormat": "2006年1月2日",
   "settings": [

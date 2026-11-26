@@ -105,6 +105,16 @@ type Content struct {
 	PublishedAt time.Time
 	Categories  []Link
 	Tags        []Link
+	// Pages only. Parent is the published parent page, or nil. Children
+	// are the published pages under this one. Siblings are the published
+	// pages under the same parent, this one included and marked Current;
+	// nil for pages without a parent. Both are in the order pages were
+	// created.
+	Parent   *Link
+	Children []Link
+	Siblings []Link
+	// Posts only: the next newer and older published posts, or nil.
+	Newer, Older *Link
 }
 
 // PostItem is a post in a list.
@@ -170,6 +180,7 @@ type Labels struct {
 	Search          string `json:"search"`          // title of the search page
 	NotFound        string `json:"notFound"`        // title of the 404 page
 	FeedDescription string `json:"feedDescription"` // fmt layout with the site name: %s
+	Table           string `json:"table"`           // name of a table's scroll region, for screen readers
 }
 
 // pageTemplates are the page templates every theme provides, each defining
@@ -329,7 +340,7 @@ func (m Manifest) check() error {
 		{"home", l.Home}, {"posts", l.Posts}, {"untitled", l.Untitled},
 		{"categoryHeading", l.CategoryHeading}, {"tagHeading", l.TagHeading},
 		{"pageHeading", l.PageHeading}, {"search", l.Search}, {"notFound", l.NotFound},
-		{"feedDescription", l.FeedDescription},
+		{"feedDescription", l.FeedDescription}, {"table", l.Table},
 	} {
 		if f.value == "" {
 			return fmt.Errorf("theme %s: theme.json labels.%s is missing", m.Name, f.key)

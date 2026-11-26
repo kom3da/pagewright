@@ -43,14 +43,15 @@ mytheme/
     "pageHeading": "%s（%dページ目）",
     "search": "サイト内検索",
     "notFound": "ページが見つかりません",
-    "feedDescription": "%sのお知らせ"
+    "feedDescription": "%sのお知らせ",
+    "table": "表"
   },
   "dateFormat": "2006年1月2日"
 }
 ```
 
 - `settings`（任意）は、このテーマが管理画面に出してほしい設定項目です（下の「テーマの設定項目」）
-- `labels` は、本体がページに入れる言葉です。パンくず、一覧の見出し、`<title>`、RSS の説明に使います。すべて必須です。`%s` と `%d` は Go の fmt の書式です
+- `labels` は、本体がページに入れる言葉です。パンくず、一覧の見出し、`<title>`、RSS の説明、表を囲む領域の名前（`table`。スクリーンリーダーが読み上げます）に使います。すべて必須です。`%s` と `%d` は Go の fmt の書式です
 - `dateFormat` は `date` 関数の書式です（Go の時刻レイアウト）
 - 知らないキーはエラーになります（書き間違いに気づけるように）
 
@@ -83,11 +84,20 @@ mytheme/
 | `Title`・`Description` | `<title>` と説明。トップでは `Title` は空 |
 | `NoIndex` | 検索エンジンに載せないページ（`<meta name="robots" content="noindex">` を出す） |
 | `Breadcrumbs` | パンくず（`[]Link`。最後は現在のページで URL なし） |
-| `Content` | 記事・固定ページ（`Title`、`Body`、`Type`、`PublishedAt`、`Categories`、`Tags`）。トップでは、トップに載せるページの本文 |
+| `Content` | 記事・固定ページ（`Title`、`Body`、`Type`、`PublishedAt`、`Categories`、`Tags`、下の親子と前後）。トップでは、トップに載せるページの本文 |
 | `Front` | トップに載せるページの要約（`Summary`。なければ nil）。トップだけ |
 | `Posts` | お知らせの一覧（`[]PostItem`）。トップ（最新数件）と一覧ページ |
 | `Heading`・`Pagination` | 一覧ページの見出しとページ送り |
 | `SelfURL` | プレビューのときだけ、このページ自身の URL（下の「プレビュー」） |
+
+`Content` には、ほかのページへの案内に使える項目もあります。どれも公開中のものだけで、なければ nil です。
+
+| 項目 | 内容 |
+| --- | --- |
+| `Parent` | 固定ページの親ページ（`*Link`） |
+| `Children` | 固定ページの子ページ（`[]Link`、作った順） |
+| `Siblings` | 同じ親を持つ固定ページ（`[]Link`、作った順）。このページ自身も入り、`Current` が true。親のないページでは nil |
+| `Newer`・`Older` | 記事の、ひとつ新しい記事とひとつ古い記事（`*Link`） |
 
 `Summary` は `Title`、`URL`、`Lead`（最初の段落）、`Excerpt`（短い抜粋）、`Image`（本文の最初の画像。`Src` と `Alt`）、`Rest`（最初の段落と最初の画像を除いた本文の HTML。固定ページのみ）、`More`（`Rest` に文章があるか）です。ヒーローにするか、カードにするか、本文を全部出すかはテーマが決めます。
 
@@ -129,7 +139,7 @@ mytheme/
 | 要素 | クラス |
 | --- | --- |
 | 画像 | `<figure class="image"><img …></figure>`（`width`・`height` は分かるときだけ） |
-| 表 | `<div class="table-wrap"><table>…` |
+| 表 | `<div class="table-wrap" role="region" tabindex="0" aria-label="（labels.table）"><table>…`。幅の広い表をキーボードでも横にスクロールできるように、囲みにフォーカスが当たります。`:focus-visible` の見た目を付けてください |
 | YouTube・Google マップ | `<div class="embed embed-youtube">` / `embed-map` |
 | 移行した HTML | `<div class="raw-html">` |
 | ルビ | `<ruby>…<rp>(</rp><rt>…</rt><rp>)</rp></ruby>` |

@@ -1,3 +1,18 @@
 {{define "main" -}}
 <article><h1>{{.Content.Title}}</h1>{{.Content.Body}}</article>
+{{- with .Content.Parent}}
+<p class="parent"><a href="{{.URL}}">{{.Title}}</a></p>
+{{- end}}
+{{- with .Content.Children}}
+<ul class="children">{{range .}}<li><a href="{{.URL}}">{{.Title}}</a></li>{{end}}</ul>
+{{- end}}
+{{- with .Content.Siblings}}
+<ul class="siblings">{{range .}}<li>{{if .Current}}{{.Title}}{{else}}<a href="{{.URL}}">{{.Title}}</a>{{end}}</li>{{end}}</ul>
+{{- end}}
+{{- with .Content.Older}}
+<a class="older" rel="prev" href="{{.URL}}">{{.Title}}</a>
+{{- end}}
+{{- with .Content.Newer}}
+<a class="newer" rel="next" href="{{.URL}}">{{.Title}}</a>
+{{- end}}
 {{- end}}
