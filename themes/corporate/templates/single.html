@@ -1,0 +1,31 @@
+{{define "main" -}}
+<article class="container entry">
+  <header class="entry-header">
+    <h1>{{.Content.Title}}</h1>
+    {{- if eq .Content.Type "post"}}
+    <p class="entry-meta">
+      <time datetime="{{isoDate .Content.PublishedAt}}">{{date .Content.PublishedAt}}</time>
+      {{- range .Content.Categories}}
+      <a class="badge" href="{{.URL}}">{{.Title}}</a>
+      {{- end}}
+    </p>
+    {{- end}}
+  </header>
+  <div class="entry-body">
+{{.Content.Body}}
+  </div>
+  {{- with .Content.Tags}}
+  <footer class="entry-footer">
+    <h2 class="visually-hidden">タグ</h2>
+    <ul class="tag-list">
+      {{- range .}}
+      <li><a href="{{.URL}}">#{{.Title}}</a></li>
+      {{- end}}
+    </ul>
+  </footer>
+  {{- end}}
+  {{- if eq .Content.Type "post"}}
+  <p class="more-link"><a href="{{.Site.PostsURL}}">お知らせ一覧へ戻る</a></p>
+  {{- end}}
+</article>
+{{- end}}

@@ -1,0 +1,19 @@
+{{define "main" -}}
+<div class="hero">
+  <div class="container">
+    <h1 class="hero__title">{{with .Content}}{{.Title}}{{else}}{{.Site.Name}}{{end}}</h1>
+  </div>
+</div>
+<div class="container">
+  {{- with .Content}}
+  <div class="entry-body">
+{{.Body}}
+  </div>
+  {{- end}}
+  <section class="home-news" aria-labelledby="home-news-heading">
+    <h2 id="home-news-heading">お知らせ</h2>
+    {{template "post-list" .Posts}}
+    <p class="more-link"><a href="{{.Site.PostsURL}}">お知らせ一覧を見る</a></p>
+  </section>
+</div>
+{{- end}}

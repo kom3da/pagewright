@@ -1,0 +1,21 @@
+{{define "main" -}}
+<div class="container">
+  <h1>{{.Heading}}</h1>
+  {{template "post-list" .Posts}}
+  {{- with .Pagination}}{{if gt .Total 1}}
+  <nav class="pagination" aria-label="ページ送り">
+    <ul>
+      {{- if .Prev}}
+      <li><a href="{{.Prev}}" rel="prev">前のページ</a></li>
+      {{- end}}
+      {{- range .Pages}}
+      <li>{{if .Current}}<span aria-current="page">{{.Title}}<span class="visually-hidden">ページ目（現在のページ）</span></span>{{else}}<a href="{{.URL}}">{{.Title}}<span class="visually-hidden">ページ目</span></a>{{end}}</li>
+      {{- end}}
+      {{- if .Next}}
+      <li><a href="{{.Next}}" rel="next">次のページ</a></li>
+      {{- end}}
+    </ul>
+  </nav>
+  {{- end}}{{end}}
+</div>
+{{- end}}

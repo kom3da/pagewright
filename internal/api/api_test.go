@@ -75,7 +75,7 @@ func (f *fakeBuilds) count(id uuid.UUID) int {
 
 type env struct {
 	t       *testing.T
-	db      *dbtest.DB
+	db      *dbtest.Env
 	srv     *httptest.Server
 	mail    *fakeMail
 	builds  *fakeBuilds
@@ -107,7 +107,7 @@ func newEnv(t *testing.T) *env {
 		}
 	}
 	s := api.New(api.Options{
-		DB: d.App, Mail: e.mail, Media: media.Store{Root: t.TempDir()}, Builds: e.builds,
+		DB: d.DB, Mail: e.mail, Media: media.Store{Root: t.TempDir()}, Builds: e.builds,
 		BaseURL: "http://admin.test",
 	})
 	e.srv = httptest.NewServer(s.Handler())
