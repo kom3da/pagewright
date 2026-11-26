@@ -715,8 +715,14 @@ export const handlers = [
   http.get("/api/forms/submissions", ({ request }) => {
     const denied = adminGuard(request, "お問い合わせの内容を見られるのは管理者だけです");
     if (denied) return denied;
+    const before = Number(
+      new URL(request.url).searchParams.get("before") ?? Number.POSITIVE_INFINITY,
+    );
     return HttpResponse.json(
-      [...db.submissions].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      db.submissions
+        .filter((f) => f.id < before)
+        .sort((a, b) => b.id - a.id)
+        .slice(0, 100),
     );
   }),
 

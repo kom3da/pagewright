@@ -154,9 +154,14 @@ export const api = {
   saveSite: (input: SiteSettingsInput) => put<SiteSettings>("/site", input),
   buildSite: () => post<void>("/site/build"),
 
-  listSubmissions: () => get<Submission[]>("/forms/submissions"),
+  /** Newest first, SUBMISSIONS_PAGE_SIZE at a time; `before` is the last id received. */
+  listSubmissions: (before?: number) =>
+    get<Submission[]>(`/forms/submissions${before === undefined ? "" : `?before=${before}`}`),
   deleteSubmission: (id: number) => del(`/forms/submissions/${id}`),
 };
+
+/** Page size of GET /api/forms/submissions. */
+export const SUBMISSIONS_PAGE_SIZE = 100;
 
 /** URL the admin uses to display a media file (requires login). */
 export const mediaFileUrl = (mediaId: number) => `/api/media/${mediaId}/file`;

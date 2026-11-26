@@ -108,6 +108,12 @@ describe("api client", () => {
     expect((await api.listSubmissions()).map((s) => s.id)).toEqual([1]);
   });
 
+  it("pages contact messages with ?before", async () => {
+    const requests = recordRequests();
+    expect((await api.listSubmissions(2)).map((s) => s.id)).toEqual([1]);
+    expect(requests.map((r) => r.path)).toEqual(["/api/forms/submissions?before=2"]);
+  });
+
   it("sends media as multipart with the alt text", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const file = new File(["x"], "photo.png", { type: "image/png" });
