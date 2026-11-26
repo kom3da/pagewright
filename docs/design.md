@@ -168,7 +168,7 @@ MVPの固定版：本文に「お問い合わせフォーム」ブロックを�
 | バージョン管理・タスク | mise（`mise run dev`、`test`、`gen` など） |
 | Go本体 | slog、pgx＋sqlc、goose、River（ジョブキュー）、wazero |
 | Goのテストと検査 | testing＋go-cmp、golangci-lint、govulncheck |
-| 管理画面 | pnpm、React＋Vite＋TanStack Router、TanStack Query、Tailwind CSS＋Radix（shadcn/ui風の部品を自前で）、React Hook Form＋Zod、lucide-react、Tiptap |
+| 管理画面 | pnpm、React＋Vite＋TanStack Router、TanStack Query、Mantine（部品・テーマ。決まりは `web/admin/DESIGN.md`）、React Hook Form＋Zod、lucide-react、Tiptap |
 | 管理画面のテストと検査 | Biome、Vitest、Playwright＋@axe-core/playwright |
 | DBの周辺 | Squawk、tbls、pgBackRest（自分たちが運用する環境） |
 | 開発環境 | Docker Compose（PostgreSQL、Mailpit） |
