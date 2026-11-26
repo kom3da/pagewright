@@ -364,6 +364,15 @@ func (s *Server) patchContent(w http.ResponseWriter, r *http.Request, sess *sess
 				}
 			}
 		}
+		if urlChanged && c.Type == "page" {
+			updated, err := q.GetContent(ctx, id)
+			if err != nil {
+				return err
+			}
+			if _, err := contentPath(ctx, q, updated); err != nil {
+				return err
+			}
+		}
 		if urlChanged {
 			if err := syncContentRoute(ctx, q, id); err != nil {
 				return err
@@ -504,8 +513,17 @@ func contentPath(ctx context.Context, q *dbgen.Queries, c dbgen.Content) (string
 	for _, a := range chain {
 		parts = append(parts, seg(a.Slug, a.Number))
 	}
-	return "/" + strings.Join(parts, "/") + "/", nil
+	path := "/" + strings.Join(parts, "/") + "/"
+	for _, reserved := range reservedPrefixes {
+		if strings.HasPrefix(path, reserved) {
+			return "", invalid("reserved_slug", "「posts」と「media」はサイトの仕組みで使っているため、いちばん上の固定ページのURLには使えません")
+		}
+	}
+	return path, nil
 }
+
+// reservedPrefixes are paths the site itself uses (post lists, media).
+var reservedPrefixes = []string{"/posts/", "/media/"}
 
 // syncContentRoute makes the canonical route of a content match its URL.
 // A previous canonical URL is kept as a redirect. Pages below it follow.

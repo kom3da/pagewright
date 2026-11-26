@@ -28,8 +28,14 @@ func runServe(ctx context.Context, cfg config.Config) error {
 		return fmt.Errorf("connect to database: %w", err)
 	}
 
+	riverClient, err := newRiver(d, cfg)
+	if err != nil {
+		return err
+	}
+
 	apiServer := api.New(api.Options{
 		DB:            d,
+		Builds:        riverBuilds{client: riverClient},
 		Mail:          mail.SMTP{Addr: cfg.SMTPAddr, From: cfg.MailFrom},
 		Media:         media.Store{Root: cfg.MediaDir()},
 		BaseURL:       cfg.BaseURL,
@@ -49,7 +55,20 @@ func runServe(ctx context.Context, cfg config.Config) error {
 	})
 
 	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		if err := riverClient.Start(ctx); err != nil {
+			return fmt.Errorf("start jobs: %w", err)
+		}
+		<-ctx.Done()
+		stop, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		return riverClient.Stop(stop)
+	})
 	g.Go(func() error { return listen(ctx, cfg.Addr, logRequests(mux)) })
+	if cfg.SiteAddr != "" {
+		g.Go(func() error { return listen(ctx, cfg.SiteAddr, previewHandler(cfg.SiteDir())) })
+		slog.Info("公開サイトのプレビューを起動しました", "url", cfg.PublicBaseURL+"/")
+	}
 	slog.Info("管理画面を起動しました", "url", cfg.BaseURL+"/admin/")
 	return g.Wait()
 }
