@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # release.yaml runs the same checks on the tag before publishing.
+  workflow_call:
 
 permissions:
   contents: read
@@ -18,7 +20,7 @@ concurrency:
 
 jobs:
   go:
-    name: Go (test, lint, vulncheck, migrations)
+    name: Go (test -race, lint, vulncheck, migrations)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -59,8 +61,8 @@ jobs:
           restore-keys: |
             go-${{ runner.os }}-${{ hashFiles('go.sum', 'mise.toml') }}-
             go-${{ runner.os }}-
-      - name: go test
-        run: go test ./...
+      - name: go test -race
+        run: go test -race ./...
       - name: golangci-lint
         run: golangci-lint run
       - name: govulncheck
