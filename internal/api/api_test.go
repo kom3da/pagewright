@@ -240,6 +240,7 @@ type detail struct {
 	HasUnpublishedChanges bool
 	URL                   *string
 	ScheduledAt           *time.Time
+	PublishedAt           *time.Time
 	ParentID              *int64
 	CategoryIDs           []int64
 	TagIDs                []int64
@@ -388,6 +389,19 @@ func TestContentLifecycle(t *testing.T) {
 	alice.mustDo(http.MethodDelete, fmt.Sprintf("/api/contents/%d", d.ID), nil, nil, http.StatusNoContent)
 	if got, _ := alice.errorCode(http.MethodGet, fmt.Sprintf("/api/contents/%d", d.ID), nil); got != http.StatusNotFound {
 		t.Errorf("deleted content = %d, want 404", got)
+	}
+}
+
+// TestUnpublishDraft makes sure taking down a never-published content
+// does not give it a publication date, which would date its first
+// publication in the past.
+func TestUnpublishDraft(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	d := alice.newContent("post", "下書き", false)
+	alice.mustDo(http.MethodPost, fmt.Sprintf("/api/contents/%d/unpublish", d.ID), nil, &d, http.StatusOK)
+	if d.PublishedAt != nil {
+		t.Errorf("publishedAt after unpublishing a draft = %v, want none", d.PublishedAt)
 	}
 }
 

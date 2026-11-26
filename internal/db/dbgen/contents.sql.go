@@ -496,7 +496,7 @@ func (q *Queries) LockContent(ctx context.Context, id int64) (int64, error) {
 const publishRevision = `-- name: PublishRevision :execrows
 UPDATE contents
 SET published_revision_id = $1,
-    published_at = coalesce(published_at, now()),
+    published_at = CASE WHEN $1::bigint IS NULL THEN published_at ELSE coalesce(published_at, now()) END,
     updated_at = now()
 WHERE id = $2
 `
@@ -506,7 +506,9 @@ type PublishRevisionParams struct {
 	ContentID  int64
 }
 
-// Makes a revision of the content live. Keeps the first publication date.
+// Makes a revision of the content live, or takes it down when revision_id
+// is null. Keeps the first publication date; taking a never-published
+// content down sets none.
 func (q *Queries) PublishRevision(ctx context.Context, arg PublishRevisionParams) (int64, error) {
 	result, err := q.db.Exec(ctx, publishRevision, arg.RevisionID, arg.ContentID)
 	if err != nil {

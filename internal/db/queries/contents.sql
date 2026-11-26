@@ -82,10 +82,12 @@ RETURNING *;
 SELECT * FROM content_revisions WHERE content_id = $1 ORDER BY id DESC LIMIT 1;
 
 -- name: PublishRevision :execrows
--- Makes a revision of the content live. Keeps the first publication date.
+-- Makes a revision of the content live, or takes it down when revision_id
+-- is null. Keeps the first publication date; taking a never-published
+-- content down sets none.
 UPDATE contents
 SET published_revision_id = @revision_id,
-    published_at = coalesce(published_at, now()),
+    published_at = CASE WHEN sqlc.narg(revision_id)::bigint IS NULL THEN published_at ELSE coalesce(published_at, now()) END,
     updated_at = now()
 WHERE id = @content_id;
 
