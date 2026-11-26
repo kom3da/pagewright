@@ -17,12 +17,27 @@ type Props = {
   /** Error from the server: `field` errors are shown at the inputs. */
   error: ScheduleError | null;
   onSubmit: (publishAt: string) => void;
+  /** Where focus goes after closing, when the opening control no longer exists (a menu item). */
+  onCloseFocus?: () => void;
 };
 
 /** Date + time (Japan time) for scheduled publishing. */
-export function ScheduleDialog({ open, onOpenChange, scheduledAt, busy, error, onSubmit }: Props) {
+export function ScheduleDialog({
+  open,
+  onOpenChange,
+  scheduledAt,
+  busy,
+  error,
+  onSubmit,
+  onCloseFocus,
+}: Props) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="日時を指定して公開">
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="日時を指定して公開"
+      onCloseFocus={onCloseFocus}
+    >
       {open && (
         <ScheduleForm
           scheduledAt={scheduledAt}

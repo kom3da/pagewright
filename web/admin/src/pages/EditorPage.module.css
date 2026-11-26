@@ -3,29 +3,56 @@
   font-weight: 700;
 }
 
-.details {
-  border: 1px solid var(--mantine-color-gray-3);
-  border-radius: var(--mantine-radius-md);
+/* Body on the left, settings on the right from `lg`; settings under the body below it. */
+.layout {
+  display: grid;
+  gap: var(--mantine-spacing-xl);
+  margin-top: var(--mantine-spacing-lg);
+}
+@media (min-width: 75em) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 22rem;
+    align-items: start;
+  }
+}
+
+/*
+ * Save / publish / その他. Desktop: a row under the page header that sticks to the top
+ * while scrolling; it covers the header's bottom border and draws its own. Phones: a
+ * slim bar fixed to the bottom of the screen.
+ */
+.barTop {
+  position: sticky;
+  top: var(--app-shell-header-offset, 0rem);
+  z-index: 20;
+  margin-top: calc(var(--mantine-spacing-lg) * -1 - 1px);
+  margin-inline: -2.5rem;
+  padding: var(--mantine-spacing-xs) 2.5rem;
+  border-bottom: 1px solid var(--mantine-color-gray-2);
   background: var(--mantine-color-white);
 }
 
-.summary {
-  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.detailsBody {
-  border-top: 1px solid var(--mantine-color-gray-3);
-}
-
-/* Save / publish stay reachable while scrolling a long body. */
-.actionBar {
-  position: sticky;
+.barBottom {
+  position: fixed;
+  inset-inline: 0;
   bottom: 0;
-  z-index: 10;
-  margin-inline: calc(var(--mantine-spacing-md) * -1);
-  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  z-index: 20;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  padding-bottom: calc(var(--mantine-spacing-xs) + env(safe-area-inset-bottom));
   border-top: 1px solid var(--mantine-color-gray-3);
-  background: rgb(255 255 255 / 0.96);
+  background: var(--mantine-color-white);
+  box-shadow: var(--mantine-shadow-md);
+}
+
+/* 「保存していない変更があります」: left of the buttons, or a full line above them on phones. */
+.saveState {
+  flex: 1 1 auto;
+}
+.barBottom .saveState {
+  flex-basis: 100%;
+  text-align: center;
+}
+
+.schedule {
+  border-color: var(--mantine-color-orange-3);
 }

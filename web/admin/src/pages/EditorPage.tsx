@@ -4,6 +4,7 @@ import {
   Button,
   Code,
   Group,
+  Menu,
   NativeSelect,
   Paper,
   Stack,
@@ -11,9 +12,19 @@ import {
   Textarea,
   TextInput,
 } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
-import { type KeyboardEvent, type Ref, useEffect, useRef, useState } from "react";
+import { CalendarClock, ChevronDown, EyeOff, Link2, SlidersHorizontal, Trash2 } from "lucide-react";
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type Ref,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { api, errorField, errorMessage, isApiError } from "../api/client";
@@ -26,6 +37,7 @@ import type {
   PreviewLink,
 } from "../api/types";
 import { CategoryCheckboxes } from "../components/CategoryCheckboxes";
+import { DateTimeFields } from "../components/DateTimeFields";
 import { PreviewLinksDialog } from "../components/PreviewLinksDialog";
 import { ScheduleDialog, type ScheduleError } from "../components/ScheduleDialog";
 import { TagPicker } from "../components/TagPicker";
@@ -35,14 +47,24 @@ import { ExternalLink } from "../components/ui/ExternalLink";
 import { ErrorMessage, Loading } from "../components/ui/feedback";
 import { notify } from "../components/ui/notify";
 import { PageHeader } from "../components/ui/PageHeader";
+import { Section } from "../components/ui/Section";
 import { ContentStatusBadges } from "../components/ui/StatusBadge";
 import { publicUrl } from "../config";
 import { BodyEditor, useBodyEditor } from "../editor/BodyEditor";
 import { editorContent, normalizeBody } from "../editor/normalize";
-import { formatDateTime, formatJapanDateTime } from "../lib/datetime";
+import {
+  formatDateTime,
+  formatJapanDateTime,
+  fromJapanInputs,
+  toJapanInputs,
+} from "../lib/datetime";
 import { descendantPageIds, pageRows } from "../lib/pageTree";
 import { optionalSlugSchema } from "../lib/slug";
+import { DESKTOP_QUERY } from "../theme";
 import classes from "./EditorPage.module.css";
+
+/** From here the settings sit in a column beside the body (Mantine's `lg`). */
+const WIDE_QUERY = "(min-width: 75em)";
 
 const typeLabels = { post: "記事", page: "固定ページ" } as const;
 const listCrumb = (type: ContentType) =>
@@ -64,27 +86,51 @@ export function EditorPage({ type, id }: { type: ContentType; id: number }) {
   return <EditorForm content={data} />;
 }
 
+/** The date shown on the site. It can be moved to any past time; the future is scheduling. */
+const publishedSchema = z.object({ date: z.string(), time: z.string() }).superRefine((v, ctx) => {
+  // Empty for contents that were never published (the field is not shown then).
+  if (!v.date && !v.time) return;
+  const at = fromJapanInputs(v.date, v.time);
+  if (!at) {
+    ctx.addIssue({ code: "custom", message: "公開日の日付と時刻を入力してください。" });
+  } else if (new Date(at).getTime() > Date.now()) {
+    ctx.addIssue({
+      code: "custom",
+      message:
+        "公開日は今より前の日時にしてください。先の日時に公開するときは「日時を指定して公開」を使ってください。",
+    });
+  }
+});
+
 const settingsSchema = z.object({
   slug: optionalSlugSchema,
   parentId: z.string(),
   categoryIds: z.array(z.number()),
   tagIds: z.array(z.number()),
+  published: publishedSchema,
 });
 type Settings = z.infer<typeof settingsSchema>;
+/** Settings fields in screen order: the first invalid one gets focus. */
+const settingsFields = ["published", "slug", "parentId"] as const;
 
 const settingsFrom = (c: ContentDetail): Settings => ({
   slug: c.slug ?? "",
   parentId: c.parentId === null ? "" : String(c.parentId),
   categoryIds: c.categoryIds,
   tagIds: c.tagIds,
+  published: c.publishedAt ? toJapanInputs(c.publishedAt) : { date: "", time: "" },
 });
 
-const toPatch = (s: Settings): ContentPatch => ({
-  slug: s.slug === "" ? null : s.slug,
-  parentId: s.parentId === "" ? null : Number(s.parentId),
-  categoryIds: s.categoryIds,
-  tagIds: s.tagIds,
-});
+const toPatch = (s: Settings, publishedChanged: boolean): ContentPatch => {
+  const publishedAt = publishedChanged ? fromJapanInputs(s.published.date, s.published.time) : null;
+  return {
+    slug: s.slug === "" ? null : s.slug,
+    parentId: s.parentId === "" ? null : Number(s.parentId),
+    categoryIds: s.categoryIds,
+    tagIds: s.tagIds,
+    ...(publishedAt && { publishedAt }),
+  };
+};
 
 type Busy =
   | "save"
@@ -127,7 +173,6 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
     defaultValues: settingsFrom(initial),
   });
   const settingsDirty = form.formState.isDirty;
-  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const [busy, setBusy] = useState<Busy>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -137,6 +182,34 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   const previewButtonRef = useRef<HTMLButtonElement>(null);
   // Set when saving before creating a preview link failed: focus then goes to the problem.
   const previewSaveFailed = useRef(false);
+
+  // The action bar is sticky at the top on desktop and fixed at the bottom on phones. Its
+  // height keeps the body toolbar below it (desktop) and the page end above it (phones).
+  const desktop = useMediaQuery(DESKTOP_QUERY, true, { getInitialValueInEffect: false });
+  const wide = useMediaQuery(WIDE_QUERY, true, { getInitialValueInEffect: false });
+  const barRef = useRef<HTMLDivElement>(null);
+  const [barHeight, setBarHeight] = useState(0);
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const measure = () => setBarHeight(bar.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, []);
+  // Items of the 「その他」 menu disappear when chosen: focus returns to the menu button.
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const focusMoreButton = () => moreButtonRef.current?.focus();
+  const scheduleSaveFailed = useRef(false);
+  const afterScheduleClose = () => {
+    if (scheduleSaveFailed.current) {
+      scheduleSaveFailed.current = false;
+      return;
+    }
+    focusMoreButton();
+  };
+  const settingsHeadingId = `${useId()}-settings`;
 
   const titleDirty = title !== savedTitle;
   const dirty = titleDirty || bodyDirty || settingsDirty;
@@ -151,9 +224,8 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
     withResolver: true,
   });
 
-  const showSettingsError = (name: "slug" | "parentId", message?: string) => {
+  const showSettingsError = (name: (typeof settingsFields)[number], message?: string) => {
     if (message) form.setError(name, { message });
-    setDetailsOpen(true);
     setTimeout(() => form.setFocus(name));
   };
 
@@ -170,6 +242,10 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       showSettingsError(field, e.message);
       return true;
     }
+    if (field === "publishedAt") {
+      showSettingsError("published", e.message);
+      return true;
+    }
     return false;
   };
 
@@ -181,13 +257,15 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   /** Saves settings and the draft if they changed. Returns null when input is invalid. */
   const persist = async (): Promise<ContentDetail | null> => {
     if (!(await form.trigger())) {
-      showSettingsError("slug");
+      const errors = form.formState.errors;
+      showSettingsError(settingsFields.find((f) => errors[f]) ?? "slug");
       return null;
     }
     let detail = content;
     if (settingsDirty) {
       try {
-        detail = await api.patchContent(id, toPatch(form.getValues()));
+        const publishedChanged = form.getFieldState("published").isDirty;
+        detail = await api.patchContent(id, toPatch(form.getValues(), publishedChanged));
       } catch (e) {
         if (showFieldError(e)) return null;
         throw e;
@@ -274,6 +352,8 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       try {
         // Save first so that what the user sees is what gets scheduled.
         if (!(await persist())) {
+          // The problem (or the conflict dialog) takes focus, not the menu button.
+          scheduleSaveFailed.current = true;
           setScheduleOpen(false);
           return;
         }
@@ -327,6 +407,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         : `この${label}は公開サイトから見えなくなります。内容は下書きとして残ります。`,
       confirmLabel: "公開をやめる",
     });
+    setTimeout(focusMoreButton);
     if (!ok) return;
     await run("unpublish", async () => {
       update(await api.unpublish(id));
@@ -341,7 +422,10 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       confirmLabel: "削除する",
       danger: true,
     });
-    if (!ok) return;
+    if (!ok) {
+      setTimeout(focusMoreButton);
+      return;
+    }
     await run("delete", async () => {
       await api.deleteContent(id);
       leaving.current = true;
@@ -407,8 +491,105 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   const parentId = form.watch("parentId");
   const pages = useQuery({ ...contentsQuery("page"), enabled: type === "page" }).data ?? [];
 
+  // Below the `lg` breakpoint the settings are under the body: 「その他」 offers a jump there.
+  const goToSettings = () => {
+    const heading = document.getElementById(settingsHeadingId);
+    if (!heading) return;
+    heading.setAttribute("tabindex", "-1");
+    heading.scrollIntoView({ block: "start" });
+    heading.focus({ preventScroll: true });
+  };
+
+  const actionBar = (
+    <Box
+      ref={barRef}
+      component="section"
+      aria-label="保存と公開"
+      className={desktop ? classes.barTop : classes.barBottom}
+    >
+      <Stack gap="xs">
+        {actionError && <ErrorMessage>{actionError}</ErrorMessage>}
+        <Group gap="xs" justify="flex-end" wrap="wrap">
+          <Text size="sm" c="dimmed" aria-live="polite" className={classes.saveState}>
+            {dirty ? "保存していない変更があります" : ""}
+          </Text>
+          <Group gap="xs" wrap="nowrap">
+            <Button
+              size={desktop ? "md" : "sm"}
+              onClick={save}
+              disabled={busy !== null}
+              loading={busy === "save"}
+            >
+              下書き保存
+            </Button>
+            <Button
+              size={desktop ? "md" : "sm"}
+              variant="filled"
+              onClick={publish}
+              disabled={busy !== null}
+              loading={busy === "publish"}
+            >
+              {isPublic ? "変更を公開する" : "公開する"}
+            </Button>
+            <Menu position={desktop ? "bottom-end" : "top-end"}>
+              <Menu.Target>
+                <Button
+                  ref={moreButtonRef}
+                  size={desktop ? "md" : "sm"}
+                  disabled={busy !== null}
+                  rightSection={<ChevronDown aria-hidden="true" size={16} />}
+                >
+                  その他
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item
+                  leftSection={<CalendarClock aria-hidden="true" size={16} />}
+                  onClick={openSchedule}
+                >
+                  {content.scheduledAt ? "予約し直す" : "日時を指定して公開"}
+                </Menu.Item>
+                {!wide && (
+                  <Menu.Item
+                    leftSection={<SlidersHorizontal aria-hidden="true" size={16} />}
+                    onClick={goToSettings}
+                  >
+                    公開日・URL・プレビューなどの設定へ移動
+                  </Menu.Item>
+                )}
+                {isPublic && (
+                  <Menu.Item
+                    leftSection={<EyeOff aria-hidden="true" size={16} />}
+                    onClick={unpublish}
+                  >
+                    公開をやめる
+                  </Menu.Item>
+                )}
+                <Menu.Divider />
+                <Menu.Item
+                  color="red"
+                  leftSection={<Trash2 aria-hidden="true" size={16} />}
+                  onClick={remove}
+                >
+                  削除する
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          </Group>
+        </Group>
+      </Stack>
+    </Box>
+  );
+
+  const barVar = (desktop ? { "--pw-editor-bar": `${barHeight}px` } : {}) as CSSProperties;
+
   return (
-    <Stack gap="lg" onKeyDown={onKeyDown}>
+    <Box
+      onKeyDown={onKeyDown}
+      style={barVar}
+      // On phones the bar is fixed to the bottom: keep the end of the page above it.
+      pb={desktop ? undefined : barHeight}
+    >
       <PageHeader
         title={`${label}の編集`}
         breadcrumbs={[listCrumb(type)]}
@@ -426,68 +607,133 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
           </>
         }
       />
+      {actionBar}
 
-      <TextInput
-        label="タイトル"
-        ref={titleRef}
-        value={title}
-        onChange={(e) => {
-          setTitle(e.target.value);
-          setTitleError(undefined);
-        }}
-        error={titleError}
-        size="lg"
-        classNames={{ input: classes.titleInput }}
-      />
-
-      <BodyEditor editor={editor} />
-
-      <details
-        open={detailsOpen}
-        onToggle={(e) => setDetailsOpen(e.currentTarget.open)}
-        className={classes.details}
-      >
-        <summary className={classes.summary}>詳細設定</summary>
-        <Stack gap="lg" p="md" className={classes.detailsBody}>
+      <Box className={classes.layout}>
+        <Stack gap="lg" miw={0}>
           <TextInput
-            label="ページのURL（英数字）"
-            description={
-              <>
-                英小文字・数字・ハイフン（-）で入力します。例：company-profile
-                <br />
-                空のままなら番号で決まります。URL：
-                <Code>{urlPreview(type, slug || String(content.number), parentId, pages)}</Code>
-              </>
-            }
-            error={form.formState.errors.slug?.message}
-            {...form.register("slug")}
-            autoCapitalize="none"
-            autoComplete="off"
-            spellCheck={false}
+            label="タイトル"
+            ref={titleRef}
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              setTitleError(undefined);
+            }}
+            error={titleError}
+            size="lg"
+            classNames={{ input: classes.titleInput }}
           />
-          {isPublic && (
-            <Text size="sm" c="dimmed">
-              公開中にURLを変えると、古いURLは新しいURLへ自動で転送されます。
-            </Text>
-          )}
-          {type === "page" && (
-            <Controller
-              control={form.control}
-              name="parentId"
-              render={({ field, fieldState }) => (
-                <ParentSelect
-                  ref={field.ref}
-                  pages={pages}
-                  self={id}
-                  value={field.value}
-                  onChange={field.onChange}
-                  error={fieldState.error?.message}
-                />
-              )}
+          <BodyEditor editor={editor} />
+        </Stack>
+
+        <Stack gap="md" miw={0}>
+          <Section title="公開" id={settingsHeadingId}>
+            {content.scheduledAt && (
+              <Paper withBorder bg="orange.0" p="sm" className={classes.schedule}>
+                <Stack gap="xs" align="flex-start">
+                  <Text fw={700} c="orange.9">
+                    {isPublic ? "更新の予約" : "予約"}：{formatJapanDateTime(content.scheduledAt)}
+                    に公開
+                  </Text>
+                  {scheduleOutdated && (
+                    <Text size="sm">
+                      予約したあとに保存した変更は、この予約に含まれていません。含めるには予約し直してください。
+                    </Text>
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={unschedule}
+                    disabled={busy !== null}
+                    loading={busy === "unschedule"}
+                  >
+                    予約を取り消す
+                  </Button>
+                </Stack>
+              </Paper>
+            )}
+            {isPublic ? (
+              <Controller
+                control={form.control}
+                name="published"
+                render={({ field, fieldState }) => (
+                  <DateTimeFields
+                    legend="公開日（日本時間）"
+                    hint="サイトに表示される公開日です。今より前の日時に変えられます。保存すると公開サイトにも反映されます。"
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={fieldState.error?.message}
+                    dateRef={field.ref}
+                    cols={{ base: 1, xs: 2, lg: 1 }}
+                  />
+                )}
+              />
+            ) : (
+              !content.scheduledAt && (
+                <Text size="sm" c="dimmed">
+                  まだ公開していません。「公開する」ですぐに公開できます。日時を決めて公開するときは「その他」から予約します。
+                </Text>
+              )
+            )}
+          </Section>
+
+          <Section
+            title="プレビュー"
+            description={`公開する前に、ログインしていない人にも${label}を見てもらえるリンクを作れます。`}
+          >
+            <Group>
+              <Button
+                ref={previewButtonRef}
+                onClick={() => setPreviewOpen(true)}
+                disabled={busy !== null}
+                leftSection={<Link2 aria-hidden="true" size={16} />}
+              >
+                プレビュー用のリンク
+              </Button>
+            </Group>
+          </Section>
+
+          <Section title="URL">
+            <TextInput
+              label="ページのURL（英数字）"
+              description={
+                <>
+                  英小文字・数字・ハイフン（-）で入力します。例：company-profile
+                  <br />
+                  空のままなら番号で決まります。URL：
+                  <Code>{urlPreview(type, slug || String(content.number), parentId, pages)}</Code>
+                </>
+              }
+              error={form.formState.errors.slug?.message}
+              {...form.register("slug")}
+              autoCapitalize="none"
+              autoComplete="off"
+              spellCheck={false}
             />
-          )}
+            {isPublic && (
+              <Text size="sm" c="dimmed">
+                公開中にURLを変えると、古いURLは新しいURLへ自動で転送されます。
+              </Text>
+            )}
+            {type === "page" && (
+              <Controller
+                control={form.control}
+                name="parentId"
+                render={({ field, fieldState }) => (
+                  <ParentSelect
+                    ref={field.ref}
+                    pages={pages}
+                    self={id}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={fieldState.error?.message}
+                  />
+                )}
+              />
+            )}
+          </Section>
+
           {type === "post" && (
-            <>
+            <Section title="カテゴリとタグ">
               <Controller
                 control={form.control}
                 name="categoryIds"
@@ -500,79 +746,8 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
                 name="tagIds"
                 render={({ field }) => <TagPicker value={field.value} onChange={field.onChange} />}
               />
-            </>
+            </Section>
           )}
-        </Stack>
-      </details>
-
-      <Box className={classes.actionBar}>
-        <Stack gap="sm">
-          {actionError && <ErrorMessage>{actionError}</ErrorMessage>}
-          {content.scheduledAt && (
-            <Paper withBorder bg="orange.0" px="sm" py="xs">
-              <Group justify="space-between" gap="sm">
-                <div>
-                  <Text fw={700} c="orange.9">
-                    {isPublic ? "更新の予約" : "予約"}：{formatJapanDateTime(content.scheduledAt)}
-                    に公開
-                  </Text>
-                  {scheduleOutdated && (
-                    <Text size="sm">
-                      予約したあとに保存した変更は、この予約に含まれていません。含めるには予約し直してください。
-                    </Text>
-                  )}
-                </div>
-                <Button
-                  size="sm"
-                  onClick={unschedule}
-                  disabled={busy !== null}
-                  loading={busy === "unschedule"}
-                >
-                  予約を取り消す
-                </Button>
-              </Group>
-            </Paper>
-          )}
-          <Group gap="sm">
-            <Button onClick={save} disabled={busy !== null} loading={busy === "save"}>
-              下書き保存
-            </Button>
-            <Button
-              variant="filled"
-              onClick={publish}
-              disabled={busy !== null}
-              loading={busy === "publish"}
-            >
-              {content.status === "published" ? "変更を公開する" : "公開する"}
-            </Button>
-            <Button onClick={openSchedule} disabled={busy !== null}>
-              {content.scheduledAt ? "予約し直す" : "日時を指定して公開"}
-            </Button>
-            <Button
-              ref={previewButtonRef}
-              onClick={() => setPreviewOpen(true)}
-              disabled={busy !== null}
-            >
-              プレビュー用のリンク
-            </Button>
-            {isPublic && (
-              <Button onClick={unpublish} disabled={busy !== null}>
-                公開をやめる
-              </Button>
-            )}
-            <Text size="sm" c="dimmed" aria-live="polite">
-              {dirty ? "保存していない変更があります" : ""}
-            </Text>
-            <Button
-              variant="subtle"
-              color="red"
-              ml="auto"
-              onClick={remove}
-              disabled={busy !== null}
-            >
-              削除
-            </Button>
-          </Group>
         </Stack>
       </Box>
 
@@ -583,6 +758,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         busy={busy === "schedule"}
         error={scheduleError}
         onSubmit={schedule}
+        onCloseFocus={afterScheduleClose}
       />
       <PreviewLinksDialog
         open={previewOpen}
@@ -602,7 +778,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         onLoadLatest={loadLatest}
         onOverwrite={overwrite}
       />
-    </Stack>
+    </Box>
   );
 }
 

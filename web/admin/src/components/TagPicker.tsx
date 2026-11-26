@@ -10,6 +10,7 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import { type KeyboardEvent, useRef, useState } from "react";
 import { api, errorField, errorMessage } from "../api/client";
 import { tagsQuery } from "../api/queries";
@@ -78,6 +79,8 @@ function NewTag({ onCreated }: { onCreated: (id: number) => void }) {
   const [errors, setErrors] = useState<{ name?: string; slug?: string; form?: string }>({});
   const nameRef = useRef<HTMLInputElement>(null);
   const slugRef = useRef<HTMLInputElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
 
   const create = useMutation({
     mutationFn: api.createTag,
@@ -114,11 +117,32 @@ function NewTag({ onCreated }: { onCreated: (id: number) => void }) {
     }
   };
 
+  // Closed by default: the fields only matter when the right tag does not exist yet.
+  if (!open) {
+    return (
+      <Group>
+        <Button
+          size="sm"
+          variant="subtle"
+          leftSection={<Plus aria-hidden="true" size={16} />}
+          ref={toggleRef}
+          onClick={() => {
+            setOpen(true);
+            setTimeout(() => nameRef.current?.focus());
+          }}
+        >
+          新しいタグを追加
+        </Button>
+      </Group>
+    );
+  }
+
   return (
     <Paper withBorder p="sm">
       <Stack gap="sm">
         <Text fw={700}>新しいタグを追加</Text>
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+        {/* One column in the editor's narrow settings column (lg and up). */}
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 1 }} spacing="sm">
           <TextInput
             label="タグの名前"
             ref={nameRef}
@@ -144,9 +168,19 @@ function NewTag({ onCreated }: { onCreated: (id: number) => void }) {
           />
         </SimpleGrid>
         {errors.form && <ErrorMessage>{errors.form}</ErrorMessage>}
-        <Group>
+        <Group gap="sm">
           <Button onClick={submit} loading={create.isPending}>
             タグを追加して選ぶ
+          </Button>
+          <Button
+            variant="subtle"
+            onClick={() => {
+              setOpen(false);
+              setErrors({});
+              setTimeout(() => toggleRef.current?.focus());
+            }}
+          >
+            閉じる
           </Button>
         </Group>
       </Stack>
