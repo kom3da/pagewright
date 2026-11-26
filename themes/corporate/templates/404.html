@@ -2,9 +2,12 @@
 <div class="container container--narrow not-found">
   <h1>ページが見つかりません</h1>
   <p>お探しのページは、移動または削除された可能性があります。URLに誤りがないかご確認ください。</p>
-  <ul>
-    <li><a href="/">ホームへ戻る</a></li>
-    <li><a href="{{.Site.PostsURL}}">お知らせ一覧を見る</a></li>
-  </ul>
+  <p class="not-found__actions">
+    <a class="button" href="/">ホームへ戻る</a>
+    {{- with .Site.SearchURL}}
+    <a class="button button--secondary" href="{{.}}">サイト内を検索する</a>
+    {{- end}}
+    <a class="button button--secondary" href="{{.Site.PostsURL}}">お知らせ一覧を見る</a>
+  </p>
 </div>
 {{- end}}

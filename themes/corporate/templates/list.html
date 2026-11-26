@@ -1,8 +1,11 @@
 {{define "main" -}}
 <div class="page-head">
-  <div class="container">
+  <div class="container container--narrow">
     <p class="eyebrow" aria-hidden="true">NEWS</p>
     <h1>{{.Heading}}</h1>
+    {{- with .Pagination}}{{if gt .Total 1}}
+    <p class="page-head__note">{{range .Pages}}{{if .Current}}{{.Title}}{{end}}{{end}} / {{.Total}} ページ</p>
+    {{- end}}{{end}}
   </div>
 </div>
 <div class="container container--narrow list-body">

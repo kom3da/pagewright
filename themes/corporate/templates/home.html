@@ -59,7 +59,7 @@
         <a class="card" href="{{.URL}}">
           {{- with .Image}}<img class="card__image" src="{{.Src}}" alt="">{{end}}
           <span class="card__title">{{.Title}}</span>
-          {{- with .Excerpt}}<span class="card__summary">{{.}}</span>{{end}}
+          {{- if .Lead}}<span class="card__summary">{{.Lead}}</span>{{else if .Excerpt}}<span class="card__summary">{{.Excerpt}}</span>{{end}}
         </a>
       </li>
       {{- end}}{{end}}

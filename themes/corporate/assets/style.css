@@ -42,6 +42,9 @@ html {
 }
 
 body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
   margin: 0;
   background: var(--color-bg);
   color: var(--color-text);
@@ -199,6 +202,7 @@ h4 {
 
 .site-name a {
   display: flex;
+  white-space: nowrap;
   align-items: center;
   gap: 0.75rem;
   color: var(--color-text);
@@ -231,7 +235,7 @@ h4 {
 .global-nav ul {
   display: flex;
   align-items: center;
-  gap: 0.5rem 2.25rem;
+  gap: 0.5rem clamp(1rem, 2vw, 2.25rem);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -241,6 +245,7 @@ h4 {
 
 .global-nav a {
   display: inline-flex;
+  white-space: nowrap;
   align-items: center;
   gap: 0.375rem;
   min-height: 2.75rem;
@@ -277,10 +282,12 @@ h4 {
 
 .nav-toggle__button {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 3rem;
-  height: 3rem;
+  gap: 0.125rem;
+  min-width: 3rem;
+  height: 3.25rem;
   margin-right: -0.5rem;
   border-radius: var(--radius);
   color: var(--color-text);
@@ -292,7 +299,24 @@ h4 {
   display: none;
 }
 
-@media (max-width: 54rem) {
+.nav-toggle__label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.nav-toggle__close,
+.nav-toggle[open] .nav-toggle__open {
+  display: none;
+}
+
+.nav-toggle[open] .nav-toggle__close {
+  display: inline;
+}
+
+/* Wider than the layout breakpoint: the row needs room for the name and
+   every menu item. */
+@media (max-width: 68rem) {
   .nav-wide {
     display: none;
   }
@@ -350,7 +374,7 @@ h4 {
   gap: 0.25rem 0.5rem;
   margin: 0 auto;
   padding-top: 1.25rem;
-  padding-bottom: 0;
+  padding-bottom: 1.25rem;
   list-style: none;
   font-size: 0.8125rem;
   color: var(--color-muted);
@@ -366,8 +390,30 @@ h4 {
   color: var(--color-text-soft);
 }
 
+.site-main {
+  flex: 1;
+}
+
 .site-main:focus {
   outline: none;
+}
+
+/* Keep phrases whole in headings where the browser can. */
+h1,
+h2,
+h3,
+.card__title,
+.post-list__title {
+  text-wrap-style: balance;
+  word-break: auto-phrase;
+}
+
+.hero__title {
+  text-wrap-style: auto;
+}
+
+.entry-body p {
+  text-wrap-style: pretty;
 }
 
 /* Sections */
@@ -472,6 +518,17 @@ h4 {
   background: var(--color-placeholder);
 }
 
+@media (max-width: 54rem) {
+  .hero__media img {
+    aspect-ratio: 16 / 9;
+    max-height: 22rem;
+  }
+}
+
+.hero__media img {
+  background: var(--color-placeholder);
+}
+
 /* Lists of posts */
 
 .post-list {
@@ -521,7 +578,7 @@ h4 {
 
 @media (min-width: 40rem) {
   .post-list__link {
-    grid-template-columns: 9rem 7rem minmax(0, 1fr);
+    grid-template-columns: 9rem minmax(5.5rem, max-content) minmax(0, 1fr);
     align-items: center;
     padding-block: 1.5rem;
   }
@@ -586,6 +643,27 @@ a.badge:hover {
   color: var(--color-text);
 }
 
+@media (min-width: 54rem) {
+  .cards {
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  }
+}
+
+/* Cards without an image keep the same rhythm as those with one. */
+.card:not(:has(.card__image))::before {
+  content: "";
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  background: var(--color-subtle-bg) linear-gradient(135deg, transparent 49.5%, var(--color-border) 49.5%, var(--color-border) 50.5%, transparent 50.5%);
+}
+
+.card__summary {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
 .card__image {
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -609,6 +687,11 @@ a.badge:hover {
 
 .cta {
   padding-block: var(--section);
+}
+
+.entry + .cta,
+.section:not(.section--tinted) + .cta {
+  padding-top: 0;
 }
 
 .cta__inner {
@@ -668,6 +751,12 @@ a.badge:hover {
   letter-spacing: 0.06em;
 }
 
+.page-head__note {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.9375rem;
+}
+
 .list-body {
   padding-block: clamp(2.5rem, 6vw, 4rem) var(--section);
 }
@@ -677,7 +766,7 @@ a.badge:hover {
 .entry {
   max-width: calc(var(--measure) + 2 * var(--gutter));
   margin-inline: auto;
-  padding: clamp(2.5rem, 6vw, 3.5rem) var(--gutter) var(--section);
+  padding: clamp(1.25rem, 4vw, 2.25rem) var(--gutter) var(--section);
 }
 
 .entry-header {
@@ -713,7 +802,6 @@ a.badge:hover {
 
 .entry-body--wide {
   max-width: var(--measure);
-  margin-inline: auto;
   font-size: 1rem;
 }
 
@@ -746,7 +834,7 @@ a.badge:hover {
 
 .entry-body h3 {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 0.625rem;
   margin: 2.5rem 0 1rem;
   font-size: 1.1875rem;
@@ -756,6 +844,7 @@ a.badge:hover {
 .entry-body h3::before {
   content: "";
   flex: none;
+  transform: translateY(-0.15em);
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 2px;
@@ -844,6 +933,16 @@ a.badge:hover {
 .entry-body th {
   background: var(--color-subtle-bg);
   font-weight: 700;
+}
+
+.entry-body tbody th {
+  white-space: nowrap;
+}
+
+/* Tables of three or more columns scroll sideways rather than squeeze
+   every cell to a few characters. */
+.entry-body table:has(tr > :nth-child(3)) {
+  min-width: 32rem;
 }
 
 .entry-body td > :last-child,
@@ -958,6 +1057,7 @@ a.badge:hover {
 
 .form-field label {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.9375rem;
@@ -1003,7 +1103,7 @@ a.badge:hover {
 
 .form-field__check {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.75rem;
 }
 
@@ -1030,6 +1130,8 @@ a.badge:hover {
 
 .required {
   display: inline-block;
+  flex: none;
+  white-space: nowrap;
   padding: 0 0.5rem;
   border-radius: 4px;
   background: var(--color-required);
@@ -1100,6 +1202,8 @@ a.badge:hover {
 
 .footer-nav {
   display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(5, auto);
   grid-template-columns: repeat(2, minmax(0, auto));
   gap: 0 3rem;
   margin: 0;
@@ -1111,6 +1215,10 @@ a.badge:hover {
 .footer-nav a {
   display: inline-block;
   padding-block: 0.375rem;
+}
+
+.copyright small {
+  font-size: inherit;
 }
 
 .copyright {
@@ -1125,6 +1233,13 @@ a.badge:hover {
 
 .not-found {
   padding-block: var(--section);
+}
+
+.not-found__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 2rem;
 }
 
 .not-found h1 {
@@ -1152,4 +1267,9 @@ a.badge:hover {
   --pagefind-ui-border: var(--color-border-strong);
   --pagefind-ui-border-radius: 6px;
   --pagefind-ui-font: var(--font-sans);
+}
+
+#search input::placeholder {
+  color: var(--color-muted);
+  opacity: 1;
 }
