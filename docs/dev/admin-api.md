@@ -12,6 +12,7 @@
   - 401 `unauthenticated`：ログインしていない
   - 403 `no_site`：サイトを選んでいない／`forbidden`：権限がない／`csrf`
   - 404 `not_found`、409 `conflict`（URL の重複など）、422 入力エラー（`code` は項目ごと）
+  - どの API でも起こりうる 422：`invalid_reference`（存在しないものを指している。DB の外部キー違反）、`invalid_value`（値が DB の制約に合わない。DB の CHECK 違反）。どちらも `field` なし。管理画面の検査をすり抜けた入力や、ほかの人が同時に消したものを指したときに出る
 - テナントは画面上「サイト」と呼ぶ
 
 ## 開発時の URL
@@ -81,7 +82,7 @@ type ContentDetail = ContentSummary & {
 
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
-| `GET /api/contents?type=post&q=...&status=...` | `type`：`post` / `page`。`q`（省略可）：タイトルか「ページのURL」の部分一致、100文字まで。`status`（省略可）：`draft` / `scheduled` / `published` | 200 `ContentSummary[]`（番号の降順、1000 件まで） |
+| `GET /api/contents?type=post&q=...&status=...` | `type`：`post` / `page`。`q`（省略可）：タイトルか「ページのURL」の部分一致、100文字まで。`status`（省略可）：`draft` / `scheduled` / `published` | 200 `ContentSummary[]`（番号の降順、1000 件まで）。`q` が 100 文字を超えるか制御文字を含むと 422 `invalid_q`、`status` がそれ以外なら 422 `invalid_status` |
 | `POST /api/contents` | `{"type": "post"}` | 201 `ContentDetail`（空の版を 1 つ作る） |
 | `GET /api/contents/{id}` | | 200 `ContentDetail` |
 | `PUT /api/contents/{id}/draft` | `{"title": "...", "body": {...}, "fields": {...}, "baseRevisionId": 12}`（`fields`・`baseRevisionId` は省略可） | 200 `ContentDetail`。保存のたびに新しい版を作る。`baseRevisionId`（編集を始めたときの `revision.id`）が最新の版と違えば、ほかの人が先に保存したので 409 `edit_conflict` |
@@ -102,6 +103,7 @@ type PreviewLink = { id: number; url?: string; expiresAt: string; createdAt: str
 プレビューのページ（`/p/{token}/`）は本体が描画する。帯で「プレビュー」と示し、検索エンジンには載せない。ページ内のリンクは公開サイトを指す。
 
 `slug` の検査：英小文字・数字・ハイフンのみ、数字だけは不可、1〜100 文字。日本語が入っていたら 422 `invalid_slug`（「ページのURLは英小文字・数字・ハイフンで入力してください」）。
+いちばん上の固定ページの URL を `posts` か `media` にする（サイトの仕組みが使う `/posts/`・`/media/` と重なる）と 422 `reserved_slug`（`field: "slug"`）。
 
 URL の決まり方（MVP）：記事は `/posts/{slug または番号}/`、固定ページは `/{親の slug}/{slug または番号}/`。
 
@@ -190,7 +192,7 @@ type ThemeInfo = {
 | `GET /api/site` | | 200 `SiteSettings` |
 | `PUT /api/site` | `SiteSettings`（`logo` を除く。全体を置き換える） | 200 `SiteSettings`。管理者だけ（編集者は 403）。不正な値は 422、`field` に項目名（`primaryColor` など、メニューは `menu`）。再ビルドを予約する |
 | `POST /api/site/build` | なし | 202。全体ビルドを予約する（手動で再ビルドしたいとき） |
-| `GET /api/site/builds?limit=5` | `limit`：1〜50（省略時 5） | 200 `Build[]`（新しい順）。公開サイトの書き出しの記録 |
+| `GET /api/site/builds?limit=5` | `limit`：1〜50（省略時 5） | 200 `Build[]`（新しい順）。公開サイトの書き出しの記録。`limit` が整数でないか範囲外なら 422 `invalid_limit` |
 
 ```ts
 type Build = {
@@ -214,5 +216,5 @@ type Submission = {
 
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
-| `GET /api/forms/submissions?before={id}` | `before` は省略可 | 200 `Submission[]`（`id` の降順＝受け付けた順の新しい順に 100 件まで）。続きは、受け取った最後の `id` を `before` に入れて取る。管理者だけ（編集者は 403） |
+| `GET /api/forms/submissions?before={id}` | `before` は省略可 | 200 `Submission[]`（`id` の降順＝受け付けた順の新しい順に 100 件まで）。続きは、受け取った最後の `id` を `before` に入れて取る。`before` が正の整数でなければ 422 `invalid_before`。管理者だけ（編集者は 403） |
 | `DELETE /api/forms/submissions/{id}` | | 204。管理者だけ |
