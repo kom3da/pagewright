@@ -72,7 +72,8 @@ const sections = [
   ["site-contact", "お問い合わせの送り先"],
   ["site-time", "日付と時刻"],
 ] as const;
-const sectionTitle = Object.fromEntries(sections) as Record<(typeof sections)[number][0], string>;
+type SectionId = (typeof sections)[number][0];
+const sectionTitle = Object.fromEntries(sections) as Record<SectionId, string>;
 
 /** Theme name → key → value, all as strings ("" = not set; page ids as digits). */
 type ThemeValues = Record<string, Record<string, string>>;
@@ -255,6 +256,8 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
   // theme is shown as selected but nothing is sent, so the server keeps its default.
   const themeName = form.theme || themes[0]?.name || "";
   const theme = themes.find((t) => t.name === themeName);
+  // The theme may name its settings the way people look for them (「会社の連絡先」).
+  const themeTitle = theme?.settingsTitle || sectionTitle["site-theme"];
 
   const dirty = JSON.stringify(toInput(form, themes)) !== JSON.stringify(toInput(saved, themes));
   const dirtyRef = useRef(dirty);
@@ -358,7 +361,7 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
     <>
       <PageHeader title={TITLE} description={DESCRIPTION} />
       <div className={classes.layout}>
-        <TableOfContents />
+        <TableOfContents titles={{ "site-theme": themeTitle }} />
         <Form ref={formRef} onSubmit={onSubmit} gap="xl" className={classes.form}>
           <Section id="site-basic" title={sectionTitle["site-basic"]}>
             <TextInput
@@ -513,10 +516,10 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
 
           <Section
             id="site-theme"
-            title={sectionTitle["site-theme"]}
+            title={themeTitle}
             description={
               theme
-                ? `「${theme.title || theme.name}」テーマが公開サイトに表示する内容です。空欄の項目は表示されません。`
+                ? `${theme.settingsDescription || "公開サイトに表示する内容です。"}この項目は「${theme.title || theme.name}」テーマのものです。空欄の項目は表示されません。`
                 : undefined
             }
           >
@@ -634,7 +637,7 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
 }
 
 /** Links to the sections (wide screens only). Moves focus to the section's heading. */
-function TableOfContents() {
+function TableOfContents({ titles }: { titles: Partial<Record<SectionId, string>> }) {
   const jump = (e: MouseEvent<HTMLAnchorElement>, id: string) => {
     // Not a hash navigation: the router would treat it as leaving the page.
     e.preventDefault();
@@ -653,7 +656,7 @@ function TableOfContents() {
         {sections.map(([id, title]) => (
           <li key={id}>
             <a href={`#${id}`} onClick={(e) => jump(e, id)} className={classes.tocLink}>
-              {title}
+              {titles[id] ?? title}
             </a>
           </li>
         ))}

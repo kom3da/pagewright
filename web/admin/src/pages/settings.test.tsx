@@ -136,7 +136,11 @@ describe("site settings", () => {
   it("shows the fields the chosen theme declares and keeps each theme's values", async () => {
     const requests = recordRequests();
     const { user } = await openSettings();
-    const section = screen.getByRole("region", { name: "テーマの項目" });
+    // The theme names its settings section; the table of contents follows.
+    const section = screen.getByRole("region", { name: "会社の連絡先" });
+    expect(within(section).getByText(/フッター.*「コーポレート」テーマのもの/)).toBeInTheDocument();
+    const toc = screen.getByRole("navigation", { name: "設定の項目" });
+    expect(within(toc).getByRole("link", { name: "会社の連絡先" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /コーポレート/ })).toBeChecked();
     expect(screen.getByRole("radio", { name: /シンプル/ })).toHaveAccessibleDescription(
       /お店や個人のサイト向け/,
@@ -156,6 +160,9 @@ describe("site settings", () => {
     // Simple: a url field and a page field; corporate's fields are gone.
     await user.click(screen.getByRole("radio", { name: /シンプル/ }));
     expect(within(section).queryByLabelText("電話番号")).toBeNull();
+    // A theme without its own title gets the default heading.
+    expect(section).toHaveAccessibleName("テーマの項目");
+    expect(within(toc).getByRole("link", { name: "テーマの項目" })).toBeInTheDocument();
     const instagram = within(section).getByLabelText("Instagram のURL");
     expect(instagram).toHaveAttribute("type", "url");
     await user.type(instagram, "https://instagram.com/yamada");
@@ -188,7 +195,7 @@ describe("site settings", () => {
   it("checks theme fields before sending and shows server errors at themeSettings.<key>", async () => {
     const requests = recordRequests();
     const { user } = await openSettings();
-    const section = screen.getByRole("region", { name: "テーマの項目" });
+    const section = screen.getByRole("region", { name: "会社の連絡先" });
     const phone = within(section).getByLabelText("電話番号");
     await user.clear(phone);
     await user.type(phone, "03-1234-5678 内線");

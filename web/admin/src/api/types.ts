@@ -145,6 +145,9 @@ export type ThemeInfo = {
   name: string;
   title: string;
   description: string;
+  /** Heading and help for the theme's settings in the admin; empty means the admin's default. */
+  settingsTitle: string;
+  settingsDescription: string;
   settings: ThemeSettingDecl[];
 };
 

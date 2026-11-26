@@ -193,6 +193,8 @@ export const mockThemes: ThemeInfo[] = [
     title: "コーポレート",
     description:
       "中小企業の会社サイト向け。トップに大見出しとお知らせ、固定ページの案内、ご相談の帯を並べます。",
+    settingsTitle: "会社の連絡先",
+    settingsDescription: "ページの下（フッター）と「お気軽にご相談ください」の帯に表示します。",
     settings: [
       {
         key: "address",
@@ -221,6 +223,8 @@ export const mockThemes: ThemeInfo[] = [
     name: "simple",
     title: "シンプル",
     description: "お店や個人のサイト向け。写真を大きく見せ、文字を控えめにします。",
+    settingsTitle: "",
+    settingsDescription: "",
     settings: [
       {
         key: "instagram",
