@@ -549,6 +549,77 @@ describe("images", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
+  const shopImage = {
+    id: 50,
+    url: "/media/50/shop.jpg",
+    previewUrl: "/api/media/50/file",
+    filename: "shop.jpg",
+    contentType: "image/jpeg",
+    sizeBytes: 100,
+    width: 10,
+    height: 10,
+    altText: "店内の様子",
+    createdAt: "2026-11-01T00:00:00Z",
+  };
+
+  const openLibrary = async (user: ReturnType<typeof renderApp>["user"]) => {
+    await user.click(screen.getByRole("textbox", { name: "本文" }));
+    await user.click(screen.getByRole("button", { name: "画像を入れる" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(await within(dialog).findByRole("button", { name: "店内の様子" }));
+    return dialog;
+  };
+
+  it("deletes an image from the library after confirmation", async () => {
+    db.media.push({ ...shopImage });
+    const requests = recordRequests();
+    const { user } = await openEditor();
+    const dialog = await openLibrary(user);
+    await user.click(within(dialog).getByRole("button", { name: "この画像を削除" }));
+    const confirm = await screen.findByRole("alertdialog", { name: "この画像を削除しますか？" });
+    expect(within(confirm).getByRole("button", { name: "キャンセル" })).toHaveFocus();
+    await user.click(within(confirm).getByRole("button", { name: "削除する" }));
+    expect(await screen.findByText("画像「店内の様子」を削除しました。")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(dialog).queryByRole("button", { name: "店内の様子" })).not.toBeInTheDocument(),
+    );
+    expect(db.media).toHaveLength(0);
+    expect(requests.some((r) => r.method === "DELETE" && r.path === "/api/media/50")).toBe(true);
+    await user.keyboard("{Escape}");
+  });
+
+  it("shows media_in_use when the image is used in a saved body", async () => {
+    db.media.push({ ...shopImage });
+    const post = db.contents.find((c) => c.id === 3);
+    post?.revision.body.content?.push({
+      type: "image",
+      attrs: { src: shopImage.url, alt: "店内", mediaId: 50 },
+    });
+    const { user } = await openEditor();
+    const dialog = await openLibrary(user);
+    await user.click(within(dialog).getByRole("button", { name: "この画像を削除" }));
+    const confirm = await screen.findByRole("alertdialog");
+    await user.click(within(confirm).getByRole("button", { name: "削除する" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "この画像は記事やページで使われているため削除できません。先に本文から外してください",
+    );
+    expect(db.media).toHaveLength(1);
+    await user.keyboard("{Escape}");
+  });
+
+  it("does not delete an image used in the unsaved body", async () => {
+    db.media.push({ ...shopImage });
+    const { user } = await openEditor();
+    let dialog = await openLibrary(user);
+    await user.click(within(dialog).getByRole("button", { name: "この画像を入れる" }));
+    await screen.findByRole("img", { name: "店内の様子" });
+    dialog = await openLibrary(user);
+    await user.click(within(dialog).getByRole("button", { name: "この画像を削除" }));
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(/編集中の本文で使われている/);
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+  });
+
   it("picks an uploaded image from the library", async () => {
     db.media.push({
       id: 50,
