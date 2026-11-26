@@ -11,7 +11,7 @@ import (
 
 // SendMailArgs sends one mail. Sending from a job keeps SMTP out of
 // requests and retries when the server is down. The job row holds the mail
-// until River deletes finished jobs (a day by default).
+// until River deletes finished jobs (an hour; see cmd/pagewright/river.go).
 type SendMailArgs struct {
 	To      string `json:"to"`
 	Subject string `json:"subject"`

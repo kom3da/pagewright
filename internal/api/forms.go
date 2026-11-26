@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"fmt"
 	"html/template"
 	"net/http"
 	"net/mail"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/kom3da/pagewright/internal/db"
 	"github.com/kom3da/pagewright/internal/db/dbgen"
+	"github.com/kom3da/pagewright/internal/jobs"
 	pwmail "github.com/kom3da/pagewright/internal/mail"
 	"github.com/kom3da/pagewright/internal/site"
 )
@@ -133,9 +133,10 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.DB.InTenantTx(ctx, func(tx pgx.Tx, q *dbgen.Queries) error {
-		if _, err := q.CreateFormSubmission(ctx, dbgen.CreateFormSubmissionParams{
+		sub, err := q.CreateFormSubmission(ctx, dbgen.CreateFormSubmissionParams{
 			Name: in.Name, Kana: in.Kana, Email: in.Email, Phone: in.Phone, Message: in.Message, PagePath: in.Page,
-		}); err != nil {
+		})
+		if err != nil {
 			return err
 		}
 		recipients := []string{settings.ContactEmail}
@@ -145,7 +146,7 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
-		s.queueContactMails(ctx, tx, tenantID, siteName, recipients, in)
+		s.queueContactMails(ctx, tx, tenantID, siteName, recipients, in, sub)
 		return nil
 	})
 	if err != nil {
@@ -161,17 +162,17 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 // acknowledgement repeats nothing the sender typed, so the form cannot be
 // used to mail arbitrary text to arbitrary people, and each address gets
 // at most a few per day.
-func (s *Server) queueContactMails(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, siteName string, recipients []string, in contactInput) {
-	summary := fmt.Sprintf("お名前：%s\nふりがな：%s\nメールアドレス：%s\n電話番号：%s\n\nお問い合わせ内容：\n%s\n",
-		in.Name, in.Kana, in.Email, in.Phone, in.Message)
+func (s *Server) queueContactMails(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, siteName string, recipients []string, in contactInput, sub dbgen.FormSubmission) {
 	for _, to := range recipients {
-		s.sendMail(ctx, tx, pwmail.Message{
-			To:      to,
-			Subject: "【" + siteName + "】お問い合わせがありました",
-			Body: "サイトのお問い合わせフォームから、次の内容が届きました。\n" +
-				"返信するときは、下のメールアドレスあてに送ってください。\n\n" + summary +
-				"\n送信元のページ：" + in.Page + "\n受付日時：" + time.Now().In(time.FixedZone("JST", 9*60*60)).Format("2006年1月2日 15:04") + "\n",
-		})
+		var err error
+		if s.Jobs != nil {
+			err = s.Jobs.EnqueueContactNotify(ctx, tx, jobs.ContactNotifyArgs{TenantID: tenantID, SubmissionID: sub.ID, To: to, SiteName: siteName})
+		} else {
+			err = s.Mail.Send(ctx, jobs.ContactNotification(to, siteName, sub))
+		}
+		if err != nil {
+			s.Logger.Error("contact form: notify", "tenant_id", tenantID, "err", err)
+		}
 	}
 	if !s.autoReplyTo.allow(tenantID.String() + " " + strings.ToLower(in.Email)) {
 		return

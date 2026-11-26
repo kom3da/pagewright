@@ -60,6 +60,27 @@ func (q *Queries) DeleteFormSubmission(ctx context.Context, id int64) (int64, er
 	return result.RowsAffected(), nil
 }
 
+const getFormSubmission = `-- name: GetFormSubmission :one
+SELECT tenant_id, id, name, kana, email, phone, message, page_path, created_at FROM form_submissions WHERE id = $1
+`
+
+func (q *Queries) GetFormSubmission(ctx context.Context, id int64) (FormSubmission, error) {
+	row := q.db.QueryRow(ctx, getFormSubmission, id)
+	var i FormSubmission
+	err := row.Scan(
+		&i.TenantID,
+		&i.ID,
+		&i.Name,
+		&i.Kana,
+		&i.Email,
+		&i.Phone,
+		&i.Message,
+		&i.PagePath,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listAdminEmails = `-- name: ListAdminEmails :many
 SELECT u.email FROM memberships m JOIN users u ON u.id = m.user_id
 WHERE m.role = 'admin' ORDER BY u.email

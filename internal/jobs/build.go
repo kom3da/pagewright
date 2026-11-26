@@ -44,6 +44,7 @@ func NewWorkers(d *db.DB, opts build.Options, sender mail.Sender) *river.Workers
 	river.AddWorker(w, NewPublishScheduledWorker(d))
 	river.AddWorker(w, &CleanupAuthWorker{db: d})
 	river.AddWorker(w, &SendMailWorker{sender: sender})
+	river.AddWorker(w, &ContactNotifyWorker{db: d, sender: sender})
 	return w
 }
 

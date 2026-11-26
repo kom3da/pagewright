@@ -22,6 +22,7 @@ import (
 
 	"github.com/kom3da/pagewright/internal/body"
 	"github.com/kom3da/pagewright/internal/db"
+	"github.com/kom3da/pagewright/internal/jobs"
 	"github.com/kom3da/pagewright/internal/mail"
 	"github.com/kom3da/pagewright/internal/media"
 	"github.com/kom3da/pagewright/internal/routing"
@@ -37,6 +38,9 @@ type Jobs interface {
 	EnqueuePublish(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, contentID, revisionID int64, at time.Time) error
 	// EnqueueMail sends a mail. tx may be nil.
 	EnqueueMail(ctx context.Context, tx pgx.Tx, m mail.Message) error
+	// EnqueueContactNotify tells to that a contact form submission (made
+	// in tx) arrived. The job reads the submission when it runs.
+	EnqueueContactNotify(ctx context.Context, tx pgx.Tx, args jobs.ContactNotifyArgs) error
 }
 
 // Options configures a Server.

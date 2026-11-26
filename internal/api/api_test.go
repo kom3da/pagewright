@@ -24,7 +24,9 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/kom3da/pagewright/internal/api"
+	"github.com/kom3da/pagewright/internal/db/dbgen"
 	"github.com/kom3da/pagewright/internal/db/dbtest"
+	"github.com/kom3da/pagewright/internal/jobs"
 	"github.com/kom3da/pagewright/internal/mail"
 	"github.com/kom3da/pagewright/internal/media"
 )
@@ -74,6 +76,16 @@ func (f *fakeBuilds) EnqueuePublish(_ context.Context, _ pgx.Tx, _ uuid.UUID, co
 type scheduledPublish struct {
 	contentID, revisionID int64
 	at                    time.Time
+}
+
+// EnqueueContactNotify delivers right away, reading the submission in
+// tx as the job would after commit.
+func (f *fakeBuilds) EnqueueContactNotify(ctx context.Context, tx pgx.Tx, args jobs.ContactNotifyArgs) error {
+	sub, err := dbgen.New(tx).GetFormSubmission(ctx, args.SubmissionID)
+	if err != nil {
+		return err
+	}
+	return f.mail.Send(ctx, jobs.ContactNotification(args.To, args.SiteName, sub))
 }
 
 // EnqueueMail delivers right away through the env's fake mail.

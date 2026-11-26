@@ -33,7 +33,12 @@ func newRiver(d *db.DB, cfg config.Config, sender mail.Sender) (*river.Client[pg
 		Queues:       map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 2}},
 		Workers:      workers,
 		PeriodicJobs: jobs.PeriodicJobs(),
-		Logger:       slog.Default(),
+		// Mail jobs carry addresses and login links: keep finished jobs
+		// briefly (River's defaults are a day, and a week for failed ones).
+		CompletedJobRetentionPeriod: time.Hour,
+		CancelledJobRetentionPeriod: 24 * time.Hour,
+		DiscardedJobRetentionPeriod: 72 * time.Hour,
+		Logger:                      slog.Default(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("river client: %w", err)
@@ -60,6 +65,11 @@ func (j riverJobs) EnqueueMail(ctx context.Context, tx pgx.Tx, m mail.Message) e
 	} else {
 		_, err = j.client.InsertTx(ctx, tx, args, opts)
 	}
+	return err
+}
+
+func (j riverJobs) EnqueueContactNotify(ctx context.Context, tx pgx.Tx, args jobs.ContactNotifyArgs) error {
+	_, err := j.client.InsertTx(ctx, tx, args, &river.InsertOpts{MaxAttempts: 10})
 	return err
 }
 

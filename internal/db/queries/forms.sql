@@ -17,3 +17,6 @@ DELETE FROM form_submissions WHERE id = $1;
 -- Admins of the current site, as fallback recipients of form messages.
 SELECT u.email FROM memberships m JOIN users u ON u.id = m.user_id
 WHERE m.role = 'admin' ORDER BY u.email;
+
+-- name: GetFormSubmission :one
+SELECT * FROM form_submissions WHERE id = $1;
