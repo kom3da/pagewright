@@ -1,0 +1,92 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/kom3da/pagewright/internal/db"
+	"github.com/kom3da/pagewright/internal/migrate/wxrimport"
+)
+
+// devDatabaseURL is the database of deploy/compose.dev.yaml.
+const devDatabaseURL = "postgres://pagewright:pagewright@localhost:5432/pagewright?sslmode=disable"
+
+// runImportWXR implements `pagewright import-wxr [flags] <file.xml>`: it
+// imports a WordPress export into one site and prints the report.
+func runImportWXR(ctx context.Context, args []string) error {
+	return importWXR(ctx, args, os.Stdout, os.Stderr)
+}
+
+func importWXR(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("import-wxr", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		_, _ = fmt.Fprintln(stderr, "使い方: pagewright import-wxr --site <サイトID> --author-email <メール> [オプション] <WordPressの書き出しファイル.xml>")
+		fs.PrintDefaults()
+	}
+	defaultURL := os.Getenv("PAGEWRIGHT_DATABASE_URL")
+	if defaultURL == "" {
+		defaultURL = devDatabaseURL
+	}
+	dbURL := fs.String("database-url", defaultURL, "PostgreSQL の接続先（環境変数 PAGEWRIGHT_DATABASE_URL）")
+	site := fs.String("site", "", "取り込み先のサイト（テナント）の ID（UUID）")
+	authorEmail := fs.String("author-email", "", "作成者にするユーザーのメールアドレス（サイトのメンバー）")
+	dryRun := fs.Bool("dry-run", false, "取り込まずに、変換できないものの一覧だけを表示する")
+	pwURLs := fs.Bool("pagewright-urls", false, "旧URLを使わず Pagewright のURL（/posts/…/）にし、旧URLからリダイレクトする")
+	download := fs.Bool("download-media", false, "画像をダウンロードして本文の画像の場所を書き換える")
+	mediaRoot := fs.String("media-root", "./data/media", "画像の保存先")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		fs.Usage()
+		return errors.New("WordPress の書き出しファイルを1つ指定してください")
+	}
+	tenantID, err := uuid.Parse(*site)
+	if err != nil {
+		return fmt.Errorf("--site にはサイトの ID（UUID）を指定してください: %w", err)
+	}
+	email := strings.TrimSpace(*authorEmail)
+	if email == "" || !strings.Contains(email, "@") {
+		return errors.New("--author-email に作成者のメールアドレスを指定してください")
+	}
+
+	f, err := os.Open(fs.Arg(0))
+	if err != nil {
+		return fmt.Errorf("ファイルを開けません: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	d, err := db.Open(ctx, *dbURL)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	user, err := d.FindUserByEmail(ctx, email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("ユーザー %s が見つかりません", email)
+	}
+	if err != nil {
+		return err
+	}
+
+	rep, err := wxrimport.Import(ctx, d, tenantID, f, wxrimport.Options{
+		AuthorID:      user.ID,
+		DryRun:        *dryRun,
+		KeepURLs:      !*pwURLs,
+		DownloadMedia: *download,
+		MediaRoot:     *mediaRoot,
+	})
+	if werr := rep.WriteText(stdout); werr != nil && err == nil {
+		err = werr
+	}
+	return err
+}
