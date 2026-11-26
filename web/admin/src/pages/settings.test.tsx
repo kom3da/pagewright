@@ -108,6 +108,8 @@ describe("site settings", () => {
       font: "mincho",
       timeZone: "Asia/Seoul",
       contactEmail: "info@example.jp",
+      theme: "corporate",
+      themeSettings: { corporate: { phone: "03-1234-5678" } },
       menu: [],
     } satisfies SiteSettingsInput);
     expect(db.site).toMatchObject({ name: "山田工務店 本店", font: "mincho" });
@@ -129,6 +131,122 @@ describe("site settings", () => {
     await save(user);
     await waitFor(() => expect(email).toHaveFocus());
     expect(email).toHaveAccessibleDescription(/形式が正しくありません/);
+  });
+
+  it("shows the fields the chosen theme declares and keeps each theme's values", async () => {
+    const requests = recordRequests();
+    const { user } = await openSettings();
+    const section = screen.getByRole("region", { name: "テーマの項目" });
+    expect(screen.getByRole("radio", { name: /コーポレート/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /シンプル/ })).toHaveAccessibleDescription(
+      /お店や個人のサイト向け/,
+    );
+
+    // Corporate: text and tel fields from its declarations, with the saved value.
+    const phone = within(section).getByLabelText("電話番号");
+    expect(phone).toHaveValue("03-1234-5678");
+    expect(phone).toHaveAttribute("type", "tel");
+    expect(phone).toHaveAttribute("inputmode", "tel");
+    expect(phone).toHaveAttribute("autocomplete", "off");
+    expect(within(section).getByLabelText("住所")).toHaveAccessibleDescription(
+      /フッターに表示します。.*200文字まで/,
+    );
+    await user.type(within(section).getByLabelText("住所"), "東京都千代田区1-1");
+
+    // Simple: a url field and a page field; corporate's fields are gone.
+    await user.click(screen.getByRole("radio", { name: /シンプル/ }));
+    expect(within(section).queryByLabelText("電話番号")).toBeNull();
+    const instagram = within(section).getByLabelText("Instagram のURL");
+    expect(instagram).toHaveAttribute("type", "url");
+    await user.type(instagram, "https://instagram.com/yamada");
+    const recruit = within(section).getByRole("combobox", { name: "採用情報のページ" });
+    expect(
+      within(recruit).getByRole("option", { name: "お問い合わせ（公開していません）" }),
+    ).toBeInTheDocument();
+    await user.selectOptions(recruit, "会社概要");
+
+    // Switching back keeps what was typed for corporate.
+    await user.click(screen.getByRole("radio", { name: /コーポレート/ }));
+    expect(within(section).getByLabelText("住所")).toHaveValue("東京都千代田区1-1");
+    await user.click(screen.getByRole("radio", { name: /シンプル/ }));
+    expect(within(section).getByLabelText("Instagram のURL")).toHaveValue(
+      "https://instagram.com/yamada",
+    );
+
+    await save(user);
+    await screen.findByText(/サイトの設定を保存しました/);
+    expect(requests.find((r) => r.method === "PUT")?.body).toMatchObject({
+      theme: "simple",
+      themeSettings: {
+        corporate: { phone: "03-1234-5678", address: "東京都千代田区1-1" },
+        simple: { instagram: "https://instagram.com/yamada", recruitPage: 4 },
+      },
+    });
+    expect(db.site.theme).toBe("simple");
+  });
+
+  it("checks theme fields before sending and shows server errors at themeSettings.<key>", async () => {
+    const requests = recordRequests();
+    const { user } = await openSettings();
+    const section = screen.getByRole("region", { name: "テーマの項目" });
+    const phone = within(section).getByLabelText("電話番号");
+    await user.clear(phone);
+    await user.type(phone, "03-1234-5678 内線");
+    await save(user);
+    await waitFor(() => expect(phone).toHaveFocus());
+    expect(phone).toHaveAccessibleDescription(/数字とハイフンで入力してください/);
+    expect(requests.filter((r) => r.method === "PUT")).toEqual([]);
+
+    failWith(
+      "put",
+      "/api/site",
+      422,
+      "invalid_setting",
+      "受付時間は改行なしの100文字以内で入力してください",
+      "themeSettings.businessHours",
+    );
+    await user.clear(phone);
+    const hours = within(section).getByLabelText("受付時間");
+    await user.type(hours, "平日");
+    await save(user);
+    await waitFor(() => expect(hours).toHaveFocus());
+    expect(hours).toHaveAttribute("aria-invalid", "true");
+    expect(hours).toHaveAccessibleDescription(/改行なしの100文字以内/);
+  });
+
+  it("picks the top and privacy pages and shows invalid_front_page at its field", async () => {
+    failWith(
+      "put",
+      "/api/site",
+      422,
+      "invalid_front_page",
+      "トップページには固定ページを選んでください",
+    );
+    const requests = recordRequests();
+    const { user } = await openSettings();
+    const front = screen.getByRole("combobox", { name: "トップに載せる固定ページ" });
+    expect(front).toHaveValue("");
+    // Child pages are indented under their parent.
+    expect(within(front).getByRole("option", { name: "沿革" }).textContent).toBe("　沿革");
+    await user.selectOptions(front, "会社概要");
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "個人情報の取り扱いのページ" }),
+      "5",
+    );
+    await save(user);
+    await waitFor(() => expect(front).toHaveFocus());
+    expect(front).toHaveAccessibleDescription(/固定ページを選んでください/);
+    expect(requests.find((r) => r.method === "PUT")?.body).toMatchObject({
+      frontPageId: 4,
+      privacyPageId: 5,
+    });
+  });
+
+  it("moves to a section from the table of contents", async () => {
+    const { user } = await openSettings();
+    const toc = screen.getByRole("navigation", { name: "設定の項目" });
+    await user.click(within(toc).getByRole("link", { name: "メニュー" }));
+    expect(screen.getByRole("heading", { level: 2, name: "メニュー" })).toHaveFocus();
   });
 
   it("validates the name and e-mail before sending", async () => {

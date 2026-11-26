@@ -1,0 +1,114 @@
+/* Sections on the left, a table of contents on the right on wide screens. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--mantine-spacing-xl);
+}
+@media (min-width: 62em) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 12rem;
+  }
+  .form {
+    grid-column: 1;
+    grid-row: 1;
+  }
+}
+
+.toc {
+  display: none;
+}
+@media (min-width: 62em) {
+  .toc {
+    display: block;
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: var(--mantine-spacing-xl);
+    align-self: start;
+  }
+}
+
+.tocList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-inline-start: 1px solid var(--mantine-color-gray-3);
+}
+
+.tocLink {
+  display: block;
+  min-height: 2.25rem;
+  padding: 0.375rem var(--mantine-spacing-sm);
+  color: var(--mantine-color-gray-8);
+  font-size: var(--mantine-font-size-sm);
+  text-decoration: none;
+}
+.tocLink:hover {
+  color: var(--mantine-color-brand-7);
+  text-decoration: underline;
+}
+
+.logo {
+  border: 1px solid var(--mantine-color-gray-3);
+}
+
+/* Theme choices as bordered options; the chosen one is outlined in the accent color. */
+.themeOption {
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  border: 1px solid var(--mantine-color-gray-3);
+  border-radius: var(--mantine-radius-sm);
+  max-width: 40rem;
+}
+.themeTitle {
+  font-weight: 700;
+}
+.themeOption:has(input:checked) {
+  border-color: var(--mantine-primary-color-filled);
+  background: var(--mantine-color-brand-0);
+}
+
+/*
+ * The save button stays at the bottom of the window while the form scrolls, so changes
+ * in any section can be saved without scrolling to the end.
+ */
+.saveBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--mantine-spacing-sm);
+  margin-inline: calc(-1 * var(--mantine-spacing-md));
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  border-top: 1px solid var(--mantine-color-gray-3);
+  background: var(--mantine-color-white);
+}
+
+/* Keyboard focus moving down the form must not end up under the save bar (WCAG 2.4.11). */
+:global(html):has(.saveBar) {
+  scroll-padding-bottom: 5rem;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+  flex: 1;
+  min-width: 0;
+}
+
+.saveBar > button {
+  flex-shrink: 0;
+}
+.status:empty {
+  display: none;
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: var(--mantine-color-orange-6);
+}
