@@ -162,7 +162,18 @@ export const theme = createTheme({
     Badge: Badge.extend({
       // 13px bold text on a tinted background; never smaller (Japanese needs the pixels).
       defaultProps: { variant: "light", radius: "sm", size: "lg", tt: "none" },
-      styles: { root: { fontSize: "0.8125rem", fontWeight: 700, letterSpacing: 0 } },
+      // Never cut a status short: no ellipsis, and the badge keeps its full width.
+      styles: {
+        root: {
+          fontSize: "0.8125rem",
+          fontWeight: 700,
+          letterSpacing: 0,
+          maxWidth: "none",
+          flexShrink: 0,
+          overflow: "visible",
+        },
+        label: { overflow: "visible", textOverflow: "clip" },
+      },
     }),
     Alert: Alert.extend({ defaultProps: { variant: "light", radius: "md" } }),
     Card: Card.extend({ defaultProps: { withBorder: true, radius: "md", padding: "lg" } }),

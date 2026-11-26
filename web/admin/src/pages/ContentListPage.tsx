@@ -51,14 +51,16 @@ const labels = {
     title: "記事",
     description: "お知らせやブログの記事です。新しい順に並びます。",
     empty: "まだ記事がありません",
-    emptyText: "「新規作成」から最初の記事を書きましょう。",
+    emptyText: "「記事を書く」から最初の記事を書きましょう。",
+    newLabel: "記事を書く",
     icon: Newspaper,
   },
   page: {
     title: "固定ページ",
     description: "会社概要など、いつも置いておくページです。親ページの下に子ページが並びます。",
     empty: "まだ固定ページがありません",
-    emptyText: "「新規作成」から最初のページを作りましょう。",
+    emptyText: "「固定ページを作る」から最初のページを作りましょう。",
+    newLabel: "固定ページを作る",
     icon: FileText,
   },
 } as const;
@@ -95,7 +97,7 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
       <PageHeader
         title={`${label.title}の一覧`}
         description={label.description}
-        actions={<NewContentButton type={type} label="新規作成" primary />}
+        actions={<NewContentButton type={type} label={label.newLabel} primary />}
       />
       <Stack gap="md">
         {(filtered || rows.length > 0) && <Filters type={type} search={search} />}

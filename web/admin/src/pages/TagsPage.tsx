@@ -46,7 +46,7 @@ export function TagsPage() {
     <>
       <PageHeader
         title="タグ"
-        description="記事につけるキーワードです。記事の編集画面の「詳細設定」からも追加できます。"
+        description="記事につけるキーワードです。記事の編集画面の「カテゴリとタグ」からも追加できます。"
         actions={
           <Button
             variant="filled"

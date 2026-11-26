@@ -51,7 +51,7 @@ describe("content list", () => {
 
   it("creates a new page and opens the editor", async () => {
     const { user } = renderApp("/pages");
-    await user.click(await screen.findByRole("button", { name: "新規作成" }));
+    await user.click(await screen.findByRole("button", { name: "固定ページを作る" }));
     expect(await screen.findByRole("heading", { name: "固定ページの編集" })).toBeInTheDocument();
     expect(db.contents.some((c) => c.type === "page" && c.title === "")).toBe(true);
   });
