@@ -25,6 +25,26 @@ test("login screens are accessible and the link logs in only on button press", a
   await expect(page.getByRole("heading", { name: /ようこそ/ })).toBeVisible();
 });
 
+test("on a phone, the menu is a drawer and lists are cards", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("posts");
+  await expect(page.getByRole("heading", { level: 1, name: "記事の一覧" })).toBeVisible();
+  await expect(page.getByRole("table")).toHaveCount(0);
+  await expect(page.getByRole("list", { name: /記事の一覧/ }).getByRole("listitem")).toHaveCount(3);
+  await expectAccessible(page);
+
+  // The drawer opens from the top bar and closes after moving to another screen.
+  const menu = page.getByRole("navigation", { name: "メインメニュー" });
+  await expect(menu.getByRole("link", { name: "タグ" })).not.toBeInViewport();
+  const burger = page.getByRole("button", { name: "メニューを開く" });
+  await burger.click();
+  await expect(menu.getByRole("link", { name: "タグ" })).toBeInViewport();
+  await expectAccessible(page);
+  await menu.getByRole("link", { name: "タグ" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "タグ" })).toBeVisible();
+  await expect(menu.getByRole("link", { name: "タグ" })).not.toBeInViewport();
+});
+
 test("lists and management screens are accessible", async ({ page }) => {
   for (const [path, heading] of [
     ["", /ようこそ/],
