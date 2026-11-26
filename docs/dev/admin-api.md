@@ -91,7 +91,7 @@ type ContentDetail = ContentSummary & {
 | `POST /api/contents/{id}/schedule` | `{"publishAt": "RFC 3339"}`（今から 1 分以上あと） | 200 `ContentDetail`。最新の版をその日時に公開する。もう一度呼ぶと予約を置き換える。過去の日時は 422 `invalid_publish_at` |
 | `DELETE /api/contents/{id}/schedule` | | 200 `ContentDetail`。予約を取り消す |
 | `DELETE /api/contents/{id}` | | 204。再ビルドを予約する |
-| `POST /api/contents/{id}/preview-links` | `{"days"?: 1〜30}`（省略時 3） | 201 `PreviewLink`（`url` 付き）。ログインなしで最新の版を見られるリンク。`url` はこのときしか返らない（保存しているのはハッシュだけ） |
+| `POST /api/contents/{id}/preview-links` | `{"days": 1〜30}`（本体は必須。`days` のキーを省くと 3） | 201 `PreviewLink`（`url` 付き）。ログインなしで見られるリンク。開くたびにその時点の最新の版を描く（作った時点の内容に固定しない）。`url` はこのときしか返らない（保存しているのはハッシュだけ）。範囲外は 422 `invalid_days`（`field: "days"`） |
 | `GET /api/contents/{id}/preview-links` | | 200 `PreviewLink[]`（有効なものだけ。`url` なし） |
 | `DELETE /api/preview-links/{id}` | | 204。リンクを取り消す |
 
