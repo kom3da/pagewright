@@ -42,6 +42,18 @@ type testEnv struct {
 	catA, catB        dbgen.Category
 	tagA, tagB        dbgen.Tag
 	mediaA, mediaB    dbgen.Medium
+	revA, revB        dbgen.ContentRevision // published revision of postA / postB
+	routeA, routeB    dbgen.Route           // canonical route of postA / postB
+}
+
+// tenantData is what seedTenant creates in one tenant.
+type tenantData struct {
+	post  dbgen.Content
+	rev   dbgen.ContentRevision
+	cat   dbgen.Category
+	tag   dbgen.Tag
+	media dbgen.Medium
+	route dbgen.Route
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -167,32 +179,47 @@ func (e *testEnv) seed(t *testing.T) {
 		}
 	}
 
-	e.postA, e.catA, e.tagA, e.mediaA = e.seedTenant(t, e.ctxA, "a", e.alice)
-	e.postB, e.catB, e.tagB, e.mediaB = e.seedTenant(t, e.ctxB, "b", e.bob)
+	a := e.seedTenant(t, e.ctxA, "a", e.alice)
+	b := e.seedTenant(t, e.ctxB, "b", e.bob)
+	e.postA, e.revA, e.catA, e.tagA, e.mediaA, e.routeA = a.post, a.rev, a.cat, a.tag, a.media, a.route
+	e.postB, e.revB, e.catB, e.tagB, e.mediaB, e.routeB = b.post, b.rev, b.cat, b.tag, b.media, b.route
 }
 
-func (e *testEnv) seedTenant(t *testing.T, ctx context.Context, prefix string, author uuid.UUID) (post dbgen.Content, cat dbgen.Category, tag dbgen.Tag, media dbgen.Medium) {
+func (e *testEnv) seedTenant(t *testing.T, ctx context.Context, prefix string, author uuid.UUID) tenantData {
 	t.Helper()
+	var d tenantData
 	err := e.db.InTenant(ctx, func(q *dbgen.Queries) error {
 		var err error
-		if post, err = q.CreateContent(ctx, newPost(prefix+"-post", author)); err != nil {
+		if d.post, err = q.CreateContent(ctx, newPost(author)); err != nil {
 			return fmt.Errorf("content: %w", err)
 		}
-		if cat, err = q.CreateCategory(ctx, dbgen.CreateCategoryParams{Name: prefix, Slug: prefix + "-cat"}); err != nil {
+		if d.rev, err = q.CreateRevision(ctx, newRevision(d.post.ID, prefix+"-post", author)); err != nil {
+			return fmt.Errorf("revision: %w", err)
+		}
+		if _, err = q.PublishRevision(ctx, dbgen.PublishRevisionParams{ContentID: d.post.ID, RevisionID: &d.rev.ID}); err != nil {
+			return fmt.Errorf("publish: %w", err)
+		}
+		if d.post, err = q.GetContent(ctx, d.post.ID); err != nil {
+			return fmt.Errorf("reload content: %w", err)
+		}
+		if d.route, err = q.CreateRoute(ctx, dbgen.CreateRouteParams{Path: "/posts/" + prefix + "/", Kind: "canonical", ContentID: &d.post.ID}); err != nil {
+			return fmt.Errorf("route: %w", err)
+		}
+		if d.cat, err = q.CreateCategory(ctx, dbgen.CreateCategoryParams{Name: prefix, Slug: prefix + "-cat"}); err != nil {
 			return fmt.Errorf("category: %w", err)
 		}
-		if tag, err = q.CreateTag(ctx, dbgen.CreateTagParams{Name: prefix, Slug: prefix + "-tag"}); err != nil {
+		if d.tag, err = q.CreateTag(ctx, dbgen.CreateTagParams{Name: prefix, Slug: prefix + "-tag"}); err != nil {
 			return fmt.Errorf("tag: %w", err)
 		}
-		if media, err = q.CreateMedia(ctx, dbgen.CreateMediaParams{
+		if d.media, err = q.CreateMedia(ctx, dbgen.CreateMediaParams{
 			StorageKey: prefix + "/photo.jpg", Filename: "photo.jpg", ContentType: "image/jpeg", SizeBytes: 10, UploadedBy: &author,
 		}); err != nil {
 			return fmt.Errorf("media: %w", err)
 		}
-		if err := q.AddContentCategory(ctx, dbgen.AddContentCategoryParams{ContentID: post.ID, CategoryID: cat.ID}); err != nil {
+		if err := q.AddContentCategory(ctx, dbgen.AddContentCategoryParams{ContentID: d.post.ID, CategoryID: d.cat.ID}); err != nil {
 			return fmt.Errorf("content category: %w", err)
 		}
-		if err := q.AddContentTag(ctx, dbgen.AddContentTagParams{ContentID: post.ID, TagID: tag.ID}); err != nil {
+		if err := q.AddContentTag(ctx, dbgen.AddContentTagParams{ContentID: d.post.ID, TagID: d.tag.ID}); err != nil {
 			return fmt.Errorf("content tag: %w", err)
 		}
 		return nil
@@ -200,13 +227,17 @@ func (e *testEnv) seedTenant(t *testing.T, ctx context.Context, prefix string, a
 	if err != nil {
 		t.Fatalf("seed tenant %s: %v", prefix, err)
 	}
-	return post, cat, tag, media
+	return d
 }
 
-func newPost(title string, author uuid.UUID) dbgen.CreateContentParams {
-	return dbgen.CreateContentParams{
-		Type: "post", Title: title, Body: []byte(`{}`), BodySchemaVersion: 1,
-		Status: "draft", AuthorID: &author, Fields: []byte(`{}`),
+func newPost(author uuid.UUID) dbgen.CreateContentParams {
+	return dbgen.CreateContentParams{Type: "post", AuthorID: &author}
+}
+
+func newRevision(contentID int64, title string, author uuid.UUID) dbgen.CreateRevisionParams {
+	return dbgen.CreateRevisionParams{
+		ContentID: contentID, Title: title, Body: []byte(`{"type":"doc","content":[]}`),
+		BodySchemaVersion: 1, Fields: []byte(`{}`), CreatedBy: &author,
 	}
 }
 
@@ -259,8 +290,19 @@ func TestTenantCannotReadOtherTenant(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if diff := cmp.Diff([]int64{e.postA.ID}, ids(posts, func(c dbgen.Content) int64 { return c.ID })); diff != "" {
+		if diff := cmp.Diff([]int64{e.postA.ID}, ids(posts, func(c dbgen.ListContentsRow) int64 { return c.ID })); diff != "" {
 			t.Errorf("ListContents (-want +got):\n%s", diff)
+		}
+		if len(posts) == 1 && posts[0].Title != "a-post" {
+			t.Errorf("ListContents title = %q, want %q", posts[0].Title, "a-post")
+		}
+
+		routes, err := q.ListRoutes(ctx)
+		if err != nil {
+			return err
+		}
+		if diff := cmp.Diff([]int64{e.routeA.ID}, ids(routes, func(r dbgen.Route) int64 { return r.ID })); diff != "" {
+			t.Errorf("ListRoutes (-want +got):\n%s", diff)
 		}
 
 		cats, err := q.ListCategories(ctx)
@@ -320,6 +362,12 @@ func TestTenantCannotReadOtherTenant(t *testing.T) {
 			{"GetMedia",
 				func() error { _, err := q.GetMedia(ctx, e.mediaA.ID); return err },
 				func() error { _, err := q.GetMedia(ctx, e.mediaB.ID); return err }},
+			{"GetLatestRevision",
+				func() error { _, err := q.GetLatestRevision(ctx, e.postA.ID); return err },
+				func() error { _, err := q.GetLatestRevision(ctx, e.postB.ID); return err }},
+			{"GetRouteByPath",
+				func() error { _, err := q.GetRouteByPath(ctx, e.routeA.Path); return err },
+				func() error { _, err := q.GetRouteByPath(ctx, e.routeB.Path); return err }},
 			{"GetUser",
 				func() error { _, err := q.GetUser(ctx, e.alice); return err },
 				func() error { _, err := q.GetUser(ctx, e.bob); return err }},
@@ -336,7 +384,7 @@ func TestTenantCannotReadOtherTenant(t *testing.T) {
 	})
 
 	// Raw SQL, with no WHERE clause at all, still sees only A.
-	for _, table := range []string{"tenants", "memberships", "contents", "categories", "tags", "content_categories", "content_tags", "media"} {
+	for _, table := range []string{"tenants", "memberships", "contents", "content_revisions", "categories", "tags", "content_categories", "content_tags", "media", "routes"} {
 		foreign := e.countInTenant(t, e.tenantA, "SELECT count(*) FROM "+table+" WHERE "+tenantColumn(table)+" <> $1", e.tenantA)
 		if foreign != 0 {
 			t.Errorf("%s: %d rows of other tenants visible", table, foreign)
@@ -373,9 +421,9 @@ func TestTenantCannotWriteOtherTenant(t *testing.T) {
 	ctx := e.ctxA
 
 	e.inA(t, func(q *dbgen.Queries) error {
-		n, err := q.UpdateContentTitle(ctx, dbgen.UpdateContentTitleParams{ID: e.postB.ID, Title: "hijacked"})
+		n, err := q.PublishRevision(ctx, dbgen.PublishRevisionParams{ContentID: e.postB.ID, RevisionID: nil})
 		if err != nil || n != 0 {
-			t.Errorf("UpdateContentTitle on B's content: rows=%d err=%v, want 0 rows", n, err)
+			t.Errorf("unpublishing B's content: rows=%d err=%v, want 0 rows", n, err)
 		}
 		n, err = q.DeleteContent(ctx, e.postB.ID)
 		if err != nil || n != 0 {
@@ -402,13 +450,25 @@ func TestTenantCannotWriteOtherTenant(t *testing.T) {
 			return err
 		}},
 		{"page under B's content", "23503", func(q *dbgen.Queries) error {
-			p := newPost("x", e.alice)
+			p := newPost(e.alice)
 			p.Type, p.ParentID = "page", &e.postB.ID
 			_, err := q.CreateContent(ctx, p)
 			return err
 		}},
 		{"content authored by a non-member", "23503", func(q *dbgen.Queries) error {
-			_, err := q.CreateContent(ctx, newPost("x", e.bob))
+			_, err := q.CreateContent(ctx, newPost(e.bob))
+			return err
+		}},
+		{"revision of B's content", "23503", func(q *dbgen.Queries) error {
+			_, err := q.CreateRevision(ctx, newRevision(e.postB.ID, "x", e.alice))
+			return err
+		}},
+		{"publish B's revision on A's content", "23503", func(q *dbgen.Queries) error {
+			_, err := q.PublishRevision(ctx, dbgen.PublishRevisionParams{ContentID: e.postA.ID, RevisionID: &e.revB.ID})
+			return err
+		}},
+		{"route to B's content", "23503", func(q *dbgen.Queries) error {
+			_, err := q.CreateRoute(ctx, dbgen.CreateRouteParams{Path: "/x/", Kind: "redirect", ContentID: &e.postB.ID})
 			return err
 		}},
 	}
@@ -432,13 +492,13 @@ func TestTenantCannotWriteOtherTenant(t *testing.T) {
 		}
 	}
 
-	// B's data is untouched.
-	var title string
-	if err := e.admin.QueryRow(context.Background(), "SELECT title FROM contents WHERE id = $1", e.postB.ID).Scan(&title); err != nil {
+	// B's content is still there and published.
+	var published *int64
+	if err := e.admin.QueryRow(context.Background(), "SELECT published_revision_id FROM contents WHERE id = $1", e.postB.ID).Scan(&published); err != nil {
 		t.Fatal(err)
 	}
-	if title != e.postB.Title {
-		t.Errorf("B's content title = %q, want %q", title, e.postB.Title)
+	if published == nil || *published != e.revB.ID {
+		t.Errorf("B's published revision = %v, want %d", published, e.revB.ID)
 	}
 }
 
@@ -461,7 +521,7 @@ func TestNoTenantSeesNothing(t *testing.T) {
 		t.Errorf("InTenant without tenant: err = %v, want ErrNoTenant", err)
 	}
 
-	for _, table := range []string{"tenants", "users", "memberships", "contents", "categories", "tags", "content_categories", "content_tags", "media"} {
+	for _, table := range []string{"tenants", "users", "memberships", "contents", "content_revisions", "categories", "tags", "content_categories", "content_tags", "media", "routes"} {
 		var n int
 		if err := e.app.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&n); err != nil {
 			t.Fatalf("%s: %v", table, err)
@@ -512,7 +572,7 @@ func TestContentNumbersArePerTenant(t *testing.T) {
 		t.Fatalf("first numbers: A=%d B=%d, want 1 and 1", e.postA.Number, e.postB.Number)
 	}
 	e.inA(t, func(q *dbgen.Queries) error {
-		c, err := q.CreateContent(e.ctxA, newPost("second", e.alice))
+		c, err := q.CreateContent(e.ctxA, newPost(e.alice))
 		if err != nil {
 			return err
 		}
@@ -527,12 +587,12 @@ func TestExplicitContentNumberAdvancesCounter(t *testing.T) {
 	e := newTestEnv(t)
 	// As when keeping a WordPress post ID on import.
 	err := e.execInTenant(e.tenantA,
-		"INSERT INTO contents (number, type, body, body_schema_version) VALUES (241, 'post', '{}', 1)")
+		"INSERT INTO contents (number, type) VALUES (241, 'post')")
 	if err != nil {
 		t.Fatal(err)
 	}
 	e.inA(t, func(q *dbgen.Queries) error {
-		c, err := q.CreateContent(e.ctxA, newPost("after import", e.alice))
+		c, err := q.CreateContent(e.ctxA, newPost(e.alice))
 		if err != nil {
 			return err
 		}
@@ -546,7 +606,7 @@ func TestExplicitContentNumberAdvancesCounter(t *testing.T) {
 func TestAllDigitSlugIsRejected(t *testing.T) {
 	e := newTestEnv(t)
 	err := e.db.InTenant(e.ctxA, func(q *dbgen.Queries) error {
-		p := newPost("x", e.alice)
+		p := newPost(e.alice)
 		slug := "1"
 		p.Slug = &slug
 		_, err := q.CreateContent(e.ctxA, p)
@@ -566,6 +626,121 @@ func TestRemovingAnAuthorIsRefused(t *testing.T) {
 	}
 }
 
+func TestRevisions(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := e.ctxA
+
+	attempts := []struct {
+		name     string
+		wantCode string
+		run      func(q *dbgen.Queries) error
+	}{
+		{"publish another content's revision", "23503", func(q *dbgen.Queries) error {
+			other, err := q.CreateContent(ctx, newPost(e.alice))
+			if err != nil {
+				return err
+			}
+			_, err = q.PublishRevision(ctx, dbgen.PublishRevisionParams{ContentID: other.ID, RevisionID: &e.revA.ID})
+			return err
+		}},
+		{"delete the published revision", "23503", func(q *dbgen.Queries) error {
+			_, err := q.DeleteRevision(ctx, e.revA.ID)
+			return err
+		}},
+	}
+	for _, a := range attempts {
+		err := e.db.InTenant(ctx, a.run)
+		if code := pgCode(err); code != a.wantCode {
+			t.Errorf("%s: err = %v, want SQLSTATE %s", a.name, err, a.wantCode)
+		}
+	}
+
+	// Revisions are append-only, so a live revision never changes.
+	err := e.execInTenant(e.tenantA, "UPDATE content_revisions SET title = 'changed'")
+	if code := pgCode(err); code != "42501" {
+		t.Errorf("updating a revision: err = %v, want SQLSTATE 42501", err)
+	}
+
+	// Saving a new draft leaves the published revision alone.
+	e.inA(t, func(q *dbgen.Queries) error {
+		draft, err := q.CreateRevision(ctx, newRevision(e.postA.ID, "draft", e.alice))
+		if err != nil {
+			return err
+		}
+		latest, err := q.GetLatestRevision(ctx, e.postA.ID)
+		if err != nil {
+			return err
+		}
+		c, err := q.GetContent(ctx, e.postA.ID)
+		if err != nil {
+			return err
+		}
+		if latest.ID != draft.ID || c.PublishedRevisionID == nil || *c.PublishedRevisionID != e.revA.ID {
+			t.Errorf("latest = %d (want %d), published = %v (want %d)", latest.ID, draft.ID, c.PublishedRevisionID, e.revA.ID)
+		}
+		return nil
+	})
+
+	// Deleting a content takes its revisions and routes with it.
+	e.inA(t, func(q *dbgen.Queries) error {
+		n, err := q.DeleteContent(ctx, e.postA.ID)
+		if err != nil || n != 1 {
+			t.Errorf("DeleteContent: rows=%d err=%v, want 1", n, err)
+		}
+		return nil
+	})
+	if n := e.countInTenant(t, e.tenantA, "SELECT (SELECT count(*) FROM content_revisions) + (SELECT count(*) FROM routes)"); n != 0 {
+		t.Errorf("%d revisions and routes left after deleting the content, want 0", n)
+	}
+}
+
+func TestRoutes(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := e.ctxA
+
+	attempts := []struct {
+		name     string
+		path     string
+		wantCode string
+	}{
+		{"same path as an existing route", e.routeA.Path, "23505"},
+		{"query string", "/?p=123", "23514"},
+		{"percent-encoded", "/%E3%81%8A/", "23514"},
+		{"not NFC", "/\u30ab\u3099/", "23514"}, // カ + combining dakuten
+		{"relative", "posts/x/", "23514"},
+	}
+	for _, a := range attempts {
+		path := a.path
+		err := e.db.InTenant(ctx, func(q *dbgen.Queries) error {
+			_, err := q.CreateRoute(ctx, dbgen.CreateRouteParams{Path: path, Kind: "redirect", CategoryID: &e.catA.ID})
+			return err
+		})
+		if code := pgCode(err); code != a.wantCode {
+			t.Errorf("%s (%q): err = %v, want SQLSTATE %s", a.name, path, err, a.wantCode)
+		}
+	}
+
+	// A second canonical URL for the same content is refused.
+	err := e.db.InTenant(ctx, func(q *dbgen.Queries) error {
+		_, err := q.CreateRoute(ctx, dbgen.CreateRouteParams{Path: "/other/", Kind: "canonical", ContentID: &e.postA.ID})
+		return err
+	})
+	if code := pgCode(err); code != "23505" {
+		t.Errorf("second canonical route: err = %v, want SQLSTATE 23505", err)
+	}
+
+	// Paths are per tenant (B already uses /posts/b/), and NFC Japanese
+	// paths are accepted as redirects.
+	e.inA(t, func(q *dbgen.Queries) error {
+		for _, p := range []string{e.routeB.Path, "/お知らせ/"} {
+			if _, err := q.CreateRoute(ctx, dbgen.CreateRouteParams{Path: p, Kind: "redirect", ContentID: &e.postA.ID}); err != nil {
+				t.Errorf("route %q in A: %v", p, err)
+			}
+		}
+		return nil
+	})
+}
+
 func TestConcurrentContentNumbersAreUnique(t *testing.T) {
 	e := newTestEnv(t)
 	const n = 10
@@ -574,7 +749,7 @@ func TestConcurrentContentNumbersAreUnique(t *testing.T) {
 	for range n {
 		wg.Go(func() {
 			err := e.db.InTenant(e.ctxA, func(q *dbgen.Queries) error {
-				c, err := q.CreateContent(e.ctxA, newPost("concurrent", e.alice))
+				c, err := q.CreateContent(e.ctxA, newPost(e.alice))
 				nums <- c.Number
 				return err
 			})

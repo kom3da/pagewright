@@ -41,24 +41,16 @@ func (q *Queries) AddContentTag(ctx context.Context, arg AddContentTagParams) er
 }
 
 const createContent = `-- name: CreateContent :one
-INSERT INTO contents (type, title, slug, parent_id, body, body_schema_version,
-  status, published_at, author_id, fields)
-VALUES ($1, $2, $3, $4, $5, $6,
-  $7, $8, $9, $10)
-RETURNING tenant_id, id, number, type, title, slug, parent_id, body, body_schema_version, status, published_at, author_id, fields, created_at, updated_at
+INSERT INTO contents (type, slug, parent_id, author_id)
+VALUES ($1, $2, $3, $4)
+RETURNING tenant_id, id, number, type, slug, parent_id, author_id, published_revision_id, scheduled_revision_id, scheduled_at, published_at, source_format, source_body, created_at, updated_at
 `
 
 type CreateContentParams struct {
-	Type              string
-	Title             string
-	Slug              *string
-	ParentID          *int64
-	Body              []byte
-	BodySchemaVersion int64
-	Status            string
-	PublishedAt       *time.Time
-	AuthorID          *uuid.UUID
-	Fields            []byte
+	Type     string
+	Slug     *string
+	ParentID *int64
+	AuthorID *uuid.UUID
 }
 
 // The number is assigned by the contents_assign_number trigger, which locks
@@ -66,15 +58,9 @@ type CreateContentParams struct {
 func (q *Queries) CreateContent(ctx context.Context, arg CreateContentParams) (Content, error) {
 	row := q.db.QueryRow(ctx, createContent,
 		arg.Type,
-		arg.Title,
 		arg.Slug,
 		arg.ParentID,
-		arg.Body,
-		arg.BodySchemaVersion,
-		arg.Status,
-		arg.PublishedAt,
 		arg.AuthorID,
-		arg.Fields,
 	)
 	var i Content
 	err := row.Scan(
@@ -82,17 +68,56 @@ func (q *Queries) CreateContent(ctx context.Context, arg CreateContentParams) (C
 		&i.ID,
 		&i.Number,
 		&i.Type,
-		&i.Title,
 		&i.Slug,
 		&i.ParentID,
-		&i.Body,
-		&i.BodySchemaVersion,
-		&i.Status,
-		&i.PublishedAt,
 		&i.AuthorID,
-		&i.Fields,
+		&i.PublishedRevisionID,
+		&i.ScheduledRevisionID,
+		&i.ScheduledAt,
+		&i.PublishedAt,
+		&i.SourceFormat,
+		&i.SourceBody,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createRevision = `-- name: CreateRevision :one
+INSERT INTO content_revisions (content_id, title, body, body_schema_version, fields, created_by)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING tenant_id, id, content_id, title, body, body_schema_version, fields, created_by, created_at
+`
+
+type CreateRevisionParams struct {
+	ContentID         int64
+	Title             string
+	Body              []byte
+	BodySchemaVersion int64
+	Fields            []byte
+	CreatedBy         *uuid.UUID
+}
+
+func (q *Queries) CreateRevision(ctx context.Context, arg CreateRevisionParams) (ContentRevision, error) {
+	row := q.db.QueryRow(ctx, createRevision,
+		arg.ContentID,
+		arg.Title,
+		arg.Body,
+		arg.BodySchemaVersion,
+		arg.Fields,
+		arg.CreatedBy,
+	)
+	var i ContentRevision
+	err := row.Scan(
+		&i.TenantID,
+		&i.ID,
+		&i.ContentID,
+		&i.Title,
+		&i.Body,
+		&i.BodySchemaVersion,
+		&i.Fields,
+		&i.CreatedBy,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -109,8 +134,21 @@ func (q *Queries) DeleteContent(ctx context.Context, id int64) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
+const deleteRevision = `-- name: DeleteRevision :execrows
+DELETE FROM content_revisions WHERE id = $1
+`
+
+// Fails with a foreign key error while the revision is published or scheduled.
+func (q *Queries) DeleteRevision(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRevision, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getContent = `-- name: GetContent :one
-SELECT tenant_id, id, number, type, title, slug, parent_id, body, body_schema_version, status, published_at, author_id, fields, created_at, updated_at FROM contents WHERE id = $1
+SELECT tenant_id, id, number, type, slug, parent_id, author_id, published_revision_id, scheduled_revision_id, scheduled_at, published_at, source_format, source_body, created_at, updated_at FROM contents WHERE id = $1
 `
 
 func (q *Queries) GetContent(ctx context.Context, id int64) (Content, error) {
@@ -121,15 +159,15 @@ func (q *Queries) GetContent(ctx context.Context, id int64) (Content, error) {
 		&i.ID,
 		&i.Number,
 		&i.Type,
-		&i.Title,
 		&i.Slug,
 		&i.ParentID,
-		&i.Body,
-		&i.BodySchemaVersion,
-		&i.Status,
-		&i.PublishedAt,
 		&i.AuthorID,
-		&i.Fields,
+		&i.PublishedRevisionID,
+		&i.ScheduledRevisionID,
+		&i.ScheduledAt,
+		&i.PublishedAt,
+		&i.SourceFormat,
+		&i.SourceBody,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -137,7 +175,7 @@ func (q *Queries) GetContent(ctx context.Context, id int64) (Content, error) {
 }
 
 const getContentByNumber = `-- name: GetContentByNumber :one
-SELECT tenant_id, id, number, type, title, slug, parent_id, body, body_schema_version, status, published_at, author_id, fields, created_at, updated_at FROM contents WHERE number = $1
+SELECT tenant_id, id, number, type, slug, parent_id, author_id, published_revision_id, scheduled_revision_id, scheduled_at, published_at, source_format, source_body, created_at, updated_at FROM contents WHERE number = $1
 `
 
 func (q *Queries) GetContentByNumber(ctx context.Context, number int64) (Content, error) {
@@ -148,50 +186,99 @@ func (q *Queries) GetContentByNumber(ctx context.Context, number int64) (Content
 		&i.ID,
 		&i.Number,
 		&i.Type,
-		&i.Title,
 		&i.Slug,
 		&i.ParentID,
-		&i.Body,
-		&i.BodySchemaVersion,
-		&i.Status,
-		&i.PublishedAt,
 		&i.AuthorID,
-		&i.Fields,
+		&i.PublishedRevisionID,
+		&i.ScheduledRevisionID,
+		&i.ScheduledAt,
+		&i.PublishedAt,
+		&i.SourceFormat,
+		&i.SourceBody,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const listContents = `-- name: ListContents :many
-SELECT tenant_id, id, number, type, title, slug, parent_id, body, body_schema_version, status, published_at, author_id, fields, created_at, updated_at FROM contents WHERE type = $1 ORDER BY number
+const getLatestRevision = `-- name: GetLatestRevision :one
+SELECT tenant_id, id, content_id, title, body, body_schema_version, fields, created_by, created_at FROM content_revisions WHERE content_id = $1 ORDER BY id DESC LIMIT 1
 `
 
-func (q *Queries) ListContents(ctx context.Context, type_ string) ([]Content, error) {
+func (q *Queries) GetLatestRevision(ctx context.Context, contentID int64) (ContentRevision, error) {
+	row := q.db.QueryRow(ctx, getLatestRevision, contentID)
+	var i ContentRevision
+	err := row.Scan(
+		&i.TenantID,
+		&i.ID,
+		&i.ContentID,
+		&i.Title,
+		&i.Body,
+		&i.BodySchemaVersion,
+		&i.Fields,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listContents = `-- name: ListContents :many
+SELECT c.tenant_id, c.id, c.number, c.type, c.slug, c.parent_id, c.author_id, c.published_revision_id, c.scheduled_revision_id, c.scheduled_at, c.published_at, c.source_format, c.source_body, c.created_at, c.updated_at, coalesce(r.title, '')::text AS title
+FROM contents c
+LEFT JOIN LATERAL (
+  SELECT title FROM content_revisions
+  WHERE content_id = c.id ORDER BY id DESC LIMIT 1
+) r ON true
+WHERE c.type = $1
+ORDER BY c.number
+`
+
+type ListContentsRow struct {
+	TenantID            uuid.UUID
+	ID                  int64
+	Number              int64
+	Type                string
+	Slug                *string
+	ParentID            *int64
+	AuthorID            *uuid.UUID
+	PublishedRevisionID *int64
+	ScheduledRevisionID *int64
+	ScheduledAt         *time.Time
+	PublishedAt         *time.Time
+	SourceFormat        *string
+	SourceBody          *string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	Title               string
+}
+
+// Contents of a type with the title of their latest revision.
+func (q *Queries) ListContents(ctx context.Context, type_ string) ([]ListContentsRow, error) {
 	rows, err := q.db.Query(ctx, listContents, type_)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Content
+	var items []ListContentsRow
 	for rows.Next() {
-		var i Content
+		var i ListContentsRow
 		if err := rows.Scan(
 			&i.TenantID,
 			&i.ID,
 			&i.Number,
 			&i.Type,
-			&i.Title,
 			&i.Slug,
 			&i.ParentID,
-			&i.Body,
-			&i.BodySchemaVersion,
-			&i.Status,
-			&i.PublishedAt,
 			&i.AuthorID,
-			&i.Fields,
+			&i.PublishedRevisionID,
+			&i.ScheduledRevisionID,
+			&i.ScheduledAt,
+			&i.PublishedAt,
+			&i.SourceFormat,
+			&i.SourceBody,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Title,
 		); err != nil {
 			return nil, err
 		}
@@ -203,17 +290,22 @@ func (q *Queries) ListContents(ctx context.Context, type_ string) ([]Content, er
 	return items, nil
 }
 
-const updateContentTitle = `-- name: UpdateContentTitle :execrows
-UPDATE contents SET title = $1, updated_at = now() WHERE id = $2
+const publishRevision = `-- name: PublishRevision :execrows
+UPDATE contents
+SET published_revision_id = $1,
+    published_at = coalesce(published_at, now()),
+    updated_at = now()
+WHERE id = $2
 `
 
-type UpdateContentTitleParams struct {
-	Title string
-	ID    int64
+type PublishRevisionParams struct {
+	RevisionID *int64
+	ContentID  int64
 }
 
-func (q *Queries) UpdateContentTitle(ctx context.Context, arg UpdateContentTitleParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateContentTitle, arg.Title, arg.ID)
+// Makes a revision of the content live. Keeps the first publication date.
+func (q *Queries) PublishRevision(ctx context.Context, arg PublishRevisionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, publishRevision, arg.RevisionID, arg.ContentID)
 	if err != nil {
 		return 0, err
 	}

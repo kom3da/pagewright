@@ -72,23 +72,30 @@ CREATE TABLE contents (
   -- Kind of content ('post', 'page', ...). Free text so new kinds need no
   -- schema change; the application validates known kinds.
   type text NOT NULL CHECK (type ~ '^[a-z][a-z0-9_]*$'),
-  title text NOT NULL DEFAULT '',
   -- Last path segment. NULL means the URL falls back to the number, so
   -- all-digit slugs are rejected to keep the two from colliding.
   -- Japanese slugs migrated from WordPress are allowed.
   slug text CHECK (slug <> '' AND slug !~ '/' AND slug !~ '^[0-9]+$'),
   parent_id bigint,
-  body jsonb NOT NULL,
-  body_schema_version bigint NOT NULL CHECK (body_schema_version > 0),
-  status text NOT NULL DEFAULT 'draft'
-    CHECK (status IN ('draft', 'scheduled', 'published')),
-  published_at timestamptz,
   author_id uuid,
-  -- Extra fields (e.g. migrated ACF values).
-  fields jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(fields) = 'object'),
+  -- Title, body and extra fields live in content_revisions. The latest
+  -- revision is the one being edited; these point at what is live now and
+  -- what goes live at scheduled_at. Draft / scheduled / published status is
+  -- derived from them.
+  published_revision_id bigint,
+  scheduled_revision_id bigint,
+  scheduled_at timestamptz,
+  -- First publication date, shown on the page. Kept when unpublished.
+  published_at timestamptz,
+  -- Body as it was in the source CMS on import (e.g. WordPress HTML), kept
+  -- verbatim so unconverted parts can be fixed later.
+  source_format text CHECK (source_format ~ '^[a-z][a-z0-9_]*$'),
+  source_body text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  CHECK (status = 'draft' OR published_at IS NOT NULL),
+  CHECK ((scheduled_revision_id IS NULL) = (scheduled_at IS NULL)),
+  CHECK (published_revision_id IS NULL OR published_at IS NOT NULL),
+  CHECK ((source_format IS NULL) = (source_body IS NULL)),
   -- The key includes tenant_id so a key conflict never reveals that an id
   -- is used by another tenant.
   PRIMARY KEY (tenant_id, id),
@@ -133,6 +140,44 @@ $$;
 -- +goose StatementEnd
 CREATE TRIGGER contents_assign_number BEFORE INSERT ON contents
   FOR EACH ROW EXECUTE FUNCTION contents_assign_number();
+
+-- Saved versions of a content's title, body and extra fields. Rows are
+-- never updated (the app has no UPDATE grant): each save adds a revision,
+-- so a published revision cannot change under the live site.
+CREATE TABLE content_revisions (
+  tenant_id uuid NOT NULL DEFAULT app_current_tenant(),
+  id bigint GENERATED ALWAYS AS IDENTITY,
+  content_id bigint NOT NULL,
+  title text NOT NULL DEFAULT '',
+  -- ProseMirror (Tiptap) document JSON.
+  body jsonb NOT NULL CHECK (jsonb_typeof(body) = 'object'),
+  body_schema_version bigint NOT NULL CHECK (body_schema_version > 0),
+  -- Extra fields (e.g. migrated ACF values).
+  fields jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(fields) = 'object'),
+  created_by uuid,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, id),
+  -- Lets contents point at a revision of that same content; also serves
+  -- "latest revision of a content" lookups.
+  UNIQUE (tenant_id, content_id, id),
+  FOREIGN KEY (tenant_id, content_id) REFERENCES contents (tenant_id, id)
+    ON DELETE CASCADE,
+  FOREIGN KEY (tenant_id, created_by) REFERENCES memberships (tenant_id, user_id)
+);
+CREATE INDEX content_revisions_created_by_idx
+  ON content_revisions (tenant_id, created_by);
+
+-- Added after content_revisions exists. A published or scheduled revision
+-- must belong to the same content, and cannot be deleted while in use.
+-- Both tables are new in this migration, so validating is instant.
+-- squawk-ignore adding-foreign-key-constraint
+ALTER TABLE contents
+  ADD CONSTRAINT contents_published_revision_fkey
+    FOREIGN KEY (tenant_id, id, published_revision_id)
+    REFERENCES content_revisions (tenant_id, content_id, id),
+  ADD CONSTRAINT contents_scheduled_revision_fkey
+    FOREIGN KEY (tenant_id, id, scheduled_revision_id)
+    REFERENCES content_revisions (tenant_id, content_id, id);
 
 CREATE TABLE categories (
   tenant_id uuid NOT NULL DEFAULT app_current_tenant() REFERENCES tenants (id),
@@ -203,6 +248,45 @@ CREATE TABLE media (
 );
 CREATE INDEX media_uploaded_by_idx ON media (tenant_id, uploaded_by);
 
+-- Every public path of a tenant: the canonical URL of each content,
+-- category and tag, plus old URLs kept as redirects. One table so that no
+-- two things can claim the same path. Redirects point at the target, not
+-- at a path, so they follow later URL changes.
+CREATE TABLE routes (
+  tenant_id uuid NOT NULL DEFAULT app_current_tenant() REFERENCES tenants (id),
+  id bigint GENERATED ALWAYS AS IDENTITY,
+  -- Decoded (no %XX) and NFC-normalized, so Japanese paths compare
+  -- reliably. No query or fragment: static files cannot serve /?p=123.
+  path text NOT NULL CHECK (
+    path ~ '^/' AND path !~ '//' AND path !~ '[?#]'
+    AND path !~ '%[0-9A-Fa-f]{2}' AND path IS NFC NORMALIZED
+  ),
+  kind text NOT NULL CHECK (kind IN ('canonical', 'redirect')),
+  content_id bigint,
+  category_id bigint,
+  tag_id bigint,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (num_nonnulls(content_id, category_id, tag_id) = 1),
+  PRIMARY KEY (tenant_id, id),
+  UNIQUE (tenant_id, path),
+  FOREIGN KEY (tenant_id, content_id) REFERENCES contents (tenant_id, id)
+    ON DELETE CASCADE,
+  FOREIGN KEY (tenant_id, category_id) REFERENCES categories (tenant_id, id)
+    ON DELETE CASCADE,
+  FOREIGN KEY (tenant_id, tag_id) REFERENCES tags (tenant_id, id)
+    ON DELETE CASCADE
+);
+CREATE INDEX routes_content_idx ON routes (tenant_id, content_id);
+CREATE INDEX routes_category_idx ON routes (tenant_id, category_id);
+CREATE INDEX routes_tag_idx ON routes (tenant_id, tag_id);
+-- At most one canonical URL per target.
+CREATE UNIQUE INDEX routes_canonical_content_key ON routes (tenant_id, content_id)
+  WHERE kind = 'canonical' AND content_id IS NOT NULL;
+CREATE UNIQUE INDEX routes_canonical_category_key ON routes (tenant_id, category_id)
+  WHERE kind = 'canonical' AND category_id IS NOT NULL;
+CREATE UNIQUE INDEX routes_canonical_tag_key ON routes (tenant_id, tag_id)
+  WHERE kind = 'canonical' AND tag_id IS NOT NULL;
+
 -- Row level security. Not FORCEd: the owner (migration runner) bypasses
 -- it on purpose; the app never runs as the owner.
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
@@ -227,6 +311,11 @@ CREATE POLICY tenant_isolation ON memberships
 
 ALTER TABLE contents ENABLE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON contents
+  USING (tenant_id = app_current_tenant())
+  WITH CHECK (tenant_id = app_current_tenant());
+
+ALTER TABLE content_revisions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON content_revisions
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
@@ -255,6 +344,11 @@ CREATE POLICY tenant_isolation ON media
   USING (tenant_id = app_current_tenant())
   WITH CHECK (tenant_id = app_current_tenant());
 
+ALTER TABLE routes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON routes
+  USING (tenant_id = app_current_tenant())
+  WITH CHECK (tenant_id = app_current_tenant());
+
 -- Login lookup: the only path that reads users without a tenant. Runs as
 -- the owner, which is not subject to RLS. Returns at most one row and only
 -- the columns login needs.
@@ -279,14 +373,16 @@ GRANT SELECT, UPDATE (name) ON tenants TO pagewright_app;
 GRANT UPDATE (last_content_number) ON tenants TO pagewright_app;
 GRANT SELECT ON users, memberships TO pagewright_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON
-  contents, categories, tags, content_categories, content_tags, media
+  contents, categories, tags, content_categories, content_tags, media, routes
   TO pagewright_app;
+-- Revisions are append-only.
+GRANT SELECT, INSERT, DELETE ON content_revisions TO pagewright_app;
 
 -- +goose Down
 -- squawk-ignore ban-drop-function
 DROP FUNCTION find_user_by_email(text);
 -- squawk-ignore ban-drop-table
-DROP TABLE content_tags, content_categories, media, tags, categories, contents,
-  memberships, users, tenants;
+DROP TABLE routes, content_tags, content_categories, media, tags, categories,
+  content_revisions, contents, memberships, users, tenants;
 -- squawk-ignore ban-drop-function
 DROP FUNCTION contents_assign_number(), app_current_tenant();

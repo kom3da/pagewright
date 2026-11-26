@@ -21,27 +21,39 @@ type Category struct {
 }
 
 type Content struct {
-	TenantID          uuid.UUID
-	ID                int64
-	Number            int64
-	Type              string
-	Title             string
-	Slug              *string
-	ParentID          *int64
-	Body              []byte
-	BodySchemaVersion int64
-	Status            string
-	PublishedAt       *time.Time
-	AuthorID          *uuid.UUID
-	Fields            []byte
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	TenantID            uuid.UUID
+	ID                  int64
+	Number              int64
+	Type                string
+	Slug                *string
+	ParentID            *int64
+	AuthorID            *uuid.UUID
+	PublishedRevisionID *int64
+	ScheduledRevisionID *int64
+	ScheduledAt         *time.Time
+	PublishedAt         *time.Time
+	SourceFormat        *string
+	SourceBody          *string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type ContentCategory struct {
 	TenantID   uuid.UUID
 	ContentID  int64
 	CategoryID int64
+}
+
+type ContentRevision struct {
+	TenantID          uuid.UUID
+	ID                int64
+	ContentID         int64
+	Title             string
+	Body              []byte
+	BodySchemaVersion int64
+	Fields            []byte
+	CreatedBy         *uuid.UUID
+	CreatedAt         time.Time
 }
 
 type ContentTag struct {
@@ -69,6 +81,17 @@ type Membership struct {
 	UserID    uuid.UUID
 	Role      string
 	CreatedAt time.Time
+}
+
+type Route struct {
+	TenantID   uuid.UUID
+	ID         int64
+	Path       string
+	Kind       string
+	ContentID  *int64
+	CategoryID *int64
+	TagID      *int64
+	CreatedAt  time.Time
 }
 
 type Tag struct {
