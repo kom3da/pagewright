@@ -1,8 +1,10 @@
 import type {
+  Build,
   Category,
   CategoryInput,
   CategoryPatch,
   ContentDetail,
+  ContentFilter,
   ContentPatch,
   ContentSummary,
   ContentType,
@@ -120,7 +122,12 @@ export const api = {
   me: () => get<Me>("/me"),
   selectSite: (siteId: string) => post<Me>("/me/site", { siteId }),
 
-  listContents: (type: ContentType) => get<ContentSummary[]>(`/contents?type=${type}`),
+  listContents: (type: ContentType, filter: ContentFilter = {}) => {
+    const params = new URLSearchParams({ type });
+    if (filter.q) params.set("q", filter.q);
+    if (filter.status) params.set("status", filter.status);
+    return get<ContentSummary[]>(`/contents?${params}`);
+  },
   createContent: (type: ContentType) => post<ContentDetail>("/contents", { type }),
   getContent: (id: number) => get<ContentDetail>(`/contents/${id}`),
   saveDraft: (id: number, input: DraftInput) => put<ContentDetail>(`/contents/${id}/draft`, input),
@@ -163,6 +170,8 @@ export const api = {
   getSite: () => get<SiteSettings>("/site"),
   saveSite: (input: SiteSettingsInput) => put<SiteSettings>("/site", input),
   buildSite: () => post<void>("/site/build"),
+  /** Newest first. */
+  listBuilds: (limit = 5) => get<Build[]>(`/site/builds?limit=${limit}`),
 
   /** Newest first, SUBMISSIONS_PAGE_SIZE at a time; `before` is the last id received. */
   listSubmissions: (before?: number) =>

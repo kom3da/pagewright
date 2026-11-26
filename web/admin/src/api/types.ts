@@ -133,4 +133,22 @@ export type Submission = {
 /** A login-free link to the latest revision. `url` is returned only when created. */
 export type PreviewLink = { id: number; url?: string; expiresAt: string; createdAt: string };
 
+/** Filters of GET /api/contents. `q` matches the title or the URL (英数字). */
+export type ContentFilter = { q?: string; status?: ContentStatus };
+
+/** One export of the public site (GET /api/site/builds). */
+export type Build = {
+  id: number;
+  startedAt: string;
+  finishedAt: string;
+  /** All files, files that changed, files that were removed. */
+  files: number;
+  changed: number;
+  removed: number;
+  /** Notes for the user, such as posts that could not be written. */
+  warnings: string[];
+  /** Only when the build failed. */
+  error: string | null;
+};
+
 export type ApiErrorBody = { error: { code: string; message: string; field?: string } };

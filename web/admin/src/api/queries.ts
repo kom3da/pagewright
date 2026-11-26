@@ -1,11 +1,15 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { api, SUBMISSIONS_PAGE_SIZE } from "./client";
-import type { ContentType } from "./types";
+import type { ContentFilter, ContentType } from "./types";
 
 export const meQuery = queryOptions({ queryKey: ["me"], queryFn: api.me, staleTime: 60_000 });
 
-export const contentsQuery = (type: ContentType) =>
-  queryOptions({ queryKey: ["contents", type], queryFn: () => api.listContents(type) });
+// Filtered lists share the ["contents", type] prefix, so invalidating it refreshes them all.
+export const contentsQuery = (type: ContentType, filter: ContentFilter = {}) =>
+  queryOptions({
+    queryKey: filter.q || filter.status ? ["contents", type, filter] : ["contents", type],
+    queryFn: () => api.listContents(type, filter),
+  });
 
 export const contentQuery = (id: number) =>
   queryOptions({ queryKey: ["content", id], queryFn: () => api.getContent(id) });
@@ -26,6 +30,12 @@ export const tagsQuery = queryOptions({ queryKey: ["tags"], queryFn: api.listTag
 export const mediaQuery = queryOptions({ queryKey: ["media"], queryFn: api.listMedia });
 
 export const siteQuery = queryOptions({ queryKey: ["site"], queryFn: api.getSite });
+
+/** The latest export of the public site, for the home screen. */
+export const buildsQuery = queryOptions({
+  queryKey: ["builds"],
+  queryFn: () => api.listBuilds(1),
+});
 
 // Contact messages are personal data: never persisted, and dropped from memory as soon
 // as no screen shows them.

@@ -1,5 +1,6 @@
 import { HttpResponse, http } from "msw";
 import type {
+  Build,
   Category,
   ContentDetail,
   ContentSummary,
@@ -30,6 +31,8 @@ type Db = {
   /** The real server stores only a hash of the token; the mock keeps it for tests. */
   previewLinks: (PreviewLink & { contentId: number; token: string })[];
   builds: number;
+  /** Finished builds, newest first (GET /api/site/builds). */
+  buildLog: Build[];
   nextId: number;
 };
 
@@ -159,6 +162,18 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
     ],
     previewLinks: [],
     builds: 0,
+    buildLog: [
+      {
+        id: 1,
+        startedAt: "2026-11-20T01:05:00Z",
+        finishedAt: "2026-11-20T01:05:03Z",
+        files: 24,
+        changed: 3,
+        removed: 0,
+        warnings: [],
+        error: null,
+      },
+    ],
     nextId: 100,
     ...overrides,
   };
@@ -379,10 +394,24 @@ export const handlers = [
   http.get("/api/contents", ({ request }) => {
     const denied = guard(request);
     if (denied) return denied;
-    const type = new URL(request.url).searchParams.get("type");
+    const params = new URL(request.url).searchParams;
+    const type = params.get("type");
+    const q = params.get("q")?.trim().toLowerCase();
+    const status = params.get("status");
+    if (q && [...q].length > 100) {
+      return error(422, "invalid_q", "検索する言葉は100文字以内で入力してください");
+    }
+    if (status && !["draft", "scheduled", "published"].includes(status)) {
+      return error(422, "invalid_status", "状態の指定が正しくありません");
+    }
     return HttpResponse.json(
       db.contents
         .filter((c) => c.type === type)
+        .filter(
+          (c) =>
+            !q || c.title.toLowerCase().includes(q) || (c.slug ?? "").toLowerCase().includes(q),
+        )
+        .filter((c) => !status || c.status === status)
         .sort((a, b) => b.number - a.number)
         .map(summary),
     );
@@ -806,6 +835,16 @@ export const handlers = [
     if (denied) return denied;
     db.builds++;
     return new HttpResponse(null, { status: 202 });
+  }),
+
+  http.get("/api/site/builds", ({ request }) => {
+    const denied = guard(request);
+    if (denied) return denied;
+    const limit = Number(new URL(request.url).searchParams.get("limit") ?? 5);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+      return error(422, "invalid_limit", "件数は1から50で指定してください");
+    }
+    return HttpResponse.json(db.buildLog.slice(0, limit));
   }),
 ];
 
