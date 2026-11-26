@@ -9,6 +9,7 @@ import type {
   DraftInput,
   Me,
   Media,
+  PreviewLink,
   SiteSettings,
   SiteSettingsInput,
   Submission,
@@ -44,6 +45,7 @@ const fieldsByCode: Record<string, string> = {
   invalid_parent: "parentId",
   invalid_name: "name",
   invalid_publish_at: "publishAt",
+  invalid_days: "days",
   alt_required: "altText",
   file_required: "file",
   unsupported_type: "file",
@@ -129,6 +131,14 @@ export const api = {
     post<ContentDetail>(`/contents/${id}/schedule`, { publishAt }),
   unschedule: (id: number) => request<ContentDetail>("DELETE", `/contents/${id}/schedule`),
   deleteContent: (id: number) => del(`/contents/${id}`),
+
+  /** The returned link has `url`; it cannot be retrieved again later. */
+  createPreviewLink: (contentId: number, days: number) =>
+    post<PreviewLink>(`/contents/${contentId}/preview-links`, { days }),
+  /** Active links only, without `url`. */
+  listPreviewLinks: (contentId: number) =>
+    get<PreviewLink[]>(`/contents/${contentId}/preview-links`),
+  deletePreviewLink: (id: number) => del(`/preview-links/${id}`),
 
   listCategories: () => get<Category[]>("/categories"),
   createCategory: (input: CategoryInput) => post<Category>("/categories", input),

@@ -130,4 +130,7 @@ export type Submission = {
   createdAt: string;
 };
 
+/** A login-free link to the latest revision. `url` is returned only when created. */
+export type PreviewLink = { id: number; url?: string; expiresAt: string; createdAt: string };
+
 export type ApiErrorBody = { error: { code: string; message: string; field?: string } };

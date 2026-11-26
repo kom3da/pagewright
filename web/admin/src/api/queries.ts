@@ -10,6 +10,12 @@ export const contentsQuery = (type: ContentType) =>
 export const contentQuery = (id: number) =>
   queryOptions({ queryKey: ["content", id], queryFn: () => api.getContent(id) });
 
+export const previewLinksQuery = (contentId: number) =>
+  queryOptions({
+    queryKey: ["previewLinks", contentId],
+    queryFn: () => api.listPreviewLinks(contentId),
+  });
+
 export const categoriesQuery = queryOptions({
   queryKey: ["categories"],
   queryFn: api.listCategories,
