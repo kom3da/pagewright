@@ -1,0 +1,19 @@
+/* One checkbox row in the editor's category and tag lists: 44px tall, and the label's
+   click area fills the row height (easy to hit on phones). */
+.root {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+}
+.body {
+  align-items: center;
+}
+.label {
+  padding-block: var(--mantine-spacing-xs);
+  cursor: pointer;
+}
+
+/* Tags wrap into rows: space between items, none between rows (each row is 44px). */
+.wrapList {
+  column-gap: var(--mantine-spacing-lg);
+}

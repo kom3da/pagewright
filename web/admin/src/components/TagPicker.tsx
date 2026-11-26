@@ -15,6 +15,7 @@ import { type KeyboardEvent, useRef, useState } from "react";
 import { api, errorField, errorMessage } from "../api/client";
 import { tagsQuery } from "../api/queries";
 import { slugProblem } from "../lib/slug";
+import choice from "./ChoiceRow.module.css";
 import { ErrorMessage, Loading } from "./ui/feedback";
 
 type Props = { value: number[]; onChange: (ids: number[]) => void };
@@ -51,13 +52,21 @@ export function TagPicker({ value, onChange }: Props) {
                 タグはまだありません。
               </Text>
             ) : (
-              <Group component="ul" gap="lg" m={0} p={0} style={{ listStyle: "none" }}>
+              <Group
+                component="ul"
+                gap={0}
+                m={0}
+                p={0}
+                style={{ listStyle: "none" }}
+                className={choice.wrapList}
+              >
                 {shown.map((t) => (
                   <li key={t.id}>
                     <Checkbox
                       label={t.name}
                       checked={value.includes(t.id)}
                       onChange={(e) => toggle(t.id, e.currentTarget.checked)}
+                      classNames={choice}
                     />
                   </li>
                 ))}

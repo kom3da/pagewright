@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "../api/client";
 import { categoriesQuery } from "../api/queries";
 import { buildCategoryTree, type CategoryNode } from "../lib/categoryTree";
+import choice from "./ChoiceRow.module.css";
 import { AnchorLink } from "./ui/AnchorLink";
 import { ErrorMessage, Loading } from "./ui/feedback";
 
@@ -14,19 +15,16 @@ export function CategoryCheckboxes({ value, onChange }: Props) {
     onChange(checked ? [...value, id] : value.filter((v) => v !== id));
 
   const renderNodes = (nodes: CategoryNode[]) => (
-    <Stack component="ul" gap={6} m={0} p={0} style={{ listStyle: "none" }}>
+    <Stack component="ul" gap={0} m={0} p={0} style={{ listStyle: "none" }}>
       {nodes.map((n) => (
         <li key={n.id}>
           <Checkbox
             label={n.name}
             checked={value.includes(n.id)}
             onChange={(e) => toggle(n.id, e.currentTarget.checked)}
+            classNames={choice}
           />
-          {n.children.length > 0 && (
-            <Box ml={28} mt={6}>
-              {renderNodes(n.children)}
-            </Box>
-          )}
+          {n.children.length > 0 && <Box ml={28}>{renderNodes(n.children)}</Box>}
         </li>
       ))}
     </Stack>
