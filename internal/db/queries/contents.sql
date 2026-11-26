@@ -123,3 +123,9 @@ WHERE scheduled_revision_id IS NOT NULL ORDER BY scheduled_at;
 -- Locks the content row until the transaction ends, so concurrent saves of
 -- one content take turns.
 SELECT id FROM contents WHERE id = $1 FOR UPDATE;
+
+-- name: SetPublishedAt :exec
+-- Changes the publication date shown on the site (e.g. for a post written
+-- after the event). On an unpublished content it becomes the date used
+-- when it is published.
+UPDATE contents SET published_at = @published_at, updated_at = now() WHERE id = @id;

@@ -316,6 +316,7 @@ func (s *Server) patchContent(w http.ResponseWriter, r *http.Request, sess *sess
 		ParentID    json.RawMessage `json:"parentId"`
 		CategoryIDs *[]int64        `json:"categoryIds"`
 		TagIDs      *[]int64        `json:"tagIds"`
+		PublishedAt *time.Time      `json:"publishedAt"`
 	}
 	if err := decode(w, r, &in); err != nil {
 		return err
@@ -369,6 +370,15 @@ func (s *Server) patchContent(w http.ResponseWriter, r *http.Request, sess *sess
 					return err
 				}
 				urlChanged = true
+			}
+		}
+		if in.PublishedAt != nil {
+			at := in.PublishedAt.UTC().Truncate(time.Second)
+			if at.Year() < 1900 || at.After(time.Now().Add(time.Minute)) {
+				return invalid("invalid_published_at", "公開日は今より前の日時にしてください。先の日時に公開するときは「日時を指定して公開」を使ってください")
+			}
+			if err := q.SetPublishedAt(ctx, dbgen.SetPublishedAtParams{ID: id, PublishedAt: &at}); err != nil {
+				return err
 			}
 		}
 		if in.CategoryIDs != nil {

@@ -559,6 +559,23 @@ func (q *Queries) ScheduleRevision(ctx context.Context, arg ScheduleRevisionPara
 	return result.RowsAffected(), nil
 }
 
+const setPublishedAt = `-- name: SetPublishedAt :exec
+UPDATE contents SET published_at = $1, updated_at = now() WHERE id = $2
+`
+
+type SetPublishedAtParams struct {
+	PublishedAt *time.Time
+	ID          int64
+}
+
+// Changes the publication date shown on the site (e.g. for a post written
+// after the event). On an unpublished content it becomes the date used
+// when it is published.
+func (q *Queries) SetPublishedAt(ctx context.Context, arg SetPublishedAtParams) error {
+	_, err := q.db.Exec(ctx, setPublishedAt, arg.PublishedAt, arg.ID)
+	return err
+}
+
 const touchContent = `-- name: TouchContent :exec
 UPDATE contents SET updated_at = now() WHERE id = $1
 `

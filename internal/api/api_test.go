@@ -1098,3 +1098,22 @@ func TestThemeSettings(t *testing.T) {
 		t.Errorf("site B sees theme settings %v", bs["themeSettings"])
 	}
 }
+
+func TestSetPublishedAt(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	bob := e.login("bob@example.com")
+	d := alice.newContent("post", "夏祭りに出店しました", true)
+	at := time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC)
+	var out struct{ PublishedAt *time.Time }
+	alice.mustDo(http.MethodPatch, fmt.Sprintf("/api/contents/%d", d.ID), map[string]any{"publishedAt": at}, &out, http.StatusOK)
+	if out.PublishedAt == nil || !out.PublishedAt.Equal(at) {
+		t.Errorf("publishedAt = %v, want %v", out.PublishedAt, at)
+	}
+	if got, code := alice.errorCode(http.MethodPatch, fmt.Sprintf("/api/contents/%d", d.ID), map[string]any{"publishedAt": time.Now().Add(48 * time.Hour)}); got != http.StatusUnprocessableEntity || code != "invalid_published_at" {
+		t.Errorf("future publishedAt = %d %s, want 422 invalid_published_at", got, code)
+	}
+	if got, _ := bob.errorCode(http.MethodPatch, fmt.Sprintf("/api/contents/%d", d.ID), map[string]any{"publishedAt": at}); got != http.StatusNotFound {
+		t.Errorf("B changing A's date = %d, want 404", got)
+	}
+}

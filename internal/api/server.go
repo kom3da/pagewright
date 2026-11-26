@@ -308,6 +308,7 @@ var errorFields = map[string]string{
 	"invalid_parent":       "parentId",
 	"invalid_name":         "name",
 	"invalid_publish_at":   "publishAt",
+	"invalid_published_at": "publishedAt",
 	"invalid_menu":         "menu",
 	"invalid_logo":         "logoMediaId",
 	"invalid_days":         "days",
