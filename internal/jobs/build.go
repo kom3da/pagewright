@@ -89,7 +89,8 @@ func (w *BuildSiteWorker) Work(ctx context.Context, job *river.Job[BuildSiteArgs
 	}
 	started := time.Now()
 	res, err := w.build(ctx, w.db, tenantID, w.opts)
-	w.record(ctx, tenantID, started, res, err)
+	// Record even a build that timed out: its context is done by now.
+	w.record(context.WithoutCancel(ctx), tenantID, started, res, err)
 	if err != nil {
 		return fmt.Errorf("build_site: %w", err)
 	}
