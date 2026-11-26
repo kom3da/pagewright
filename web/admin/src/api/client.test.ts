@@ -60,6 +60,28 @@ describe("api client", () => {
     ]);
   });
 
+  it("creates, lists and deletes preview links; the URL comes only on create", async () => {
+    const requests = recordRequests();
+    const link = await api.createPreviewLink(1, 7);
+    expect(link.url).toMatch(/\/p\/[^/]+\/$/);
+    const days = (Date.parse(link.expiresAt) - Date.parse(link.createdAt)) / 86_400_000;
+    expect(days).toBe(7);
+    const listed = await api.listPreviewLinks(1);
+    expect(listed).toEqual([{ id: link.id, expiresAt: link.expiresAt, createdAt: link.createdAt }]);
+    await api.deletePreviewLink(link.id);
+    expect(await api.listPreviewLinks(1)).toEqual([]);
+    expect(await api.deletePreviewLink(link.id).catch((e) => e)).toMatchObject({ status: 404 });
+    const invalid = await api.createPreviewLink(1, 31).catch((e) => e);
+    expect(invalid).toMatchObject({ status: 422, code: "invalid_days" });
+    expect(errorField(invalid)).toBe("days");
+    expect(await api.createPreviewLink(999, 3).catch((e) => e)).toMatchObject({ status: 404 });
+    expect(requests.slice(0, 3).map((r) => [r.method, r.path, r.body])).toEqual([
+      ["POST", "/api/contents/1/preview-links", { days: 7 }],
+      ["GET", "/api/contents/1/preview-links", undefined],
+      ["DELETE", "/api/preview-links/100", undefined],
+    ]);
+  });
+
   it("reads and replaces the site settings", async () => {
     const requests = recordRequests();
     const site = await api.getSite();

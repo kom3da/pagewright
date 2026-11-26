@@ -154,3 +154,39 @@ test("scheduling a post is accessible and keyboard operable", async ({ page }) =
   await expect(page.getByText("予約を取り消しました。")).toBeVisible();
   await expect(page.getByText(/予約：/)).toBeHidden();
 });
+
+test("preview links are accessible and keyboard operable", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("posts/1");
+  await page.getByLabel("タイトル").fill("プレビューの確認");
+  await page.getByRole("button", { name: "プレビュー用のリンク" }).click();
+  const dialog = page.getByRole("dialog", { name: "プレビュー用のリンク" });
+  await expect(dialog.getByText("有効なリンクはありません。")).toBeVisible();
+  await expectAccessible(page);
+
+  // Choose 7 days with the arrow keys, then create (unsaved changes are saved first).
+  await dialog.getByRole("radio", { name: "3日" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(dialog.getByRole("radio", { name: "7日" })).toBeChecked();
+  await dialog.getByRole("button", { name: "保存してリンクを作る" }).click();
+  const url = dialog.getByRole("textbox", { name: "プレビュー用のリンク（URL）" });
+  await expect(url).toBeFocused();
+  await expect(url).toHaveValue(/\/p\/.+\/$/);
+  await expect(page.getByText("保存していない変更があります", { exact: true })).toBeHidden();
+  await dialog.getByRole("button", { name: "コピー" }).click();
+  await expect(dialog.getByText(/コピーしました。/)).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await url.inputValue());
+  await expectAccessible(page);
+
+  await dialog.getByRole("button", { name: /まで有効なリンクを取り消す$/ }).click();
+  const confirm = page.getByRole("alertdialog", { name: "このリンクを取り消しますか？" });
+  await expect(confirm).toBeVisible();
+  await expectAccessible(page);
+  await confirm.getByRole("button", { name: "取り消す" }).click();
+  await expect(dialog.getByText(/リンクを取り消しました。/)).toBeVisible();
+  await expect(dialog.getByText("有効なリンクはありません。")).toBeVisible();
+  await expect(url).toBeHidden();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("button", { name: "プレビュー用のリンク" })).toBeFocused();
+});

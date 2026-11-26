@@ -7,8 +7,15 @@ import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { api, errorField, errorMessage, isApiError } from "../api/client";
 import { contentQuery, contentsQuery } from "../api/queries";
-import type { ContentDetail, ContentPatch, ContentSummary, ContentType } from "../api/types";
+import type {
+  ContentDetail,
+  ContentPatch,
+  ContentSummary,
+  ContentType,
+  PreviewLink,
+} from "../api/types";
 import { CategoryCheckboxes } from "../components/CategoryCheckboxes";
+import { PreviewLinksDialog } from "../components/PreviewLinksDialog";
 import { ScheduleDialog, type ScheduleError } from "../components/ScheduleDialog";
 import { TagPicker } from "../components/TagPicker";
 import { useNotify } from "../components/Toaster";
@@ -69,7 +76,15 @@ const toPatch = (s: Settings): ContentPatch => ({
   tagIds: s.tagIds,
 });
 
-type Busy = "save" | "publish" | "unpublish" | "schedule" | "unschedule" | "delete" | null;
+type Busy =
+  | "save"
+  | "publish"
+  | "unpublish"
+  | "schedule"
+  | "unschedule"
+  | "delete"
+  | "preview"
+  | null;
 
 function EditorForm({ content: initial }: { content: ContentDetail }) {
   const { id, type } = initial;
@@ -110,6 +125,10 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   const [confirm, setConfirm] = useState<"unpublish" | "delete" | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleError, setScheduleError] = useState<ScheduleError | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewButtonRef = useRef<HTMLButtonElement>(null);
+  // Set when saving before creating a preview link failed: focus then goes to the problem.
+  const previewSaveFailed = useRef(false);
 
   const titleDirty = title !== savedTitle;
   const dirty = titleDirty || bodyDirty || settingsDirty;
@@ -258,6 +277,33 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       setScheduleOpen(false);
       notify(`${formatJapanDateTime(publishAt)}に公開するよう予約しました。`);
     });
+
+  // The preview shows the latest saved revision, so unsaved changes are saved first:
+  // otherwise the person receiving the link would not see what the editor shows.
+  const createPreviewLink = async (days: number): Promise<PreviewLink | null> => {
+    if (busy) return null;
+    setBusy("preview");
+    try {
+      if (dirty && !(await persist())) {
+        previewSaveFailed.current = true;
+        setPreviewOpen(false);
+        return null;
+      }
+      return await api.createPreviewLink(id, days);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const afterPreviewClose = () => {
+    if (!previewSaveFailed.current) {
+      previewButtonRef.current?.focus();
+      return;
+    }
+    previewSaveFailed.current = false;
+    // Settings errors and the conflict dialog take focus themselves.
+    if (titleRef.current?.getAttribute("aria-invalid") === "true") titleRef.current.focus();
+  };
 
   const unschedule = () =>
     run("unschedule", async () => {
@@ -481,6 +527,13 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
           <Button onClick={openSchedule} disabled={busy !== null}>
             {content.scheduledAt ? "予約し直す" : "日時を指定して公開"}
           </Button>
+          <Button
+            ref={previewButtonRef}
+            onClick={() => setPreviewOpen(true)}
+            disabled={busy !== null}
+          >
+            プレビュー用のリンク
+          </Button>
           {isPublic && (
             <Button onClick={() => setConfirm("unpublish")} disabled={busy !== null}>
               公開をやめる
@@ -528,6 +581,15 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         busy={busy === "schedule"}
         error={scheduleError}
         onSubmit={schedule}
+      />
+      <PreviewLinksDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        contentId={id}
+        label={label}
+        dirty={dirty}
+        onCreate={createPreviewLink}
+        onCloseFocus={afterPreviewClose}
       />
       <ConflictDialog
         open={conflict}

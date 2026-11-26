@@ -7,6 +7,7 @@ import type {
   Me,
   Media,
   MenuItem,
+  PreviewLink,
   SiteSettings,
   Submission,
   Tag,
@@ -26,6 +27,8 @@ type Db = {
   /** Settings of the current site. The mock keeps one set for every site. */
   site: SiteSettings;
   submissions: Submission[];
+  /** The real server stores only a hash of the token; the mock keeps it for tests. */
+  previewLinks: (PreviewLink & { contentId: number; token: string })[];
   builds: number;
   nextId: number;
 };
@@ -154,6 +157,7 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
         createdAt: "2026-11-19T23:40:00Z",
       },
     ],
+    previewLinks: [],
     builds: 0,
     nextId: 100,
     ...overrides,
@@ -174,6 +178,7 @@ const errorFields: Record<string, string> = {
   invalid_parent: "parentId",
   invalid_name: "name",
   invalid_publish_at: "publishAt",
+  invalid_days: "days",
   alt_required: "altText",
   file_required: "file",
   invalid_menu: "menu",
@@ -539,7 +544,61 @@ export const handlers = [
     const denied = guard(request);
     if (denied) return denied;
     db.contents = db.contents.filter((c) => c.id !== Number(params.id));
+    db.previewLinks = db.previewLinks.filter((l) => l.contentId !== Number(params.id));
     db.builds++;
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.post("/api/contents/:id/preview-links", async ({ request, params }) => {
+    const denied = guard(request);
+    if (denied) return denied;
+    const c = findContent(params.id);
+    if (!c) return error(404, "not_found", "見つかりません。");
+    const { days = 3 } = (await request.json()) as { days?: number };
+    if (!Number.isInteger(days) || days < 1 || days > 30) {
+      return error(422, "invalid_days", "有効期間は1日から30日のあいだで指定してください");
+    }
+    const id = db.nextId++;
+    const token = `token-${id}`;
+    const created = new Date();
+    const link = {
+      id,
+      contentId: c.id,
+      token,
+      createdAt: created.toISOString(),
+      expiresAt: new Date(created.getTime() + days * 24 * 60 * 60 * 1000).toISOString(),
+    };
+    db.previewLinks.push(link);
+    const out: PreviewLink = {
+      id,
+      url: `http://localhost:8080/p/${token}/`,
+      expiresAt: link.expiresAt,
+      createdAt: link.createdAt,
+    };
+    return HttpResponse.json(out, { status: 201 });
+  }),
+
+  http.get("/api/contents/:id/preview-links", ({ request, params }) => {
+    const denied = guard(request);
+    if (denied) return denied;
+    const c = findContent(params.id);
+    if (!c) return error(404, "not_found", "見つかりません。");
+    return HttpResponse.json(
+      db.previewLinks
+        .filter((l) => l.contentId === c.id && new Date(l.expiresAt).getTime() > Date.now())
+        .sort((a, b) => b.id - a.id)
+        .map(({ id, expiresAt, createdAt }): PreviewLink => ({ id, expiresAt, createdAt })),
+    );
+  }),
+
+  http.delete("/api/preview-links/:id", ({ request, params }) => {
+    const denied = guard(request);
+    if (denied) return denied;
+    const id = Number(params.id);
+    if (!db.previewLinks.some((l) => l.id === id)) {
+      return error(404, "not_found", "見つかりません。");
+    }
+    db.previewLinks = db.previewLinks.filter((l) => l.id !== id);
     return new HttpResponse(null, { status: 204 });
   }),
 
