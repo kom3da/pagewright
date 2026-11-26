@@ -114,10 +114,40 @@ export type SiteSettings = {
   contactEmail?: string;
   /** Empty: top-level pages and お知らせ are listed automatically. */
   menu: MenuItem[];
+  /** Name of the theme; missing means the server's default theme. */
+  theme?: string;
+  /** Page shown at the top of the home page. Missing: none. */
+  frontPageId?: number;
+  /** Page about handling personal data, linked from contact forms. Missing: none. */
+  privacyPageId?: number;
+  /** Theme name → declared setting key → value (page settings hold a page id). */
+  themeSettings?: Record<string, Record<string, string | number>>;
+  /** Output only: the installed themes and the settings each declares. */
+  themes: ThemeInfo[];
 };
 
-/** PUT /api/site replaces everything. `logo` must not be sent (the server rejects unknown keys). */
-export type SiteSettingsInput = Omit<SiteSettings, "logo">;
+export type ThemeSettingType = "text" | "tel" | "url" | "page";
+
+/** A setting a theme declares in its theme.json (build.SettingDecl). */
+export type ThemeSettingDecl = {
+  key: string;
+  label: string;
+  /** Optional help text; may be empty. */
+  description: string;
+  type: ThemeSettingType;
+  /** Limit for text values; 0 means the default (100). */
+  maxLength: number;
+};
+
+export type ThemeInfo = {
+  name: string;
+  title: string;
+  description: string;
+  settings: ThemeSettingDecl[];
+};
+
+/** PUT /api/site replaces everything. `logo` and `themes` must not be sent (the server rejects unknown keys). */
+export type SiteSettingsInput = Omit<SiteSettings, "logo" | "themes">;
 
 export type Submission = {
   id: number;

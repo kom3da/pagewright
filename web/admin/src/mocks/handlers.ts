@@ -12,6 +12,7 @@ import type {
   SiteSettings,
   Submission,
   Tag,
+  ThemeInfo,
 } from "../api/types";
 import { contrast, isHexColor, MIN_CONTRAST } from "../lib/color";
 import { slugProblem } from "../lib/slug";
@@ -136,6 +137,9 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
       logoMediaId: null,
       logo: null,
       timeZone: "Asia/Tokyo",
+      theme: "corporate",
+      themeSettings: { corporate: { phone: "03-1234-5678" } },
+      themes: mockThemes,
       menu: [],
     },
     submissions: [
@@ -179,6 +183,63 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
   };
 }
 
+/**
+ * The themes GET /api/site lists. "corporate" mirrors themes/corporate/theme.json; "simple"
+ * exists only in the mock, to have a second theme with url and page settings.
+ */
+export const mockThemes: ThemeInfo[] = [
+  {
+    name: "corporate",
+    title: "コーポレート",
+    description:
+      "中小企業の会社サイト向け。トップに大見出しとお知らせ、固定ページの案内、ご相談の帯を並べます。",
+    settings: [
+      {
+        key: "address",
+        label: "住所",
+        description: "フッターに表示します。",
+        type: "text",
+        maxLength: 200,
+      },
+      {
+        key: "phone",
+        label: "電話番号",
+        description: "フッターとご相談の帯に表示し、スマートフォンではそのまま電話をかけられます。",
+        type: "tel",
+        maxLength: 0,
+      },
+      {
+        key: "businessHours",
+        label: "受付時間",
+        description: "例：平日 9:00〜18:00。電話番号と一緒に表示します。",
+        type: "text",
+        maxLength: 0,
+      },
+    ],
+  },
+  {
+    name: "simple",
+    title: "シンプル",
+    description: "お店や個人のサイト向け。写真を大きく見せ、文字を控えめにします。",
+    settings: [
+      {
+        key: "instagram",
+        label: "Instagram のURL",
+        description: "",
+        type: "url",
+        maxLength: 0,
+      },
+      {
+        key: "recruitPage",
+        label: "採用情報のページ",
+        description: "フッターにリンクを出します。",
+        type: "page",
+        maxLength: 0,
+      },
+    ],
+  },
+];
+
 export let db = seedDb();
 export const resetDb = (overrides: Partial<Db> = {}) => {
   db = seedDb(overrides);
@@ -198,6 +259,8 @@ const errorFields: Record<string, string> = {
   file_required: "file",
   invalid_menu: "menu",
   invalid_logo: "logoMediaId",
+  invalid_front_page: "frontPageId",
+  invalid_privacy_page: "privacyPageId",
 };
 
 const error = (status: number, code: string, message: string) =>
@@ -249,7 +312,60 @@ const siteKeys = new Set([
   "timeZone",
   "contactEmail",
   "menu",
+  "theme",
+  "frontPageId",
+  "privacyPageId",
+  "themeSettings",
 ]);
+
+const isPage = (id: unknown) =>
+  typeof id === "number" && db.contents.some((c) => c.id === id && c.type === "page");
+
+/** Mirrors checkThemeSettings in internal/api/site.go and CheckSettings in internal/build. */
+function checkThemeSettings(all: Record<string, Record<string, unknown>>) {
+  for (const [name, values] of Object.entries(all)) {
+    const info = mockThemes.find((t) => t.name === name);
+    if (!info)
+      return fieldError("invalid_setting", "入っていないテーマの設定です", "themeSettings");
+    for (const [key, v] of Object.entries(values)) {
+      const field = `themeSettings.${key}`;
+      const d = info.settings.find((s) => s.key === key);
+      if (!d) return fieldError("invalid_setting", "このテーマにはない設定です", field);
+      if (v == null) continue;
+      if (d.type === "page") {
+        if (!isPage(v)) return fieldError("invalid_setting", "固定ページを選んでください", field);
+        continue;
+      }
+      if (typeof v !== "string") {
+        return fieldError("invalid_setting", `${d.label}は文字で入力してください`, field);
+      }
+      const t = v.trim();
+      const max = d.maxLength || 100;
+      if ([...t].length > max) {
+        return fieldError(
+          "invalid_setting",
+          `${d.label}は改行なしの${max}文字以内で入力してください`,
+          field,
+        );
+      }
+      if (t && d.type === "tel" && !/^[0-9+()\- ]{1,30}$/.test(t)) {
+        return fieldError(
+          "invalid_setting",
+          `${d.label}は数字とハイフンで入力してください（例：03-1234-5678）`,
+          field,
+        );
+      }
+      if (t && d.type === "url" && !/^(https?:\/\/|\/(?!\/))/.test(t)) {
+        return fieldError(
+          "invalid_setting",
+          `${d.label}は https:// か / で始まるURLで入力してください`,
+          field,
+        );
+      }
+    }
+  }
+  return null;
+}
 
 /** Mirrors putSite in internal/api/site.go and Validate in internal/site/settings.go. */
 function validateSite(input: Record<string, unknown>) {
@@ -298,6 +414,9 @@ function validateSite(input: Record<string, unknown>) {
       return fieldError("invalid_setting", "タイムゾーンが正しくありません", "timeZone");
     }
   }
+  if (s.theme && !mockThemes.some((t) => t.name === s.theme)) {
+    return fieldError("invalid_setting", "そのテーマは入っていません", "theme");
+  }
   if (s.contactEmail && !/^[^\s@<>]+@[^\s@<>]+$/.test(s.contactEmail)) {
     return fieldError(
       "invalid_setting",
@@ -337,12 +456,25 @@ function validateSite(input: Record<string, unknown>) {
   if (s.logoMediaId != null && !db.media.some((m) => m.id === s.logoMediaId)) {
     return fieldError("invalid_logo", "ロゴの画像が見つかりません", "logoMediaId");
   }
+  const themeProblem = checkThemeSettings(s.themeSettings ?? {});
+  if (themeProblem) return themeProblem;
+  if (s.frontPageId && !isPage(s.frontPageId)) {
+    return error(422, "invalid_front_page", "トップページには固定ページを選んでください");
+  }
+  if (s.privacyPageId && !isPage(s.privacyPageId)) {
+    return error(
+      422,
+      "invalid_privacy_page",
+      "個人情報の取り扱いのページには固定ページを選んでください",
+    );
+  }
   return null;
 }
 
 const siteResponse = (): SiteSettings => ({
   ...db.site,
   logo: db.media.find((m) => m.id === db.site.logoMediaId) ?? null,
+  themes: mockThemes,
 });
 
 const invalidSlug = () =>
@@ -794,6 +926,12 @@ export const handlers = [
       ...(s.font && { font: s.font }),
       ...(s.timeZone && { timeZone: s.timeZone }),
       ...(s.contactEmail && { contactEmail: s.contactEmail }),
+      ...(s.theme && { theme: s.theme }),
+      ...(s.frontPageId && { frontPageId: s.frontPageId }),
+      ...(s.privacyPageId && { privacyPageId: s.privacyPageId }),
+      ...(s.themeSettings &&
+        Object.keys(s.themeSettings).length > 0 && { themeSettings: s.themeSettings }),
+      themes: mockThemes,
       menu: (s.menu ?? []).map(
         (it): MenuItem => ({
           label: it.label?.trim() ?? null,

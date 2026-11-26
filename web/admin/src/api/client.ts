@@ -54,6 +54,8 @@ const fieldsByCode: Record<string, string> = {
   too_large: "file",
   invalid_menu: "menu",
   invalid_logo: "logoMediaId",
+  invalid_front_page: "frontPageId",
+  invalid_privacy_page: "privacyPageId",
 };
 
 /** The input field an API error is about, or undefined when it is not about one. */

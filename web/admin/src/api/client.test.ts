@@ -86,7 +86,7 @@ describe("api client", () => {
     const requests = recordRequests();
     const site = await api.getSite();
     expect(site).toMatchObject({ name: "山田工務店", logo: null, menu: [] });
-    const { logo: _, ...input } = site;
+    const { logo: _, themes: __, ...input } = site;
     const saved = await api.saveSite({
       ...input,
       primaryColor: "#0a4f8f",
@@ -102,7 +102,7 @@ describe("api client", () => {
 
   it("returns setting errors with the field, and 403 for editors", async () => {
     const site = await api.getSite();
-    const { logo: _, ...input } = site;
+    const { logo: _, themes: __, ...input } = site;
     const err = await api.saveSite({ ...input, footerColor: "#7fb3ff" }).catch((e) => e);
     expect(err).toMatchObject({ status: 422, code: "invalid_setting", field: "footerColor" });
     expect(err.message).toMatch(/コントラスト比 2\.\d:1/);
