@@ -26,7 +26,7 @@ mise exec -- go run ./cmd/pagewright init --site "サイトの名前" --email yo
 | 何を | どこで |
 | --- | --- |
 | 管理画面 | http://localhost:8080/admin/ |
-| 公開サイトのプレビュー | http://localhost:8081/ （公開や「サイトを更新」で書き出された静的ファイル） |
+| 公開サイトのプレビュー | http://localhost:8081/ （公開や「サイトを更新」で書き出された静的ファイル。検索は http://localhost:8081/search/ ） |
 | 届いたメール（ログイン用リンク） | http://localhost:8025/ （Mailpit） |
 
 - 2回目からは、ログイン画面でメールアドレスを入れ、Mailpit に届いたリンクを開きます。`go run ./cmd/pagewright login-url --email ...` でもログイン用URLを出せます

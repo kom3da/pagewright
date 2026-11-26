@@ -7,6 +7,7 @@ pnpm = "latest"
 "aqua:golangci/golangci-lint" = "latest"
 "aqua:goreleaser/goreleaser" = "latest"
 "github:sbdchd/squawk" = "2.74.0"
+"github:Pagefind/pagefind" = { version = "1.6.0", asset_pattern = "pagefind_extended-*" }
 
 [tasks."admin:build"]
 description = "管理画面をビルドする（web/admin/dist）"

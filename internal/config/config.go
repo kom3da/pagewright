@@ -3,6 +3,7 @@ package config
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -22,6 +23,7 @@ type Config struct {
 	SMTPAddr           string // PAGEWRIGHT_SMTP_ADDR
 	MailFrom           string // PAGEWRIGHT_MAIL_FROM
 	AdminDir           string // PAGEWRIGHT_ADMIN_DIR: built admin UI, when not embedded
+	Pagefind           string // PAGEWRIGHT_PAGEFIND: Pagefind binary for site search; "off" disables
 }
 
 // FromEnv reads Config, using development defaults for unset values.
@@ -36,6 +38,19 @@ func FromEnv() Config {
 		SMTPAddr:      env("PAGEWRIGHT_SMTP_ADDR", "localhost:1025"),
 		MailFrom:      env("PAGEWRIGHT_MAIL_FROM", "Pagewright <no-reply@localhost>"),
 		AdminDir:      env("PAGEWRIGHT_ADMIN_DIR", filepath.Join("web", "admin", "dist")),
+		Pagefind:      os.Getenv("PAGEWRIGHT_PAGEFIND"),
+	}
+	switch c.Pagefind {
+	case "off":
+		c.Pagefind = ""
+	case "":
+		// The extended build segments Japanese; fall back to the plain one.
+		for _, name := range []string{"pagefind_extended", "pagefind"} {
+			if p, err := exec.LookPath(name); err == nil {
+				c.Pagefind = p
+				break
+			}
+		}
 	}
 	c.MigrateDatabaseURL = env("PAGEWRIGHT_MIGRATE_DATABASE_URL", c.DatabaseURL)
 	return c

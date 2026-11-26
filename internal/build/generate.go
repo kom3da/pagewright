@@ -74,7 +74,7 @@ func (g *generator) run() error {
 	}
 	steps := []func() error{
 		g.writeHome, g.writeContents, g.writePostList, g.writeArchives,
-		g.write404, g.writeRedirects, g.writeSitemap, g.writeFeed, g.copyMedia,
+		g.write404, g.writeSearch, g.writeRedirects, g.writeSitemap, g.writeFeed, g.copyMedia,
 	}
 	for _, step := range steps {
 		if err := step(); err != nil {
@@ -90,6 +90,9 @@ func (g *generator) reserveSystemFiles() {
 	}
 	for name := range g.theme.assets {
 		g.out.reserve(assetsDir + "/" + name)
+	}
+	if g.opts.Pagefind != "" {
+		g.out.reserve(strings.TrimPrefix(searchPath, "/") + "index.html")
 	}
 }
 
@@ -278,6 +281,9 @@ func (g *generator) buildSite() {
 		PostsURL:      postsBase,
 		FeedURL:       "/feed.xml",
 		StylesheetURL: g.theme.css,
+	}
+	if g.opts.Pagefind != "" {
+		g.site.SearchURL = searchPath
 	}
 	var pages []*item
 	for _, it := range g.items {
@@ -468,6 +474,16 @@ func (g *generator) writeArchives() error {
 		}
 	}
 	return nil
+}
+
+// writeSearch writes the search page when Pagefind is enabled.
+func (g *generator) writeSearch() error {
+	if g.site.SearchURL == "" {
+		return nil
+	}
+	pg := g.page("search", searchPath)
+	pg.Title = "サイト内検索"
+	return g.writePage("search", systemOwner, pg, time.Time{})
 }
 
 func (g *generator) write404() error {

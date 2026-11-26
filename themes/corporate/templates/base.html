@@ -29,11 +29,14 @@
 <header class="site-header">
   <div class="container site-header__inner">
     <p class="site-name"><a href="/"{{if eq .Path "/"}} aria-current="page"{{end}}>{{.Site.Name}}</a></p>
-    {{- with .Site.Menu}}
+    {{- if or .Site.Menu .Site.SearchURL}}
     <nav class="global-nav" aria-label="メインメニュー">
       <ul>
-        {{- range .}}
+        {{- range .Site.Menu}}
         <li><a href="{{.URL}}"{{with current $.Path .URL}} aria-current="{{.}}"{{end}}>{{.Title}}</a></li>
+        {{- end}}
+        {{- with .Site.SearchURL}}
+        <li><a href="{{.}}"{{with current $.Path .}} aria-current="{{.}}"{{end}}>検索</a></li>
         {{- end}}
       </ul>
     </nav>

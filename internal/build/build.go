@@ -43,6 +43,9 @@ type Options struct {
 	BaseURL string
 	// Logger receives warnings. Default slog.Default().
 	Logger *slog.Logger
+	// Pagefind is the path of the Pagefind binary (the extended build, for
+	// Japanese). Empty disables site search.
+	Pagefind string
 }
 
 // Result describes what a build changed. Paths are public file paths
@@ -115,6 +118,11 @@ func Build(ctx context.Context, d *db.DB, tenantID uuid.UUID, opts Options) (Res
 	}
 	if err := g.run(); err != nil {
 		return Result{}, fmt.Errorf("build: %w", err)
+	}
+	if opts.Pagefind != "" {
+		if err := runPagefind(ctx, opts.Pagefind, staging); err != nil {
+			return Result{}, fmt.Errorf("build: %w", err)
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return Result{}, err

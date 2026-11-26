@@ -27,6 +27,8 @@ type Site struct {
 	// LegacyRedirects is set when /_legacy.json maps WordPress query URLs
 	// (/?p=123); the home page then forwards such visits.
 	LegacyRedirects bool
+	// SearchURL is the search page, or empty when search is off.
+	SearchURL string
 }
 
 // Link is a titled URL path.
@@ -121,7 +123,7 @@ func defaultTheme() (*theme, error) {
 
 func loadTheme(fsys fs.FS) (*theme, error) {
 	t := &theme{pages: map[string]*template.Template{}, assets: map[string][]byte{}}
-	for _, kind := range []string{"home", "single", "list", "404"} {
+	for _, kind := range []string{"home", "single", "list", "404", "search"} {
 		tmpl, err := template.New(kind).Funcs(themeFuncs).ParseFS(fsys, "templates/base.html", "templates/"+kind+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse theme template %s: %w", kind, err)

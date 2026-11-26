@@ -1,0 +1,12 @@
+{{define "main" -}}
+<div class="container">
+  <h1>サイト内検索</h1>
+  <link rel="stylesheet" href="/pagefind/pagefind-ui.css">
+  <div id="search"></div>
+  <noscript><p>検索にはJavaScriptが必要です。</p></noscript>
+  <script src="/pagefind/pagefind-ui.js"></script>
+  <script>
+    new PagefindUI({ element: "#search", showSubResults: true, showImages: false, autofocus: true });
+  </script>
+</div>
+{{- end}}
