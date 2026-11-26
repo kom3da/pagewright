@@ -1,4 +1,5 @@
-import { Box, Button, Fieldset, Group, Stack, Text } from "@mantine/core";
+import { Box, Button, Fieldset, Group, Input, Stack, Text } from "@mantine/core";
+import { CircleCheck, TriangleAlert } from "lucide-react";
 import { useId } from "react";
 import { contrast, formatRatio, isHexColor, MIN_CONTRAST } from "../lib/color";
 import classes from "./ColorField.module.css";
@@ -28,7 +29,9 @@ export function colorProblem(label: string, value: string) {
 
 /**
  * A color picker plus a hex text box, with a preview of white text on the color and its
- * contrast ratio, so the user can see why a light color cannot be saved.
+ * contrast ratio, so the user can see why a light color cannot be saved. Both inputs share
+ * one hint, ratio and error, which Mantine inputs cannot do, hence the plain `.pw-input`
+ * with Mantine's label, description and error parts around it.
  */
 export function ColorField({ label, hint, value, defaultColor, error, onChange }: Props) {
   const id = useId();
@@ -42,20 +45,22 @@ export function ColorField({ label, hint, value, defaultColor, error, onChange }
   const valid = isHexColor(value);
   const shown = value === "" ? defaultColor : valid ? value.toLowerCase() : null;
   const ratio = shown ? contrast(shown) : null;
+  const ok = ratio !== null && ratio >= MIN_CONTRAST;
   const describedBy = [ids.hint, ids.ratio, error && ids.error].filter(Boolean).join(" ");
+  const RatioIcon = ok ? CircleCheck : TriangleAlert;
 
   return (
-    <Fieldset legend={label} variant="unstyled">
-      <Stack gap="sm">
-        <Text id={ids.hint} size="sm" c="dimmed">
+    <Fieldset legend={label} variant="unstyled" className={classes.root}>
+      <Stack gap="xs">
+        <Input.Description id={ids.hint} size="sm">
           {hint}
           {value === "" && `いまは標準の色（${defaultColor}）を使っています。`}
-        </Text>
+        </Input.Description>
         <Group align="flex-end" gap="sm">
           <Box>
-            <label htmlFor={ids.picker} className="pw-label">
+            <Input.Label htmlFor={ids.picker} size="sm" className={classes.label}>
               色を選ぶ
-            </label>
+            </Input.Label>
             <input
               id={ids.picker}
               type="color"
@@ -66,9 +71,9 @@ export function ColorField({ label, hint, value, defaultColor, error, onChange }
             />
           </Box>
           <Box w="13rem">
-            <label htmlFor={ids.text} className="pw-label">
+            <Input.Label htmlFor={ids.text} size="sm" className={classes.label}>
               色コード（例：#1a73e8）
-            </label>
+            </Input.Label>
             <input
               id={ids.text}
               type="text"
@@ -81,30 +86,40 @@ export function ColorField({ label, hint, value, defaultColor, error, onChange }
               onChange={(e) => onChange(e.target.value.trim())}
               aria-describedby={describedBy}
               aria-invalid={error ? true : undefined}
-              className="pw-input"
-              style={{ fontFamily: "var(--mantine-font-family-monospace)" }}
+              className={`pw-input ${classes.code}`}
             />
           </Box>
-          {value !== "" && <Button onClick={() => onChange("")}>標準の色に戻す</Button>}
+          {value !== "" && (
+            <Button variant="subtle" onClick={() => onChange("")}>
+              標準の色に戻す
+            </Button>
+          )}
         </Group>
-        <Group gap="sm">
+        <Group gap="sm" wrap="nowrap" align="center">
           {shown && (
             <Box aria-hidden="true" className={classes.preview} style={{ backgroundColor: shown }}>
-              白い文字の見え方
+              文字の見え方
             </Box>
           )}
-          <Text id={ids.ratio} size="sm">
-            {ratio === null
-              ? "色コードを読み取れないため、見え方を表示できません。"
-              : `白い文字とのコントラスト比：${formatRatio(ratio)}（${
-                  ratio >= MIN_CONTRAST ? "基準の 4.5:1 以上です" : "基準の 4.5:1 に足りません"
-                }）`}
-          </Text>
+          <Group gap={6} wrap="nowrap" align="flex-start">
+            {ratio !== null && (
+              <Box component="span" c={ok ? "green.6" : "red.6"} className={classes.icon}>
+                <RatioIcon aria-hidden="true" size={18} />
+              </Box>
+            )}
+            <Text id={ids.ratio} size="sm">
+              {ratio === null
+                ? "色コードを読み取れないため、見え方を表示できません。"
+                : `白い文字とのコントラスト比：${formatRatio(ratio)}（${
+                    ok ? "基準の 4.5:1 以上です" : "基準の 4.5:1 に足りません"
+                  }）`}
+            </Text>
+          </Group>
         </Group>
         {error && (
-          <Text id={ids.error} size="sm" fw={700} c="red.7">
+          <Input.Error id={ids.error} size="sm">
             {error}
-          </Text>
+          </Input.Error>
         )}
       </Stack>
     </Fieldset>

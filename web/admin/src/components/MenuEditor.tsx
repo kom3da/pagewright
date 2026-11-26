@@ -2,6 +2,7 @@ import {
   Box,
   Button,
   Group,
+  Input,
   NativeSelect,
   Paper,
   Radio,
@@ -13,6 +14,7 @@ import {
 import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import type { ContentSummary, MenuItem } from "../api/types";
+import classes from "./MenuEditor.module.css";
 import { Dialog } from "./ui/Dialog";
 import { Form } from "./ui/Form";
 import { Notice } from "./ui/feedback";
@@ -111,37 +113,39 @@ export function MenuEditor({ items, onChange, contents, error, errorId }: Props)
 
   return (
     <Stack gap="sm">
-      <Text size="sm" c="dimmed">
-        公開サイトのいちばん上に並ぶリンクです。上下のボタンで順番を変えられます。公開していないページや記事は、メニューに入れてもサイトには表示されません。
-      </Text>
       {items.length === 0 && (
         <Notice>
           いまはメニューに何も登録していません。この場合、親のない固定ページと「お知らせ」（記事の一覧）が自動で並びます。
         </Notice>
       )}
       {error && (
-        <Text id={errorId} tabIndex={-1} data-error-focus="" size="sm" fw={700} c="red.7">
+        <Input.Error id={errorId} tabIndex={-1} data-error-focus="" size="sm">
           {error}
-        </Text>
+        </Input.Error>
       )}
       {items.length > 0 && (
-        <Paper withBorder component="ol" p={0} m={0} style={{ listStyle: "none" }}>
+        <Paper
+          withBorder
+          component="ol"
+          className={classes.list}
+          aria-label="メニューの項目（公開サイトでの並び順）"
+          aria-describedby={error ? errorId : undefined}
+        >
           {items.map((it, i) => {
             const name = title(it);
             const c = it.contentId !== null ? byId.get(it.contentId) : undefined;
             return (
-              <Group
-                component="li"
-                key={it.key}
-                gap="sm"
-                px="md"
-                py="sm"
-                style={i > 0 ? { borderTop: "1px solid var(--mantine-color-gray-2)" } : undefined}
-              >
-                <Text component="span" aria-hidden="true" fw={700} c="dimmed" w="1.5rem" ta="right">
+              <Group component="li" key={it.key} gap="sm" className={classes.row}>
+                <Text
+                  component="span"
+                  aria-hidden="true"
+                  fw={700}
+                  c="dimmed"
+                  className={classes.number}
+                >
                   {i + 1}.
                 </Text>
-                <Box miw="12rem" style={{ flex: 1 }}>
+                <Box className={classes.text}>
                   <Text fw={700}>{name}</Text>
                   <Text size="sm" c="dimmed">
                     {it.url !== null
@@ -155,7 +159,7 @@ export function MenuEditor({ items, onChange, contents, error, errorId }: Props)
                         : "リンク先のページが見つかりません。削除されたか、編集で選び直してください。"}
                   </Text>
                 </Box>
-                <Group gap={4}>
+                <Group gap={4} className={classes.actions}>
                   <Button
                     ref={setButton(`${it.key}-up`)}
                     size="sm"

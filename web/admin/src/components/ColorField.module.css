@@ -1,18 +1,51 @@
+/* The legend reads like a Mantine input label. */
+.root > legend {
+  margin-bottom: 0;
+  font-size: var(--mantine-font-size-md);
+}
+
+/* The two inner labels are secondary to the legend. */
+.label {
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
 .picker {
   display: block;
-  width: 4rem;
+  width: 3.5rem;
   height: 2.5rem;
-  padding: 2px;
+  padding: 3px;
   border: 1px solid var(--mantine-color-gray-4);
   border-radius: var(--mantine-radius-sm);
   background: var(--mantine-color-white);
   cursor: pointer;
 }
+.picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.picker::-webkit-color-swatch {
+  border: none;
+  border-radius: calc(var(--mantine-radius-sm) - 2px);
+}
+.picker:focus-visible {
+  outline-offset: 0;
+}
+
+.code {
+  font-family: var(--mantine-font-family-monospace);
+}
 
 .preview {
-  padding: var(--mantine-spacing-xs) var(--mantine-spacing-md);
-  border: 1px solid var(--mantine-color-gray-4);
+  flex-shrink: 0;
+  padding: 0.25rem var(--mantine-spacing-sm);
   border-radius: var(--mantine-radius-sm);
-  color: #fff;
+  color: var(--mantine-color-white);
+  font-size: var(--mantine-font-size-sm);
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.icon {
+  display: inline-flex;
+  margin-top: 2px;
 }

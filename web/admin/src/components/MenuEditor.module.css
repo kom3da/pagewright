@@ -1,0 +1,30 @@
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+}
+.row + .row {
+  border-top: 1px solid var(--mantine-color-gray-2);
+}
+
+.number {
+  width: 1.5rem;
+  text-align: right;
+  align-self: flex-start;
+}
+
+.text {
+  flex: 1;
+  min-width: 12rem;
+}
+
+/* On phones the buttons go under the item's name, lined up with the text. */
+@media (max-width: 47.99em) {
+  .actions {
+    margin-inline-start: calc(1.5rem + var(--mantine-spacing-sm));
+  }
+}
