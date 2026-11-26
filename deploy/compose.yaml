@@ -69,6 +69,8 @@ services:
       PAGEWRIGHT_PUBLIC_BASE_URL: https://${PAGEWRIGHT_SITE_DOMAIN:?.env に PAGEWRIGHT_SITE_DOMAIN を書いてください}
       PAGEWRIGHT_SMTP_ADDR: ${PAGEWRIGHT_SMTP_ADDR:?.env に PAGEWRIGHT_SMTP_ADDR を書いてください}
       PAGEWRIGHT_MAIL_FROM: ${PAGEWRIGHT_MAIL_FROM:?.env に PAGEWRIGHT_MAIL_FROM を書いてください}
+      # サイト内検索（Pagefind）。off で使わない
+      PAGEWRIGHT_PAGEFIND: ${PAGEWRIGHT_PAGEFIND:-/usr/local/bin/pagefind_extended}
       TZ: ${TZ:-Asia/Tokyo}
     volumes:
       - data:/data # 画像（media/）と書き出したサイト（site/）
