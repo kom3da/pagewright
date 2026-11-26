@@ -17,8 +17,8 @@ describe("categories", () => {
 
   it("adds a category with a parent and validates the URL", async () => {
     const { user } = renderApp("/categories");
-    await screen.findByRole("table");
-    const form = screen.getByRole("region", { name: "カテゴリを追加" });
+    await user.click(await screen.findByRole("button", { name: "カテゴリを追加" }));
+    const form = await screen.findByRole("dialog", { name: "カテゴリを追加" });
     await user.type(within(form).getByLabelText(/カテゴリの名前/), "新築");
     const slug = within(form).getByLabelText(/カテゴリのURL/);
     await user.type(slug, "しんちく");
@@ -28,13 +28,16 @@ describe("categories", () => {
     await user.selectOptions(within(form).getByLabelText("親カテゴリ"), "施工事例");
     await user.click(within(form).getByRole("button", { name: "追加する" }));
     expect(await screen.findByText("カテゴリ「新築」を追加しました。")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(await screen.findByRole("cell", { name: "新築" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "カテゴリを追加" })).toHaveFocus();
     expect(db.categories.at(-1)).toMatchObject({ name: "新築", slug: "new-house", parentId: 2 });
   });
 
   it("shows a duplicate URL error from the server on the field", async () => {
     const { user } = renderApp("/categories");
-    await screen.findByRole("table");
-    const form = screen.getByRole("region", { name: "カテゴリを追加" });
+    await user.click(await screen.findByRole("button", { name: "カテゴリを追加" }));
+    const form = await screen.findByRole("dialog", { name: "カテゴリを追加" });
     await user.type(within(form).getByLabelText(/カテゴリの名前/), "ニュース");
     await user.type(within(form).getByLabelText(/カテゴリのURL/), "news");
     await user.click(within(form).getByRole("button", { name: "追加する" }));
@@ -55,8 +58,8 @@ describe("categories", () => {
       "name",
     );
     const { user } = renderApp("/categories");
-    await screen.findByRole("table");
-    const form = screen.getByRole("region", { name: "カテゴリを追加" });
+    await user.click(await screen.findByRole("button", { name: "カテゴリを追加" }));
+    const form = await screen.findByRole("dialog", { name: "カテゴリを追加" });
     await user.type(within(form).getByLabelText(/カテゴリの名前/), "長い名前");
     await user.type(within(form).getByLabelText(/カテゴリのURL/), "long");
     await user.click(within(form).getByRole("button", { name: "追加する" }));
@@ -106,6 +109,17 @@ describe("categories", () => {
 });
 
 describe("tags", () => {
+  it("guides to the add button when there are no tags", async () => {
+    db.tags = [];
+    const { user } = renderApp("/tags");
+    expect(await screen.findByText("まだタグがありません")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "タグを追加" }));
+    const dialog = await screen.findByRole("dialog", { name: "タグを追加" });
+    await user.click(within(dialog).getByRole("button", { name: "キャンセル" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(db.tags).toEqual([]);
+  });
+
   it("edits a tag's name and URL", async () => {
     const requests = recordRequests();
     const { user } = renderApp("/tags");
@@ -143,10 +157,11 @@ describe("tags", () => {
 
   it("adds and deletes tags", async () => {
     const { user } = renderApp("/tags");
-    await screen.findByRole("table");
-    await user.type(screen.getByLabelText(/タグの名前/), "求人");
-    await user.type(screen.getByLabelText(/タグのURL/), "jobs");
-    await user.click(screen.getByRole("button", { name: "追加する" }));
+    await user.click(await screen.findByRole("button", { name: "タグを追加" }));
+    const dialog = await screen.findByRole("dialog", { name: "タグを追加" });
+    await user.type(within(dialog).getByLabelText(/タグの名前/), "求人");
+    await user.type(within(dialog).getByLabelText(/タグのURL/), "jobs");
+    await user.click(within(dialog).getByRole("button", { name: "追加する" }));
     expect(await screen.findByRole("cell", { name: "求人" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "「イベント」を削除" }));
