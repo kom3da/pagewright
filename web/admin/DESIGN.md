@@ -225,11 +225,11 @@ Mantine をそのまま使うもの：`Button`、`TextInput`、`Textarea`（自�
 
 Tailwind と Radix は取り除き、すべての画面の部品（ボタン、入力欄、ダイアログ、確認、バッジ、通知）は Mantine と上の共通部品に置き換え済みです。見た目はそろいましたが、**画面の構成はまだ以前のまま**です。次の作業で組み直します。
 
-- **記事・固定ページの編集**（`pages/EditorPage.tsx`、`editor/*`、`components/ScheduleDialog.tsx`・`PreviewLinksDialog.tsx`・`TagPicker.tsx`・`CategoryCheckboxes.tsx`）
-  - 操作ボタンが画面下の固定バーに横一列（スマホでは3段になり本文を隠す）。「詳細設定」が素の `<details>`（`EditorPage.module.css`）
-  - 案：PC は本文＋右の設定パネル（状態・公開・予約・URL・カテゴリ・タグ）、上のバーに「下書き保存」と主ボタン「公開する」。スマホは設定を引き出しに
-  - ツールバーは独自の CSS（`editor/Toolbar.module.css`）と独自の矢印キー移動。Mantine の `Toolbar` に替えてもよい（キーボード操作の E2E を守る）
-  - 予約の日付・時刻は `.pw-input`（素の input）。`@mantine/dates` に替えるなら、E2E の `getByLabel("日付").fill("2099-12-01")` を直す
+- **記事・固定ページの編集**（`pages/EditorPage.tsx`）は組み直し済み
+  - 見出しの下に「保存と公開」のバー（PC では上に貼り付く。スマホでは画面の下に固定した細いバー）：「下書き保存」・主ボタン「公開する」・「その他」（日時を指定して公開、公開をやめる、削除する）
+  - 設定は `Section` の並び（公開〔公開日・予約〕・プレビュー・URL・カテゴリとタグ）。1200px 以上は本文の右の列、それより狭いと本文の下（「その他」から移動できる）
+  - 本文のツールバーは Mantine の `ActionIcon`／`Button` と `Tooltip`。矢印キーの移動は独自のまま（使えないボタンにも移れるよう `aria-disabled` を使うため。Mantine の `Toolbar` は `disabled` で飛ばしてしまう）
+  - 日付と時刻は `components/DateTimeFields.tsx`（`.pw-input` の素の input 2つで説明とエラーを共有）。予約と公開日で使う
 - **ホームと一覧**：組み直し済み（2026年11月）。ホームは「記事とページの状況」（件数から絞り込んだ一覧へ）・「最近編集した記事・ページ」・「公開サイトの更新」（`GET /api/site/builds`）・お問い合わせの件数（管理者だけ）。まだ何も公開していないサイトでは「はじめに」の手順を出す
   - 「画像」（メディアライブラリ）の画面はまだない。作るならサイドバーの `navGroups` に足し、`editor/MediaDialog.tsx` の `UploadForm`・`MediaPicker` を使う
 - **サイトの設定**（`pages/SiteSettingsPage.tsx`、`components/ColorField.tsx`・`MenuEditor.tsx`）
