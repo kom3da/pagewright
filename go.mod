@@ -7,6 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/pressly/goose/v3 v3.30.2
+	golang.org/x/net v0.63.0
 	golang.org/x/text v0.44.0
 )
 
