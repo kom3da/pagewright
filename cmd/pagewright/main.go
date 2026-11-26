@@ -18,6 +18,8 @@ const usage = `使い方: pagewright <サブコマンド>
   migrate                        データベースを最新の形にする
   init --site 名前 --email メール  サイトと管理者を作り、ログイン用URLを表示する
   login-url --email メール        ログイン用URLを発行する（メールが届かないとき）
+  import-wxr --site ID --author-email メール [--dry-run] ファイル
+                                 WordPressの書き出しファイル（WXR）を取り込む
 
 設定は環境変数 PAGEWRIGHT_* で行う（internal/config を参照）。
 `
@@ -43,6 +45,8 @@ func main() {
 		err = runInit(ctx, cfg, args)
 	case "login-url":
 		err = runLoginURL(ctx, cfg, args)
+	case "import-wxr":
+		err = runImportWXR(ctx, args)
 	default:
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
