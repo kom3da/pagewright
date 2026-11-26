@@ -530,6 +530,13 @@ func (s *Server) deleteContent(w http.ResponseWriter, r *http.Request, sess *ses
 	}
 	ctx := r.Context()
 	err = s.DB.InTenantTx(ctx, func(tx pgx.Tx, q *dbgen.Queries) error {
+		children, err := q.ListChildContentIDs(ctx, &id)
+		if err != nil {
+			return err
+		}
+		if len(children) > 0 {
+			return invalid("has_children", "下に固定ページがあるため削除できません。先に下のページを別の場所へ移すか、削除してください")
+		}
 		n, err := q.DeleteContent(ctx, id)
 		if err != nil {
 			return err

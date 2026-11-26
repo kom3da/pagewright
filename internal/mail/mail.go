@@ -27,8 +27,8 @@ type Sender interface {
 	Send(ctx context.Context, m Message) error
 }
 
-// SMTP sends through an SMTP server without authentication (e.g. Mailpit
-// in development, or a local relay).
+// SMTP sends through an SMTP server (Mailpit in development, a local relay
+// or a mail service with AUTH).
 type SMTP struct {
 	Addr string // host:port
 	From string // e.g. "Pagewright <no-reply@example.com>"

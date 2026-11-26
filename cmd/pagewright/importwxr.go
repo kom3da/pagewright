@@ -21,8 +21,6 @@ import (
 	"github.com/kom3da/pagewright/internal/migrate/wxrimport"
 )
 
-// devDatabaseURL is the database of deploy/compose.dev.yaml.
-const devDatabaseURL = "postgres://pagewright:pagewright@localhost:5432/pagewright?sslmode=disable"
 
 // runImportWXR implements `pagewright import-wxr [flags] <file.xml>`: it
 // imports a WordPress export into one site and prints the report.
@@ -39,7 +37,7 @@ func importWXR(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	}
 	defaultURL := os.Getenv("PAGEWRIGHT_DATABASE_URL")
 	if defaultURL == "" {
-		defaultURL = devDatabaseURL
+		defaultURL = config.DevDatabaseURL
 	}
 	dbURL := fs.String("database-url", defaultURL, "PostgreSQL の接続先（環境変数 PAGEWRIGHT_DATABASE_URL）")
 	site := fs.String("site", "", "取り込み先のサイト（テナント）の ID（UUID）")

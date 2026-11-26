@@ -271,7 +271,7 @@ func (s *Server) finish(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, routing.ErrURLTaken):
 		ae = errURLTaken
 	case errors.Is(err, routing.ErrReservedPath):
-		ae = invalid("reserved_slug", "「posts」と「media」はサイトの仕組みで使っているため、いちばん上の固定ページのURLには使えません")
+		ae = invalid("reserved_slug", "「posts」「media」「search」「pagefind」はサイトの仕組みで使っているため、いちばん上の固定ページのURLには使えません")
 	case errors.As(err, &be):
 		ae = invalid("invalid_body", be.Message)
 	case errors.As(err, &se):

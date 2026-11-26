@@ -705,6 +705,19 @@ func TestEditConflict(t *testing.T) {
 	alice.mustDo(http.MethodPut, path, map[string]any{"title": "私", "body": json.RawMessage(paragraph), "baseRevisionId": d.Revision.ID}, nil, http.StatusOK)
 }
 
+func TestDeletePageWithChildren(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	parent := alice.newContent("page", "親", true)
+	child := alice.newContent("page", "子", false)
+	alice.mustDo(http.MethodPatch, fmt.Sprintf("/api/contents/%d", child.ID), map[string]any{"parentId": parent.ID}, &child, http.StatusOK)
+	if got, code := alice.errorCode(http.MethodDelete, fmt.Sprintf("/api/contents/%d", parent.ID), nil); got != http.StatusUnprocessableEntity || code != "has_children" {
+		t.Errorf("delete a parent page = %d %s, want 422 has_children", got, code)
+	}
+	alice.mustDo(http.MethodDelete, fmt.Sprintf("/api/contents/%d", child.ID), nil, nil, http.StatusNoContent)
+	alice.mustDo(http.MethodDelete, fmt.Sprintf("/api/contents/%d", parent.ID), nil, nil, http.StatusNoContent)
+}
+
 // TestPublishConflict refuses to publish or schedule a revision the
 // editor has not seen.
 func TestPublishConflict(t *testing.T) {
