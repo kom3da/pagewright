@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -61,7 +62,22 @@ func Open(ctx context.Context, connString string) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open pool: %w", err)
 	}
+	warnPowerfulLogin(ctx, pool)
 	return &DB{pool: pool}, nil
+}
+
+// warnPowerfulLogin warns when the login role could leave the app role
+// (RESET ROLE) and bypass row level security: a superuser or the owner of
+// the tables. Production logs in as pagewright_app itself.
+func warnPowerfulLogin(ctx context.Context, pool *pgxpool.Pool) {
+	var super, owner bool
+	err := pool.QueryRow(ctx, `SELECT r.rolsuper,
+		EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tableowner = session_user)
+		FROM pg_roles r WHERE r.rolname = session_user`).Scan(&super, &owner)
+	if err != nil || !(super || owner) {
+		return
+	}
+	slog.Warn("データベースに強い権限のユーザーで接続しています。本番では " + AppRole + " で接続してください（開発環境ならこのままで構いません）")
 }
 
 // Close closes the pool.

@@ -84,7 +84,10 @@ func runServe(ctx context.Context, cfg config.Config) error {
 
 // listen serves h on addr until ctx is done.
 func listen(ctx context.Context, addr string, h http.Handler) error {
-	srv := &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
+	// ReadTimeout leaves room for a 10 MB upload on a slow line; idle
+	// keep-alive connections are not held forever.
+	srv := &http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout: 2 * time.Minute, IdleTimeout: 2 * time.Minute}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
 	select {
