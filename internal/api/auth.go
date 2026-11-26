@@ -2,7 +2,6 @@ package api
 
 import (
 	"fmt"
-	"net"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -44,11 +43,15 @@ func (s *Server) loginLink(w http.ResponseWriter, r *http.Request, _ *session) e
 		return invalid("invalid_email", "メールアドレスの形式が正しくありません")
 	}
 
-	// Limit every address alike, registered or not, so the answer reveals
-	// nothing.
-	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-	if !s.loginByIP.allow(ip) || !s.loginByEmail.allow(strings.ToLower(email)) {
+	if !s.loginByIP.allow(s.clientKey(r)) {
 		return &apiError{http.StatusTooManyRequests, "too_many_requests", "ログイン用のリンクの送信が続いています。しばらく待ってからお試しください"}
+	}
+	// Past the per-address limit, answer as usual but send nothing: the
+	// limit must not reveal registration, nor let others lock someone out
+	// with errors.
+	if !s.loginByEmail.allow(strings.ToLower(email)) {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
 	}
 
 	token := newToken()
@@ -69,9 +72,7 @@ func (s *Server) loginLink(w http.ResponseWriter, r *http.Request, _ *session) e
 				"このリンクの有効期限は15分で、1回だけ使えます。\n" +
 				"心当たりがない場合は、このメールを無視してください。\n",
 		}
-		if err := s.Mail.Send(r.Context(), msg); err != nil {
-			s.Logger.Error("send login link", "err", err)
-		}
+		s.sendMail(r.Context(), nil, msg)
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil

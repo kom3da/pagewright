@@ -50,7 +50,7 @@ func toCategory(c dbgen.Category) categoryJSON {
 
 func checkName(name string) (string, error) {
 	name = strings.TrimSpace(name)
-	if name == "" || len([]rune(name)) > 100 {
+	if name == "" || len([]rune(name)) > 100 || !plainText(name, false) {
 		return "", invalid("invalid_name", "名前を100文字以内で入力してください")
 	}
 	return name, nil

@@ -54,6 +54,7 @@ type fakeBuilds struct {
 	mu        sync.Mutex
 	tenants   []uuid.UUID
 	publishes []scheduledPublish
+	mail      *fakeMail
 }
 
 func (f *fakeBuilds) EnqueueBuild(_ context.Context, _ pgx.Tx, id uuid.UUID) error {
@@ -73,6 +74,11 @@ func (f *fakeBuilds) EnqueuePublish(_ context.Context, _ pgx.Tx, _ uuid.UUID, co
 type scheduledPublish struct {
 	contentID, revisionID int64
 	at                    time.Time
+}
+
+// EnqueueMail delivers right away through the env's fake mail.
+func (f *fakeBuilds) EnqueueMail(ctx context.Context, _ pgx.Tx, m mail.Message) error {
+	return f.mail.Send(ctx, m)
 }
 
 func (f *fakeBuilds) count(id uuid.UUID) int {
@@ -102,7 +108,8 @@ type env struct {
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	d := dbtest.New(t)
-	e := &env{t: t, db: d, mail: &fakeMail{}, builds: &fakeBuilds{}, tenantA: uuid.New(), tenantB: uuid.New()}
+	fm := &fakeMail{}
+	e := &env{t: t, db: d, mail: fm, builds: &fakeBuilds{mail: fm}, tenantA: uuid.New(), tenantB: uuid.New()}
 	ctx := context.Background()
 	seed := []string{
 		fmt.Sprintf("INSERT INTO tenants (id, name) VALUES ('%s', 'サイトA'), ('%s', 'サイトB')", e.tenantA, e.tenantB),
@@ -122,7 +129,7 @@ func newEnv(t *testing.T) *env {
 	}
 	s := api.New(api.Options{
 		DB: d.DB, Mail: e.mail, Media: media.Store{Root: t.TempDir()}, Jobs: e.builds,
-		BaseURL: "http://admin.test",
+		BaseURL: "http://admin.test", PublicBaseURL: "https://site-a.example",
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/api/", s.Handler())
@@ -702,16 +709,23 @@ func TestDeleteParentCategory(t *testing.T) {
 func TestLoginLinkRateLimit(t *testing.T) {
 	e := newEnv(t)
 	c := e.anon()
-	for i := range 5 {
-		if got := c.do(http.MethodPost, "/api/auth/login-link", map[string]string{"email": "nobody@example.com"}, nil); got != http.StatusNoContent {
+	for i := range 6 {
+		if got := c.do(http.MethodPost, "/api/auth/login-link", map[string]string{"email": "Alice@Example.com"}, nil); got != http.StatusNoContent {
 			t.Fatalf("request %d = %d, want 204", i+1, got)
 		}
 	}
-	if got, code := c.errorCode(http.MethodPost, "/api/auth/login-link", map[string]string{"email": "Nobody@Example.com"}); got != http.StatusTooManyRequests || code != "too_many_requests" {
-		t.Errorf("6th request = %d %s, want 429 too_many_requests", got, code)
+	// The 6th answers the same but sends nothing.
+	e.mail.mu.Lock()
+	n := len(e.mail.sent)
+	e.mail.mu.Unlock()
+	if n != 5 {
+		t.Errorf("%d login mails sent, want 5", n)
 	}
 	// Other addresses are not affected.
-	c.mustDo(http.MethodPost, "/api/auth/login-link", map[string]string{"email": "alice@example.com"}, nil, http.StatusNoContent)
+	c.mustDo(http.MethodPost, "/api/auth/login-link", map[string]string{"email": "bob@example.com"}, nil, http.StatusNoContent)
+	if _, ok := e.mail.last(); !ok {
+		t.Error("no mail to bob")
+	}
 }
 
 type siteOut struct {

@@ -15,15 +15,16 @@ import (
 	"github.com/kom3da/pagewright/internal/config"
 	"github.com/kom3da/pagewright/internal/db"
 	"github.com/kom3da/pagewright/internal/jobs"
+	"github.com/kom3da/pagewright/internal/mail"
 )
 
 // newRiver returns a River client that works the build jobs. It uses the
 // app's pool, so jobs run as pagewright_app like the API.
-func newRiver(d *db.DB, cfg config.Config) (*river.Client[pgx.Tx], error) {
+func newRiver(d *db.DB, cfg config.Config, sender mail.Sender) (*river.Client[pgx.Tx], error) {
 	workers := jobs.NewWorkers(d, build.Options{
 		OutDir: cfg.SiteDir(), MediaRoot: cfg.MediaDir(), BaseURL: cfg.PublicBaseURL, Logger: slog.Default(),
 		Pagefind: cfg.Pagefind, FormBaseURL: cfg.BaseURL,
-	})
+	}, sender)
 	if cfg.Pagefind == "" {
 		slog.Info("Pagefind が見つからないため、公開サイトの検索は作りません（mise install で入ります）")
 	}
@@ -47,6 +48,18 @@ type riverJobs struct {
 
 func (j riverJobs) EnqueueBuild(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) error {
 	_, err := j.client.InsertTx(ctx, tx, jobs.BuildSiteArgs{TenantID: tenantID}, nil)
+	return err
+}
+
+func (j riverJobs) EnqueueMail(ctx context.Context, tx pgx.Tx, m mail.Message) error {
+	args := jobs.SendMailArgs{To: m.To, Subject: m.Subject, Body: m.Body}
+	opts := &river.InsertOpts{MaxAttempts: 10}
+	var err error
+	if tx == nil {
+		_, err = j.client.Insert(ctx, args, opts)
+	} else {
+		_, err = j.client.InsertTx(ctx, tx, args, opts)
+	}
 	return err
 }
 

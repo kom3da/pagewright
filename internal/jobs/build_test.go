@@ -80,7 +80,7 @@ func TestBuildSiteJob(t *testing.T) {
 	env := dbtest.New(t)
 	tenant := env.CreateTenant(t, "ジョブ株式会社")
 	opts := build.Options{OutDir: t.TempDir()}
-	client := newRiver(t, env, NewWorkers(env.DB, opts))
+	client := newRiver(t, env, NewWorkers(env.DB, opts, nil))
 
 	if _, err := client.Insert(context.Background(), BuildSiteArgs{TenantID: tenant}, nil); err != nil {
 		t.Fatal(err)

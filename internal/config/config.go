@@ -2,6 +2,7 @@
 package config
 
 import (
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,6 +25,9 @@ type Config struct {
 	MailFrom           string // PAGEWRIGHT_MAIL_FROM
 	AdminDir           string // PAGEWRIGHT_ADMIN_DIR: built admin UI, when not embedded
 	Pagefind           string // PAGEWRIGHT_PAGEFIND: Pagefind binary for site search; "off" disables
+	// TrustedProxies (PAGEWRIGHT_TRUSTED_PROXIES, comma-separated CIDRs or
+	// addresses) are reverse proxies whose X-Forwarded-For is believed.
+	TrustedProxies []netip.Prefix
 }
 
 // FromEnv reads Config, using development defaults for unset values.
@@ -39,6 +43,17 @@ func FromEnv() Config {
 		MailFrom:      env("PAGEWRIGHT_MAIL_FROM", "Pagewright <no-reply@localhost>"),
 		AdminDir:      env("PAGEWRIGHT_ADMIN_DIR", filepath.Join("web", "admin", "dist")),
 		Pagefind:      os.Getenv("PAGEWRIGHT_PAGEFIND"),
+	}
+	for _, p := range strings.Split(os.Getenv("PAGEWRIGHT_TRUSTED_PROXIES"), ",") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if pre, err := netip.ParsePrefix(p); err == nil {
+			c.TrustedProxies = append(c.TrustedProxies, pre)
+		} else if a, err := netip.ParseAddr(p); err == nil {
+			c.TrustedProxies = append(c.TrustedProxies, netip.PrefixFrom(a, a.BitLen()))
+		}
 	}
 	switch c.Pagefind {
 	case "off":

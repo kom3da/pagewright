@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"time"
 
@@ -34,6 +35,8 @@ type Jobs interface {
 	EnqueueBuild(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) error
 	// EnqueuePublish publishes a scheduled revision at at.
 	EnqueuePublish(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, contentID, revisionID int64, at time.Time) error
+	// EnqueueMail sends a mail. tx may be nil.
+	EnqueueMail(ctx context.Context, tx pgx.Tx, m mail.Message) error
 }
 
 // Options configures a Server.
@@ -43,8 +46,12 @@ type Options struct {
 	Media         media.Store
 	Jobs          Jobs   // nil: no builds or scheduled publishing
 	BaseURL       string // admin origin, for login links
-	SecureCookies bool
-	Logger        *slog.Logger
+	PublicBaseURL string // public site origin, for links on form result pages
+	// TrustedProxies are reverse proxies whose X-Forwarded-For is believed
+	// when they are the direct peer.
+	TrustedProxies []netip.Prefix
+	SecureCookies  bool
+	Logger         *slog.Logger
 }
 
 // Server is the admin API.
@@ -53,6 +60,8 @@ type Server struct {
 	loginByEmail *limiter
 	loginByIP    *limiter
 	formByIP     *limiter
+	formBySite   *limiter
+	autoReplyTo  *limiter
 }
 
 const (
@@ -72,6 +81,8 @@ func New(o Options) *Server {
 		loginByEmail: newLimiter(5, 15*time.Minute),
 		loginByIP:    newLimiter(30, 15*time.Minute),
 		formByIP:     newLimiter(10, 10*time.Minute),
+		formBySite:   newLimiter(200, time.Hour),
+		autoReplyTo:  newLimiter(3, 24*time.Hour),
 	}
 }
 
@@ -340,6 +351,20 @@ func newToken() string {
 func hashToken(t string) []byte {
 	h := sha256.Sum256([]byte(t))
 	return h[:]
+}
+
+// sendMail queues m in tx (nil: on its own), or sends it right away when
+// no job queue is configured.
+func (s *Server) sendMail(ctx context.Context, tx pgx.Tx, m mail.Message) {
+	var err error
+	if s.Jobs != nil {
+		err = s.Jobs.EnqueueMail(ctx, tx, m)
+	} else {
+		err = s.Mail.Send(ctx, m)
+	}
+	if err != nil {
+		s.Logger.Error("send mail", "subject", m.Subject, "err", err)
+	}
 }
 
 // enqueueBuild schedules a site build in tx, when a queue is configured.

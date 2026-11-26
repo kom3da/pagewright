@@ -19,6 +19,7 @@ import (
 
 	"github.com/kom3da/pagewright/internal/build"
 	"github.com/kom3da/pagewright/internal/db"
+	"github.com/kom3da/pagewright/internal/mail"
 )
 
 // BuildSiteArgs asks for a full build of one tenant's public site. Insert
@@ -35,11 +36,12 @@ func (BuildSiteArgs) Kind() string { return "build_site" }
 const BuildTimeout = 10 * time.Minute
 
 // NewWorkers registers every worker of this package.
-func NewWorkers(d *db.DB, opts build.Options) *river.Workers {
+func NewWorkers(d *db.DB, opts build.Options, sender mail.Sender) *river.Workers {
 	w := river.NewWorkers()
 	river.AddWorker(w, NewBuildSiteWorker(d, opts))
 	river.AddWorker(w, NewPublishScheduledWorker(d))
 	river.AddWorker(w, &CleanupAuthWorker{db: d})
+	river.AddWorker(w, &SendMailWorker{sender: sender})
 	return w
 }
 

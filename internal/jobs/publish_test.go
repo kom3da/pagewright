@@ -36,7 +36,7 @@ func TestPublishScheduled(t *testing.T) {
 	tenant := env.CreateTenant(t, "予約株式会社")
 	at := time.Now().Add(-time.Second).UTC().Truncate(time.Second)
 	contentID, revisionID := scheduledPost(t, env, tenant, at)
-	client := newRiver(t, env, NewWorkers(env.DB, build.Options{OutDir: t.TempDir()}))
+	client := newRiver(t, env, NewWorkers(env.DB, build.Options{OutDir: t.TempDir()}, nil))
 
 	if _, err := client.Insert(context.Background(), PublishScheduledArgs{
 		TenantID: tenant, ContentID: contentID, RevisionID: revisionID, At: at,
@@ -64,7 +64,7 @@ func TestPublishScheduledIgnoresStaleJobs(t *testing.T) {
 	env := dbtest.New(t)
 	tenant := env.CreateTenant(t, "予約株式会社")
 	contentID, revisionID := scheduledPost(t, env, tenant, time.Now().Add(time.Hour))
-	client := newRiver(t, env, NewWorkers(env.DB, build.Options{OutDir: t.TempDir()}))
+	client := newRiver(t, env, NewWorkers(env.DB, build.Options{OutDir: t.TempDir()}, nil))
 
 	stale := []PublishScheduledArgs{
 		// The schedule was moved an hour later: the old job finds it not due.

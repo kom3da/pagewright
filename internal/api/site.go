@@ -102,7 +102,7 @@ func (s *Server) putSite(w http.ResponseWriter, r *http.Request, sess *session) 
 		return err
 	}
 	name := strings.TrimSpace(in.Name)
-	if name == "" || len([]rune(name)) > 100 {
+	if name == "" || len([]rune(name)) > 100 || !plainText(name, false) {
 		return invalid("invalid_name", "サイトの名前を100文字以内で入力してください")
 	}
 	if err := in.Validate(); err != nil {
@@ -117,7 +117,7 @@ func (s *Server) putSite(w http.ResponseWriter, r *http.Request, sess *session) 
 		}
 		if it.Label != nil {
 			l := strings.TrimSpace(*it.Label)
-			if l == "" || len([]rune(l)) > 50 {
+			if l == "" || len([]rune(l)) > 50 || !plainText(l, false) {
 				return invalid("invalid_menu", fmt.Sprintf("メニューの%d番目の表示名を50文字以内で入力してください", i+1))
 			}
 			in.Menu[i].Label = &l

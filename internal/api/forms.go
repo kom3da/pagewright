@@ -1,13 +1,12 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
-	"net"
 	"net/http"
 	"net/mail"
-	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -43,22 +42,33 @@ var phonePattern = regexp.MustCompile(`^[0-9０-９+＋()（）\- ー－]{0,30}$
 func (in *contactInput) check() []string {
 	var errs []string
 	lenOK := func(s string, max int) bool { return utf8.RuneCountInString(s) <= max }
-	if in.Name == "" || !lenOK(in.Name, 100) {
+	if in.Name == "" || !lenOK(in.Name, 100) || !plainText(in.Name, false) {
 		errs = append(errs, "お名前を100文字以内で入力してください")
 	}
-	if !lenOK(in.Kana, 100) {
+	if !lenOK(in.Kana, 100) || !plainText(in.Kana, false) {
 		errs = append(errs, "ふりがなは100文字以内で入力してください")
 	}
-	if a, err := mail.ParseAddress(in.Email); err != nil || a.Address != in.Email || len(in.Email) > 254 {
+	if !replyAddress(in.Email) {
 		errs = append(errs, "メールアドレスを正しい形式で入力してください（例：taro@example.jp）")
 	}
 	if !phonePattern.MatchString(in.Phone) {
 		errs = append(errs, "電話番号は数字とハイフンで入力してください")
 	}
-	if in.Message == "" || !lenOK(in.Message, 5000) {
+	if in.Message == "" || !lenOK(in.Message, 5000) || !plainText(in.Message, true) {
 		errs = append(errs, "お問い合わせ内容を5000文字以内で入力してください")
 	}
 	return errs
+}
+
+// replyAddress accepts plain internet addresses only: no display names,
+// no IP literals, and a dotted domain (so not root@localhost).
+func replyAddress(s string) bool {
+	a, err := mail.ParseAddress(s)
+	if err != nil || a.Address != s || len(s) > 254 || !plainText(s, false) {
+		return false
+	}
+	_, domain, _ := strings.Cut(s, "@")
+	return strings.Contains(domain, ".") && !strings.ContainsAny(domain, "[]:") && !strings.HasSuffix(domain, ".")
 }
 
 func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
@@ -69,15 +79,9 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxFormBytes)
 	if err := r.ParseForm(); err != nil {
-		s.formPage(w, http.StatusBadRequest, "", "送信できませんでした", []string{"送信された内容が大きすぎるか、形式が正しくありません。"}, backLink(r, ""))
+		s.formPage(w, http.StatusBadRequest, "", "送信できませんでした", []string{"送信された内容が大きすぎるか、形式が正しくありません。"}, "")
 		return
 	}
-	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-	if !s.formByIP.allow(ip) {
-		s.formPage(w, http.StatusTooManyRequests, "", "送信できませんでした", []string{"短い時間に何度も送信されています。しばらく待ってからお試しください。"}, backLink(r, ""))
-		return
-	}
-
 	in := contactInput{
 		Name:    strings.TrimSpace(r.PostFormValue("name")),
 		Kana:    strings.TrimSpace(r.PostFormValue("kana")),
@@ -86,10 +90,14 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 		Message: strings.TrimSpace(r.PostFormValue("message")),
 		Page:    r.PostFormValue("page"),
 	}
-	if !strings.HasPrefix(in.Page, "/") || strings.HasPrefix(in.Page, "//") || len(in.Page) > 500 {
+	if !strings.HasPrefix(in.Page, "/") || strings.HasPrefix(in.Page, "//") || len(in.Page) > 500 || !plainText(in.Page, false) {
 		in.Page = "/"
 	}
-	back := backLink(r, in.Page)
+	back := s.backLink(in.Page)
+	if !s.formByIP.allow(s.clientKey(r)) || !s.formBySite.allow(tenantID.String()) {
+		s.formPage(w, http.StatusTooManyRequests, "", "送信できませんでした", []string{"短い時間に多くの送信がありました。しばらく待ってからお試しください。"}, back)
+		return
+	}
 
 	ctx := db.WithTenant(r.Context(), tenantID)
 	var siteName string
@@ -123,69 +131,66 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var recipients []string
-	err = s.DB.InTenant(ctx, func(q *dbgen.Queries) error {
+	err = s.DB.InTenantTx(ctx, func(tx pgx.Tx, q *dbgen.Queries) error {
 		if _, err := q.CreateFormSubmission(ctx, dbgen.CreateFormSubmissionParams{
 			Name: in.Name, Kana: in.Kana, Email: in.Email, Phone: in.Phone, Message: in.Message, PagePath: in.Page,
 		}); err != nil {
 			return err
 		}
-		if settings.ContactEmail != "" {
-			recipients = []string{settings.ContactEmail}
-			return nil
+		recipients := []string{settings.ContactEmail}
+		if settings.ContactEmail == "" {
+			var err error
+			if recipients, err = q.ListAdminEmails(ctx); err != nil {
+				return err
+			}
 		}
-		recipients, err = q.ListAdminEmails(ctx)
-		return err
+		s.queueContactMails(ctx, tx, tenantID, siteName, recipients, in)
+		return nil
 	})
 	if err != nil {
 		s.Logger.Error("contact form: save", "tenant_id", tenantID, "err", err)
 		s.formPage(w, http.StatusInternalServerError, siteName, "送信できませんでした", []string{"サーバーでエラーが起きました。時間をおいてもう一度お試しください。"}, back)
 		return
 	}
-	s.sendContactMails(r, siteName, recipients, in)
 	s.formPage(w, http.StatusOK, siteName, "送信しました",
 		[]string{"お問い合わせを受け付けました。確認のメールをお送りしましたので、ご確認ください。", "担当者より折り返しご連絡いたします。"}, back)
 }
 
-func (s *Server) sendContactMails(r *http.Request, siteName string, recipients []string, in contactInput) {
+// queueContactMails notifies the site and acknowledges the sender. The
+// acknowledgement repeats nothing the sender typed, so the form cannot be
+// used to mail arbitrary text to arbitrary people, and each address gets
+// at most a few per day.
+func (s *Server) queueContactMails(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, siteName string, recipients []string, in contactInput) {
 	summary := fmt.Sprintf("お名前：%s\nふりがな：%s\nメールアドレス：%s\n電話番号：%s\n\nお問い合わせ内容：\n%s\n",
 		in.Name, in.Kana, in.Email, in.Phone, in.Message)
 	for _, to := range recipients {
-		err := s.Mail.Send(r.Context(), pwmail.Message{
+		s.sendMail(ctx, tx, pwmail.Message{
 			To:      to,
 			Subject: "【" + siteName + "】お問い合わせがありました",
 			Body: "サイトのお問い合わせフォームから、次の内容が届きました。\n" +
 				"返信するときは、下のメールアドレスあてに送ってください。\n\n" + summary +
 				"\n送信元のページ：" + in.Page + "\n受付日時：" + time.Now().In(time.FixedZone("JST", 9*60*60)).Format("2006年1月2日 15:04") + "\n",
 		})
-		if err != nil {
-			s.Logger.Error("contact form: notify", "err", err)
-		}
 	}
-	err := s.Mail.Send(r.Context(), pwmail.Message{
+	if !s.autoReplyTo.allow(tenantID.String() + " " + strings.ToLower(in.Email)) {
+		return
+	}
+	s.sendMail(ctx, tx, pwmail.Message{
 		To:      in.Email,
 		Subject: "【" + siteName + "】お問い合わせを受け付けました",
-		Body: in.Name + " 様\n\n" + siteName + " へのお問い合わせありがとうございます。\n" +
-			"次の内容で受け付けました。担当者より折り返しご連絡いたします。\n\n" + summary +
-			"\n※このメールは送信専用のアドレスからお送りしています。このメールに返信されても届きません。\n" +
-			"※お心当たりのない場合は、お手数ですがこのメールを破棄してください。\n",
+		Body: siteName + " のお問い合わせフォームから送信された内容を受け付けました。\n" +
+			"担当者より折り返しご連絡いたします。\n\n" +
+			"※このメールは送信専用のアドレスからお送りしています。このメールに返信されても届きません。\n" +
+			"※お心当たりのない場合は、どなたかが誤ってあなたのメールアドレスを入力した可能性があります。お手数ですがこのメールを破棄してください。\n",
 	})
-	if err != nil {
-		s.Logger.Error("contact form: auto reply", "err", err)
-	}
 }
 
-// backLink is where the result page sends people back to: the page the
-// form was on, from the Referer when it is an http(s) URL.
-func backLink(r *http.Request, page string) string {
-	ref, err := url.Parse(r.Referer())
-	if err != nil || (ref.Scheme != "http" && ref.Scheme != "https") || ref.Host == "" {
+// backLink is the page the form was on, on the public site.
+func (s *Server) backLink(page string) string {
+	if s.PublicBaseURL == "" {
 		return ""
 	}
-	if page == "" {
-		return ref.String()
-	}
-	return ref.Scheme + "://" + ref.Host + page
+	return s.PublicBaseURL + page
 }
 
 var formPageTmpl = template.Must(template.New("form").Parse(`<!doctype html>

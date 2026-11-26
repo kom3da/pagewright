@@ -28,18 +28,21 @@ func runServe(ctx context.Context, cfg config.Config) error {
 		return fmt.Errorf("connect to database: %w", err)
 	}
 
-	riverClient, err := newRiver(d, cfg)
+	sender := mail.SMTP{Addr: cfg.SMTPAddr, From: cfg.MailFrom}
+	riverClient, err := newRiver(d, cfg, sender)
 	if err != nil {
 		return err
 	}
 
 	apiServer := api.New(api.Options{
-		DB:            d,
-		Jobs:          riverJobs{client: riverClient},
-		Mail:          mail.SMTP{Addr: cfg.SMTPAddr, From: cfg.MailFrom},
-		Media:         media.Store{Root: cfg.MediaDir()},
-		BaseURL:       cfg.BaseURL,
-		SecureCookies: cfg.SecureCookies(),
+		DB:             d,
+		Jobs:           riverJobs{client: riverClient},
+		Mail:           sender,
+		PublicBaseURL:  cfg.PublicBaseURL,
+		TrustedProxies: cfg.TrustedProxies,
+		Media:          media.Store{Root: cfg.MediaDir()},
+		BaseURL:        cfg.BaseURL,
+		SecureCookies:  cfg.SecureCookies(),
 	})
 
 	mux := http.NewServeMux()
