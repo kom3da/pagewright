@@ -46,13 +46,19 @@ jobs:
           install_args: >-
             go aqua:sqlc-dev/sqlc aqua:golangci/golangci-lint github:sbdchd/squawk
             go:golang.org/x/vuln/cmd/govulncheck github:Pagefind/pagefind
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restore and save separately: actions/cache saves only after a
+      # successful job, so a failing job would never warm the cache. The
+      # build cache changes with every commit, so each run saves a new key.
+      - id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: go-${{ runner.os }}-${{ hashFiles('go.sum') }}
-          restore-keys: go-${{ runner.os }}-
+          key: go-${{ runner.os }}-${{ hashFiles('go.sum', 'mise.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ hashFiles('go.sum', 'mise.toml') }}-
+            go-${{ runner.os }}-
       - name: go test
         run: go test ./...
       - name: golangci-lint
@@ -63,6 +69,13 @@ jobs:
         run: sqlc diff
       - name: squawk (migrations)
         run: squawk internal/db/migrations/*.sql
+      - if: always() && steps.go-cache.outcome == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
   admin:
     name: Admin UI (lint, test, build)
@@ -78,6 +91,13 @@ jobs:
       - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         with:
           install_args: node pnpm
+      - id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('web/admin/pnpm-lock.yaml', 'mise.toml') }}
+          restore-keys: pnpm-${{ runner.os }}-
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm test
@@ -97,8 +117,25 @@ jobs:
       - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         with:
           install_args: node pnpm
+      - id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('web/admin/pnpm-lock.yaml', 'mise.toml') }}
+          restore-keys: pnpm-${{ runner.os }}-
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      # Browsers are cached per lockfile (it pins the Playwright version);
+      # the system packages they need are installed every time.
+      - id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/admin/pnpm-lock.yaml') }}
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
       - run: pnpm e2e
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
