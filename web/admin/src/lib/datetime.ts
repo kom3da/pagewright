@@ -8,6 +8,7 @@ const longFormat = new Intl.DateTimeFormat("ja-JP", {
   day: "numeric",
   hour: "numeric",
   minute: "2-digit",
+  hourCycle: "h23",
   timeZone: "Asia/Tokyo",
 });
 
@@ -17,6 +18,7 @@ export const formatJapanDateTime = (iso: string) => longFormat.format(new Date(i
 const shortFormat = new Intl.DateTimeFormat("ja-JP", {
   dateStyle: "medium",
   timeStyle: "short",
+  hourCycle: "h23",
   timeZone: "Asia/Tokyo",
 });
 

@@ -613,6 +613,9 @@ describe("scheduled publishing", () => {
     const dialog = await screen.findByRole("dialog", { name: "日時を指定して公開" });
     expect(within(dialog).getByRole("group", { name: "公開する日時（日本時間）" })).toBeVisible();
     await expectNoAxeViolations(dialog);
+    await fillSchedule(user, dialog, "2099-12-01", "21:00");
+    // The chosen value is read back in words (the inputs follow the browser's locale).
+    expect(within(dialog).getByText("2099年12月1日 21:00 に公開します")).toBeInTheDocument();
     await fillSchedule(user, dialog, "2099-12-01", "09:00");
     await user.click(within(dialog).getByRole("button", { name: "この日時で予約する" }));
 

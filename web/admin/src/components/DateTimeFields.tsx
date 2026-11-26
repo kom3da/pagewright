@@ -1,5 +1,6 @@
 import { Fieldset, SimpleGrid, type SimpleGridProps, Stack, Text } from "@mantine/core";
 import { type ReactNode, type Ref, useId } from "react";
+import { formatJapanDateTime, fromJapanInputs } from "../lib/datetime";
 
 export type DateTimeValue = { date: string; time: string };
 
@@ -13,6 +14,12 @@ type Props = {
   error?: string;
   dateRef?: Ref<HTMLInputElement>;
   cols?: SimpleGridProps["cols"];
+  /**
+   * Reads the chosen value back in words under the inputs, e.g.
+   * (at) => `${at} に公開します`. The browser draws the inputs in its own locale (an
+   * English browser shows 11/10/2026, 09:00 AM), so this line removes any doubt.
+   */
+  summary?: (at: string) => string;
 };
 
 /**
@@ -28,7 +35,9 @@ export function DateTimeFields({
   error,
   dateRef,
   cols = { base: 1, sm: 2 },
+  summary,
 }: Props) {
+  const at = fromJapanInputs(value.date, value.time);
   const id = useId();
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
@@ -72,6 +81,11 @@ export function DateTimeFields({
             />
           </div>
         </SimpleGrid>
+        {summary && (
+          <Text size="sm" fw={700} aria-live="polite">
+            {at ? summary(formatJapanDateTime(at)) : ""}
+          </Text>
+        )}
         {error && (
           <Text id={errorId} size="sm" fw={700} c="red.7">
             {error}

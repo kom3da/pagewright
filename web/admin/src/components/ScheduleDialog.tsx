@@ -103,6 +103,7 @@ function ScheduleForm({
         }}
         error={fieldError}
         dateRef={dateRef}
+        summary={(at) => `${at} に公開します`}
       />
       {error && !error.field && <ErrorMessage>{error.message}</ErrorMessage>}
       <Group justify="flex-end" gap="sm">
