@@ -47,6 +47,7 @@ type generator struct {
 	items      []*item // published, newest first
 	itemByID   map[int64]*item
 	itemByPath map[string]*item
+	legacy     map[string]map[string]string // WordPress query param -> id -> path
 	treeByID   map[int64]dbgen.ListContentTreeRow
 	catPath    map[int64]string
 	tagPath    map[int64]string
@@ -67,6 +68,7 @@ func (g *generator) run() error {
 	g.reserveSystemFiles()
 	g.index()
 	g.buildSite()
+	g.collectLegacy()
 	if err := g.writeAssets(); err != nil {
 		return err
 	}
@@ -83,7 +85,7 @@ func (g *generator) run() error {
 }
 
 func (g *generator) reserveSystemFiles() {
-	for _, f := range []string{"404.html", "sitemap.xml", "feed.xml", redirectsFile} {
+	for _, f := range []string{"404.html", "sitemap.xml", "feed.xml", redirectsFile, legacyFile} {
 		g.out.reserve(f)
 	}
 	for name := range g.theme.assets {

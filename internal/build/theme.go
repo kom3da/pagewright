@@ -24,6 +24,9 @@ type Site struct {
 	PostsURL      string // first page of the post list
 	FeedURL       string
 	StylesheetURL string // with a content hash for cache busting
+	// LegacyRedirects is set when /_legacy.json maps WordPress query URLs
+	// (/?p=123); the home page then forwards such visits.
+	LegacyRedirects bool
 }
 
 // Link is a titled URL path.

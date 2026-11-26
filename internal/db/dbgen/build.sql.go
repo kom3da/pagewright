@@ -111,7 +111,7 @@ func (q *Queries) ListContentTree(ctx context.Context) ([]ListContentTreeRow, er
 
 const listPublishedContents = `-- name: ListPublishedContents :many
 
-SELECT c.id, c.number, c.type, c.slug, c.parent_id, c.published_at,
+SELECT c.id, c.number, c.type, c.slug, c.parent_id, c.published_at, c.source_format,
   r.id AS revision_id, r.title, r.body, r.body_schema_version, r.fields,
   r.created_at AS revision_created_at
 FROM contents c
@@ -128,6 +128,7 @@ type ListPublishedContentsRow struct {
 	Slug              *string
 	ParentID          *int64
 	PublishedAt       *time.Time
+	SourceFormat      *string
 	RevisionID        int64
 	Title             string
 	Body              []byte
@@ -155,6 +156,7 @@ func (q *Queries) ListPublishedContents(ctx context.Context) ([]ListPublishedCon
 			&i.Slug,
 			&i.ParentID,
 			&i.PublishedAt,
+			&i.SourceFormat,
 			&i.RevisionID,
 			&i.Title,
 			&i.Body,

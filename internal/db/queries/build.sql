@@ -3,7 +3,7 @@
 -- name: ListPublishedContents :many
 -- Contents with their published revision. Only the published revision is
 -- ever rendered, never the latest one.
-SELECT c.id, c.number, c.type, c.slug, c.parent_id, c.published_at,
+SELECT c.id, c.number, c.type, c.slug, c.parent_id, c.published_at, c.source_format,
   r.id AS revision_id, r.title, r.body, r.body_schema_version, r.fields,
   r.created_at AS revision_created_at
 FROM contents c
