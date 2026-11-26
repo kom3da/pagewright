@@ -6,6 +6,8 @@ pnpm = "latest"
 "aqua:pressly/goose" = "latest"
 "aqua:golangci/golangci-lint" = "latest"
 "aqua:goreleaser/goreleaser" = "latest"
+"go:golang.org/x/vuln/cmd/govulncheck" = "latest"
+"aqua:rhysd/actionlint" = "latest"
 "github:sbdchd/squawk" = "2.74.0"
 "github:Pagefind/pagefind" = { version = "1.6.0", asset_pattern = "pagefind_extended-*" }
 
