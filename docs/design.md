@@ -1,7 +1,5 @@
 # Pagewright 設計ドキュメント
 
-> この文書は claude.ai 上の設計ドキュメント（https://claude.ai/artifact/5mj9GRKzeY69Ko8JuVqQxx）を書き出したものです。2026-11-27 時点。
-
 ## 概要
 
 Pagewrightは、中小企業や個人のWebサイト向けの、セルフホストでも速く、日本語に強いCMSです。管理画面は動的に動き、公開サイトは静的なファイルとして書き出すので、どのCDNやWebサーバーでも速く配信できます。
