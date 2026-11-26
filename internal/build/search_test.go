@@ -49,3 +49,30 @@ func TestSearchIndex(t *testing.T) {
 		t.Errorf("rebuild changed %v", res.Changed)
 	}
 }
+
+func TestSearchFailureFallsBack(t *testing.T) {
+	falseBin, err := exec.LookPath("false")
+	if err != nil {
+		t.Skip("no false binary")
+	}
+	env := dbtest.New(t)
+	s := newSeeder(t, env, "検索株式会社", "owner@example.com")
+	c := s.content("post", ptr("x"), nil)
+	s.publish(c.ID, s.revision(c.ID, "記事", paragraph("本文")).ID, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+
+	opts := build.Options{OutDir: t.TempDir(), Pagefind: falseBin}
+	res, err := build.Build(context.Background(), env.DB, s.tenant(), opts)
+	if err != nil {
+		t.Fatalf("build failed instead of falling back: %v", err)
+	}
+	files := siteFiles(t, filepath.Join(opts.OutDir, s.tenant().String()))
+	if _, ok := files["/search/index.html"]; ok {
+		t.Error("search page written although indexing failed")
+	}
+	if strings.Contains(files["/index.html"], `href="/search/"`) {
+		t.Error("menu links to search although indexing failed")
+	}
+	if len(res.Warnings) == 0 {
+		t.Error("no warning about the missing search")
+	}
+}

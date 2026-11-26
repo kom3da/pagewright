@@ -15,6 +15,7 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
+	"github.com/kom3da/pagewright/internal/config"
 	"github.com/kom3da/pagewright/internal/db"
 	"github.com/kom3da/pagewright/internal/jobs"
 	"github.com/kom3da/pagewright/internal/migrate/wxrimport"
@@ -46,7 +47,7 @@ func importWXR(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	dryRun := fs.Bool("dry-run", false, "取り込まずに、変換できないものの一覧だけを表示する")
 	pwURLs := fs.Bool("pagewright-urls", false, "旧URLを使わず Pagewright のURL（/posts/…/）にし、旧URLからリダイレクトする")
 	download := fs.Bool("download-media", false, "画像をダウンロードして本文の画像の場所を書き換える")
-	mediaRoot := fs.String("media-root", "./data/media", "画像の保存先")
+	mediaRoot := fs.String("media-root", config.FromEnv().MediaDir(), "画像の保存先（既定は PAGEWRIGHT_DATA_DIR/media）")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

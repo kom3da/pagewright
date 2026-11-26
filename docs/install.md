@@ -114,11 +114,15 @@ https://admin.example.co.jp/admin/login/verify?token=...
 
 ## メールの設定
 
-Pagewright はログイン用リンクをメールで送ります。いまの版は **SMTP の認証（ユーザー名とパスワード）に対応していません**。
-次のどれかを使ってください。
+Pagewright はログイン用リンクとお問い合わせの通知をメールで送ります。`.env` に次を書きます。
 
-- **IPアドレスで送信を許可できるサービス**：Google Workspace の「SMTP リレー サービス」、Microsoft 365 の「コネクタ」などで、サーバーのIPアドレスからの送信を許可し、`PAGEWRIGHT_SMTP_ADDR` にそのサーバー（例：`smtp-relay.gmail.com:587`）を書く
-- **社内やサーバー上のメール中継サーバー**（Postfix など）で、このサーバーからの送信を許可する
+| 設定 | 内容 |
+| --- | --- |
+| `PAGEWRIGHT_SMTP_ADDR` | SMTP サーバー（例：`smtp.example.co.jp:587`） |
+| `PAGEWRIGHT_SMTP_USERNAME`・`PAGEWRIGHT_SMTP_PASSWORD` | 認証が必要なサービスのとき。パスワードは TLS の上でしか送りません（サーバーが STARTTLS に対応しているか、次の implicit） |
+| `PAGEWRIGHT_SMTP_TLS` | 465 番ポートのように最初から TLS で話すサーバーなら `implicit` |
+
+メール送信サービス（SendGrid、Amazon SES など）の SMTP、Google Workspace の SMTP リレー、社内の中継サーバーのどれでも使えます。
 
 SPF・DKIM の設定がないと、迷惑メールに入りやすくなります。差出人のドメインの DNS も確認してください。
 

@@ -23,7 +23,7 @@ builds:
     tags:
       - embedadmin
     ldflags:
-      - -s -w
+      - -s -w -X main.version={{ .Version }}
     goos: [linux, darwin]
     goarch: [amd64, arm64]
     mod_timestamp: "{{ .CommitTimestamp }}"

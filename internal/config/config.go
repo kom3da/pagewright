@@ -22,6 +22,9 @@ type Config struct {
 	PublicBaseURL      string // PAGEWRIGHT_PUBLIC_BASE_URL: the public site, for sitemap and feed
 	DataDir            string // PAGEWRIGHT_DATA_DIR: media and built sites
 	SMTPAddr           string // PAGEWRIGHT_SMTP_ADDR
+	SMTPUsername       string // PAGEWRIGHT_SMTP_USERNAME: enables SMTP AUTH (over TLS only)
+	SMTPPassword       string // PAGEWRIGHT_SMTP_PASSWORD
+	SMTPImplicitTLS    bool   // PAGEWRIGHT_SMTP_TLS=implicit: TLS from the start (port 465)
 	MailFrom           string // PAGEWRIGHT_MAIL_FROM
 	AdminDir           string // PAGEWRIGHT_ADMIN_DIR: built admin UI, when not embedded
 	Pagefind           string // PAGEWRIGHT_PAGEFIND: Pagefind binary for site search; "off" disables
@@ -33,16 +36,19 @@ type Config struct {
 // FromEnv reads Config, using development defaults for unset values.
 func FromEnv() Config {
 	c := Config{
-		DatabaseURL:   env("PAGEWRIGHT_DATABASE_URL", DevDatabaseURL),
-		Addr:          env("PAGEWRIGHT_ADDR", ":8080"),
-		SiteAddr:      env("PAGEWRIGHT_SITE_ADDR", ":8081"),
-		BaseURL:       strings.TrimRight(env("PAGEWRIGHT_BASE_URL", "http://localhost:8080"), "/"),
-		PublicBaseURL: strings.TrimRight(env("PAGEWRIGHT_PUBLIC_BASE_URL", "http://localhost:8081"), "/"),
-		DataDir:       env("PAGEWRIGHT_DATA_DIR", "data"),
-		SMTPAddr:      env("PAGEWRIGHT_SMTP_ADDR", "localhost:1025"),
-		MailFrom:      env("PAGEWRIGHT_MAIL_FROM", "Pagewright <no-reply@localhost>"),
-		AdminDir:      env("PAGEWRIGHT_ADMIN_DIR", filepath.Join("web", "admin", "dist")),
-		Pagefind:      os.Getenv("PAGEWRIGHT_PAGEFIND"),
+		DatabaseURL:     env("PAGEWRIGHT_DATABASE_URL", DevDatabaseURL),
+		Addr:            env("PAGEWRIGHT_ADDR", ":8080"),
+		SiteAddr:        envAllowEmpty("PAGEWRIGHT_SITE_ADDR", ":8081"),
+		BaseURL:         strings.TrimRight(env("PAGEWRIGHT_BASE_URL", "http://localhost:8080"), "/"),
+		PublicBaseURL:   strings.TrimRight(env("PAGEWRIGHT_PUBLIC_BASE_URL", "http://localhost:8081"), "/"),
+		DataDir:         env("PAGEWRIGHT_DATA_DIR", "data"),
+		SMTPAddr:        env("PAGEWRIGHT_SMTP_ADDR", "localhost:1025"),
+		SMTPUsername:    os.Getenv("PAGEWRIGHT_SMTP_USERNAME"),
+		SMTPPassword:    os.Getenv("PAGEWRIGHT_SMTP_PASSWORD"),
+		SMTPImplicitTLS: os.Getenv("PAGEWRIGHT_SMTP_TLS") == "implicit",
+		MailFrom:        env("PAGEWRIGHT_MAIL_FROM", "Pagewright <no-reply@localhost>"),
+		AdminDir:        env("PAGEWRIGHT_ADMIN_DIR", filepath.Join("web", "admin", "dist")),
+		Pagefind:        os.Getenv("PAGEWRIGHT_PAGEFIND"),
 	}
 	for _, p := range strings.Split(os.Getenv("PAGEWRIGHT_TRUSTED_PROXIES"), ",") {
 		p = strings.TrimSpace(p)
@@ -79,6 +85,14 @@ func (c Config) SiteDir() string { return filepath.Join(c.DataDir, "site") }
 
 // SecureCookies reports whether cookies need the Secure attribute.
 func (c Config) SecureCookies() bool { return strings.HasPrefix(c.BaseURL, "https://") }
+
+// envAllowEmpty is env, except that a variable set to "" stays empty.
+func envAllowEmpty(key, def string) string {
+	if v, ok := os.LookupEnv(key); ok {
+		return v
+	}
+	return def
+}
 
 func env(key, def string) string {
 	if v := os.Getenv(key); v != "" {

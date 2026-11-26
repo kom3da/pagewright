@@ -8,6 +8,10 @@
 
 開発中です。
 
+## 導入する
+
+サーバーへの導入手順は [docs/install.md](docs/install.md)（Docker Compose で PostgreSQL・Pagewright・nginx・Caddy をまとめて動かす）。
+
 ## 開発環境で動かす
 
 必要なもの：[mise](https://mise.jdx.dev/) と Docker。

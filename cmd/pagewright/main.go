@@ -12,12 +12,16 @@ import (
 	"github.com/kom3da/pagewright/internal/config"
 )
 
+// version is set at build time with -ldflags "-X main.version=...".
+var version = "dev"
+
 const usage = `使い方: pagewright <サブコマンド>
 
   serve                          管理画面・APIと公開サイトのプレビューを起動する
   migrate                        データベースを最新の形にする
   init --site 名前 --email メール  サイトと管理者を作り、ログイン用URLを表示する
   login-url --email メール        ログイン用URLを発行する（メールが届かないとき）
+  version                        版を表示する
   import-wxr --site ID --author-email メール [--dry-run] ファイル
                                  WordPressの書き出しファイル（WXR）を取り込む
 
@@ -33,6 +37,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	if os.Args[1] == "version" {
+		fmt.Println(version)
+		return
+	}
 	cfg := config.FromEnv()
 	args := os.Args[2:]
 	var err error

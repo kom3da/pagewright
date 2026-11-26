@@ -68,6 +68,12 @@ services:
       PAGEWRIGHT_BASE_URL: https://${PAGEWRIGHT_ADMIN_DOMAIN}
       PAGEWRIGHT_PUBLIC_BASE_URL: https://${PAGEWRIGHT_SITE_DOMAIN:?.env に PAGEWRIGHT_SITE_DOMAIN を書いてください}
       PAGEWRIGHT_SMTP_ADDR: ${PAGEWRIGHT_SMTP_ADDR:?.env に PAGEWRIGHT_SMTP_ADDR を書いてください}
+      PAGEWRIGHT_SMTP_USERNAME: ${PAGEWRIGHT_SMTP_USERNAME:-}
+      PAGEWRIGHT_SMTP_PASSWORD: ${PAGEWRIGHT_SMTP_PASSWORD:-}
+      PAGEWRIGHT_SMTP_TLS: ${PAGEWRIGHT_SMTP_TLS:-}
+      # app はホストに公開せず、Caddy と nginx を通してだけ届く。その2つの
+      # 送る X-Forwarded-For を信じて、回数制限を閲覧者ごとにかける。
+      PAGEWRIGHT_TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
       PAGEWRIGHT_MAIL_FROM: ${PAGEWRIGHT_MAIL_FROM:?.env に PAGEWRIGHT_MAIL_FROM を書いてください}
       # サイト内検索（Pagefind）。off で使わない
       PAGEWRIGHT_PAGEFIND: ${PAGEWRIGHT_PAGEFIND:-/usr/local/bin/pagefind_extended}

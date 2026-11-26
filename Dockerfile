@@ -30,10 +30,11 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
 COPY --from=admin /src/web/admin/dist web/admin/dist
 ARG TARGETOS TARGETARCH
+ARG VERSION=dev
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -tags embedadmin -trimpath -ldflags "-s -w" -o /out/pagewright ./cmd/pagewright
+    go build -tags embedadmin -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/pagewright ./cmd/pagewright
 
 # --- Pagefind (extended build, static musl binary) -------------------------
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-${DEBIAN_RELEASE} AS pagefind

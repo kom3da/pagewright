@@ -32,6 +32,11 @@ type Sender interface {
 type SMTP struct {
 	Addr string // host:port
 	From string // e.g. "Pagewright <no-reply@example.com>"
+	// Username and Password enable SMTP AUTH (PLAIN). They are only sent
+	// over TLS: STARTTLS, or ImplicitTLS.
+	Username, Password string
+	// ImplicitTLS starts TLS on connect (port 465) instead of STARTTLS.
+	ImplicitTLS bool
 }
 
 // Send implements Sender. It gives up after 30 seconds or when ctx ends.
@@ -46,22 +51,37 @@ func (s SMTP) Send(ctx context.Context, m Message) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", s.Addr)
+	host, _, _ := net.SplitHostPort(s.Addr)
+	tlsConfig := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+	var conn net.Conn
+	if s.ImplicitTLS {
+		conn, err = (&tls.Dialer{Config: tlsConfig}).DialContext(ctx, "tcp", s.Addr)
+	} else {
+		conn, err = (&net.Dialer{}).DialContext(ctx, "tcp", s.Addr)
+	}
 	if err != nil {
 		return fmt.Errorf("connect to smtp: %w", err)
 	}
 	deadline, _ := ctx.Deadline()
 	_ = conn.SetDeadline(deadline)
-	host, _, _ := net.SplitHostPort(s.Addr)
 	c, err := smtp.NewClient(conn, host)
 	if err != nil {
 		_ = conn.Close()
 		return err
 	}
 	defer func() { _ = c.Close() }()
-	if ok, _ := c.Extension("STARTTLS"); ok {
-		if err := c.StartTLS(&tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}); err != nil {
-			return fmt.Errorf("starttls: %w", err)
+	if !s.ImplicitTLS {
+		if ok, _ := c.Extension("STARTTLS"); ok {
+			if err := c.StartTLS(tlsConfig); err != nil {
+				return fmt.Errorf("starttls: %w", err)
+			}
+		}
+	}
+	if s.Username != "" {
+		// smtp.PlainAuth refuses to send the password without TLS (except
+		// to localhost).
+		if err := c.Auth(smtp.PlainAuth("", s.Username, s.Password, host)); err != nil {
+			return fmt.Errorf("smtp auth: %w", err)
 		}
 	}
 	if err := c.Mail(from.Address); err != nil {

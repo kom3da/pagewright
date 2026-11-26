@@ -1,7 +1,7 @@
 [tools]
-go = "latest"
-node = "lts"
-pnpm = "latest"
+go = "1.27"
+node = "24"
+pnpm = "12.6.0"
 "aqua:sqlc-dev/sqlc" = "latest"
 "aqua:pressly/goose" = "latest"
 "aqua:golangci/golangci-lint" = "latest"

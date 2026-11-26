@@ -81,7 +81,7 @@ func Build(ctx context.Context, d *db.DB, tenantID uuid.UUID, opts Options) (Res
 	}
 	log = log.With("tenant_id", tenantID)
 
-	unlock := lockTenant(tenantID)
+	unlock := sync.OnceFunc(lockTenant(tenantID))
 	defer unlock()
 
 	th, err := defaultTheme()
@@ -124,7 +124,14 @@ func Build(ctx context.Context, d *db.DB, tenantID uuid.UUID, opts Options) (Res
 	}
 	if opts.Pagefind != "" {
 		if err := runPagefind(ctx, opts.Pagefind, staging); err != nil {
-			return Result{}, fmt.Errorf("build: %w", err)
+			// Search is optional: publish the site without it rather than
+			// not at all (e.g. a CPU the Pagefind binary cannot run on).
+			log.Error("site search failed; building without search", "err", err)
+			unlock()
+			opts.Pagefind = ""
+			res, err := Build(ctx, d, tenantID, opts)
+			res.Warnings = append(res.Warnings, "サイト内検索の索引を作れなかったため、検索なしで書き出しました")
+			return res, err
 		}
 	}
 	if err := ctx.Err(); err != nil {

@@ -28,7 +28,10 @@ func runServe(ctx context.Context, cfg config.Config) error {
 		return fmt.Errorf("connect to database: %w", err)
 	}
 
-	sender := mail.SMTP{Addr: cfg.SMTPAddr, From: cfg.MailFrom}
+	sender := mail.SMTP{
+		Addr: cfg.SMTPAddr, From: cfg.MailFrom,
+		Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, ImplicitTLS: cfg.SMTPImplicitTLS,
+	}
 	riverClient, err := newRiver(d, cfg, sender)
 	if err != nil {
 		return err
@@ -73,7 +76,7 @@ func runServe(ctx context.Context, cfg config.Config) error {
 		g.Go(func() error { return listen(ctx, cfg.SiteAddr, previewHandler(cfg.SiteDir())) })
 		slog.Info("公開サイトのプレビューを起動しました", "url", cfg.PublicBaseURL+"/")
 	}
-	slog.Info("管理画面を起動しました", "url", cfg.BaseURL+"/admin/")
+	slog.Info("管理画面を起動しました", "url", cfg.BaseURL+"/admin/", "version", version)
 	return g.Wait()
 }
 
