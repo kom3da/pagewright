@@ -1,5 +1,9 @@
 # HTTPS の証明書（Let's Encrypt）を自動で取得・更新し、nginx へ中継する。
 # ドメインは .env の PAGEWRIGHT_SITE_DOMAIN と PAGEWRIGHT_ADMIN_DOMAIN。
+#
+# アクセスログはわざと出していない（log を書かなければ Caddy は記録しない）。
+# ログイン用URL（/admin/login/verify?token=…）とプレビューURL（/p/<token>/…）の
+# 合言葉が残るため。アクセスログは token を伏せる nginx のものを見る。
 
 {$PAGEWRIGHT_SITE_DOMAIN} {
 	encode zstd gzip
