@@ -112,7 +112,7 @@
 | `Form` | `<form noValidate>` を縦に並べる（`gap`）。ブラウザの検証は使わず、日本語のメッセージを欄に出す |
 | `Field` | Mantine の入力部品でない欄（ファイル選択、独自の部品）にラベル・説明・エラーを付ける。Mantine の `TextInput` などは自分の `label`・`description`・`error`・`required` を使う |
 | `AnchorLink` | アプリ内の文字のリンク（`to`・`params` が型付き）。ボタンの見た目にしたいときは Mantine の `Button` に `component={Link}` |
-| `ExternalLink` | 新しいタブで開くリンク（公開サイトなど）。アイコンと「（新しいタブで開きます）」を自動で付ける |
+| `ExternalLink` | 新しいタブで開くリンク（公開サイトなど）。アイコンと「（新しいタブで開きます）」を自動で付ける。公開サイトの URL は `usePublicUrl()`（`lib/usePublicUrl.ts`、サーバーの `publicBaseUrl`）で作る |
 | `.pw-input` / `.pw-label`（CSS） | Mantine の入力欄の見た目の素の `<input>`。1つの説明・エラーを2つの欄で共有するとき（日付＋時刻、色見本＋色コード）だけ。Mantine の入力欄は `aria-describedby` を上書きできないため |
 
 Mantine をそのまま使うもの：`Button`、`TextInput`、`Textarea`（自動で高さが伸びる）、`NativeSelect`（選択肢が少ないとき。`optgroup` も使える）、`Checkbox`、`Radio.Group`、`Fieldset`、`Menu`、`Tabs`、`Badge`、`Card`、`Paper`、`SimpleGrid`、`Stack`、`Group`、`Code`、`DataList`（詳細表示の項目名と値）、`Toolbar`（矢印キーで移動するツールバー）、`@mantine/dates` の日付入力（`DatesProvider` で日本語・日曜始まりに設定済み）。

@@ -107,6 +107,23 @@ describe("home dashboard", () => {
     expect(within(section).getByText("前回の更新はうまくいきました")).toBeVisible();
   });
 
+  it("links to the public site the server names (publicBaseUrl)", async () => {
+    db.site.publicBaseUrl = "https://www.example.jp";
+    renderApp("/");
+    const section = await screen.findByRole("region", { name: "公開サイトの更新" });
+    await waitFor(() =>
+      expect(within(section).getByRole("link", { name: /公開サイトを見る/ })).toHaveAttribute(
+        "href",
+        "https://www.example.jp/",
+      ),
+    );
+    const nav = screen.getByRole("navigation", { name: "メインメニュー" });
+    expect(within(nav).getByRole("link", { name: /公開サイトを見る/ })).toHaveAttribute(
+      "href",
+      "https://www.example.jp/",
+    );
+  });
+
   it("guides the first steps on a brand-new site", async () => {
     db.contents = [];
     db.buildLog = [];

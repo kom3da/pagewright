@@ -58,7 +58,6 @@ import { notify } from "../components/ui/notify";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Section } from "../components/ui/Section";
 import { ContentStatusBadges } from "../components/ui/StatusBadge";
-import { publicUrl } from "../config";
 import { BodyEditor, useBodyEditor } from "../editor/BodyEditor";
 import { editorContent, normalizeBody } from "../editor/normalize";
 import {
@@ -69,6 +68,7 @@ import {
 } from "../lib/datetime";
 import { descendantPageIds, pageRows } from "../lib/pageTree";
 import { optionalSlugSchema } from "../lib/slug";
+import { usePublicUrl } from "../lib/usePublicUrl";
 import { DESKTOP_QUERY } from "../theme";
 import classes from "./EditorPage.module.css";
 
@@ -156,6 +156,7 @@ type Busy =
 const PREVIEW_REUSE_MS = 60 * 60 * 1000;
 
 function EditorForm({ content: initial }: { content: ContentDetail }) {
+  const publicUrl = usePublicUrl();
   const { id, type } = initial;
   const label = typeLabels[type];
   const queryClient = useQueryClient();

@@ -22,7 +22,7 @@ mise exec -- pnpm e2e        # Playwright＋axe。モック版をビルドして
 ```
 
 - `dev:mock` は最初からログイン済み。ログインの確認は `/admin/login/verify?token=valid-token`。データはページを読み込み直すと初期状態に戻る
-- 公開サイトの URL（一覧の「公開中のURL」）は `VITE_PUBLIC_SITE_ORIGIN`（既定 `http://localhost:8081`）
+- 公開サイトへのリンクは、サーバーが `GET /api/site` の `publicBaseUrl` で教える URL を使う（`src/lib/usePublicUrl.ts`）。`VITE_PUBLIC_SITE_ORIGIN`（既定 `http://localhost:8081`）は、それが読めるまでとモックのときの予備
 - E2E を初めて動かすときは `mise exec -- pnpm exec playwright install chromium`
 
 ## 決まりごと

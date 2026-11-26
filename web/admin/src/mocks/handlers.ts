@@ -39,6 +39,9 @@ type Db = {
 
 const now = () => new Date().toISOString();
 
+/** Where the mock says the public site is (the dev fallback of the admin). */
+const MOCK_PUBLIC_BASE_URL = "http://localhost:8081";
+
 const siteA = "11111111-1111-4111-8111-111111111111";
 const siteB = "22222222-2222-4222-8222-222222222222";
 
@@ -140,6 +143,7 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
       theme: "corporate",
       themeSettings: { corporate: { phone: "03-1234-5678" } },
       themes: mockThemes,
+      publicBaseUrl: MOCK_PUBLIC_BASE_URL,
       menu: [],
     },
     submissions: [
@@ -949,6 +953,7 @@ export const handlers = [
       ...(s.themeSettings &&
         Object.keys(s.themeSettings).length > 0 && { themeSettings: s.themeSettings }),
       themes: mockThemes,
+      publicBaseUrl: db.site.publicBaseUrl,
       menu: (s.menu ?? []).map(
         (it): MenuItem => ({
           label: it.label?.trim() ?? null,

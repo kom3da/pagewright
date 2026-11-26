@@ -32,8 +32,8 @@ import {
 import { useEffect } from "react";
 import { api, errorMessage } from "../api/client";
 import { meQuery } from "../api/queries";
-import { publicSiteOrigin } from "../config";
 import { useIsAdmin } from "../lib/useIsAdmin";
+import { usePublicUrl } from "../lib/usePublicUrl";
 import { DESKTOP_QUERY } from "../theme";
 import classes from "./AppLayout.module.css";
 import { notify } from "./ui/notify";
@@ -73,6 +73,7 @@ export function AppLayout() {
   const { pathname } = useLocation();
   const site = me.sites.find((s) => s.id === me.currentSiteId);
   const desktop = useMediaQuery(DESKTOP_QUERY, true, { getInitialValueInEffect: false });
+  const publicUrl = usePublicUrl();
 
   // Close the drawer after moving to another screen.
   useEffect(() => {
@@ -122,7 +123,7 @@ export function AppLayout() {
           </AppShell.Section>
           <AppShell.Section p="sm" className={classes.footer}>
             <NavLink
-              href={publicSiteOrigin}
+              href={publicUrl()}
               target="_blank"
               rel="noopener noreferrer"
               label={

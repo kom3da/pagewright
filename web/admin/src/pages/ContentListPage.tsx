@@ -22,9 +22,9 @@ import { ErrorMessage, Loading } from "../components/ui/feedback";
 import { PageHeader } from "../components/ui/PageHeader";
 import { ResponsiveList } from "../components/ui/ResponsiveList";
 import { ContentStatusBadges } from "../components/ui/StatusBadge";
-import { publicUrl } from "../config";
 import { formatDateTime, formatJapanDateTime } from "../lib/datetime";
 import { flatPageRows, type PageRow, pageRows } from "../lib/pageTree";
+import { usePublicUrl } from "../lib/usePublicUrl";
 
 /** The status filter: the API's statuses plus 「未公開の変更あり」 (published, then filtered here). */
 export type ListStatus = ContentStatus | "changed";
@@ -66,6 +66,7 @@ const labels = {
 } as const;
 
 export function ContentListPage({ type, search }: { type: ContentType; search: ListSearch }) {
+  const publicUrl = usePublicUrl();
   const label = labels[type];
   const filtered = Boolean(search.q || search.status);
   const apiFilter: ContentFilter = {

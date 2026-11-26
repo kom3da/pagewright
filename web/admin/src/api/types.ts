@@ -126,6 +126,8 @@ export type SiteSettings = {
   themeSettings?: Record<string, Record<string, string | number>>;
   /** Output only: the installed themes and the settings each declares. */
   themes: ThemeInfo[];
+  /** Output only: the public site's URL without a trailing slash, for links from the admin. */
+  publicBaseUrl: string;
 };
 
 export type ThemeSettingType = "text" | "tel" | "url" | "page";
@@ -151,8 +153,8 @@ export type ThemeInfo = {
   settings: ThemeSettingDecl[];
 };
 
-/** PUT /api/site replaces everything. `logo` and `themes` must not be sent (the server rejects unknown keys). */
-export type SiteSettingsInput = Omit<SiteSettings, "logo" | "themes">;
+/** PUT /api/site replaces everything. Output-only keys must not be sent (the server rejects unknown keys). */
+export type SiteSettingsInput = Omit<SiteSettings, "logo" | "themes" | "publicBaseUrl">;
 
 export type Submission = {
   id: number;

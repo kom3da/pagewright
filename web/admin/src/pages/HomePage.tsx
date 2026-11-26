@@ -34,9 +34,9 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { ResponsiveList } from "../components/ui/ResponsiveList";
 import { Section } from "../components/ui/Section";
 import { ContentStatusBadges } from "../components/ui/StatusBadge";
-import { publicUrl } from "../config";
 import { formatDateTime, formatJapanDateTime } from "../lib/datetime";
 import { useIsAdmin } from "../lib/useIsAdmin";
+import { usePublicUrl } from "../lib/usePublicUrl";
 import type { ListStatus } from "./ContentListPage";
 
 const RECENT = 5;
@@ -386,6 +386,7 @@ const BUILD_POLL_MS = 3000;
 function SiteUpdate() {
   const queryClient = useQueryClient();
   const [requestedAt, setRequestedAt] = useState<string | null>(null);
+  const publicUrl = usePublicUrl();
   const { data, isPending, error } = useQuery({
     ...buildsQuery,
     refetchInterval: (q) => {
