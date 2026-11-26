@@ -36,8 +36,10 @@ test("on a phone, the menu is a drawer and lists are cards", async ({ page }) =>
   // The drawer opens from the top bar and closes after moving to another screen.
   const menu = page.getByRole("navigation", { name: "メインメニュー" });
   await expect(menu.getByRole("link", { name: "タグ" })).not.toBeInViewport();
-  const burger = page.getByRole("button", { name: "メニューを開く" });
+  const burger = page.getByRole("button", { name: "メニュー", exact: true });
+  await expect(burger).toHaveAttribute("aria-expanded", "false");
   await burger.click();
+  await expect(burger).toHaveAttribute("aria-expanded", "true");
   await expect(menu.getByRole("link", { name: "タグ" })).toBeInViewport();
   await expectAccessible(page);
   await menu.getByRole("link", { name: "タグ" }).click();

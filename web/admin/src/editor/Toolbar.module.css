@@ -32,6 +32,6 @@
 
 /* 段落の種類: wide enough for 「小見出し」. */
 .select {
-  width: 7.5rem;
+  width: 6.5rem;
   margin-inline-end: 2px;
 }

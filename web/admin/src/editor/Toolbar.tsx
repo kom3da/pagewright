@@ -65,7 +65,7 @@ function ToolButton({ label, icon: Icon, text, pressed, disabled, onClick }: But
       <Button
         {...common}
         size="sm"
-        px="xs"
+        px={6}
         aria-label={text === label ? undefined : label}
         leftSection={Icon && <Icon aria-hidden="true" size={18} />}
       >

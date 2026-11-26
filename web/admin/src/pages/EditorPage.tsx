@@ -783,7 +783,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
                   render={({ field, fieldState }) => (
                     <DateTimeFields
                       legend="公開日（日本時間）"
-                      hint="サイトに表示される公開日です。今より前の日時に変えられます。ほかの設定と同じく、保存するとすぐ公開サイトに反映されます（「保存（まだ公開しない）」でも反映されます）。"
+                      hint="サイトに表示される公開日です。今より前の日時に変えられます。保存するとすぐ公開サイトに反映されます（「保存（まだ公開しない）」でも反映されます）。"
                       value={field.value}
                       onChange={field.onChange}
                       error={fieldState.error?.message}

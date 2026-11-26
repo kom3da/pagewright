@@ -23,41 +23,28 @@
   color: var(--mantine-color-brand-9);
 }
 
-.siteButton,
-.userButton {
+.siteButton {
   display: block;
   width: 100%;
   padding: var(--mantine-spacing-xs);
   border-radius: var(--mantine-radius-sm);
 }
-/* The account menu looks like a button (border), not like the menu links above it. */
-.userButton {
-  margin-top: var(--mantine-spacing-xs);
-  min-height: 2.75rem;
-  border: 1px solid var(--mantine-color-gray-4);
-  background: var(--mantine-color-white);
-}
-.siteButton:hover,
-.userButton:hover {
+.siteButton:hover {
   background: var(--mantine-color-gray-1);
 }
 
-.userIcon {
-  flex-shrink: 0;
-  color: var(--mantine-color-gray-6);
+/* The account name in its button: cut with … when long (the full address is in the menu). */
+.userLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: start;
 }
 
-/* Phone top bar: the burger with a visible 「メニュー」 label, 44px tall. */
+/* Phone top bar: the menu button keeps its size next to a long site name. */
 .menuButton {
-  display: inline-flex;
   flex-shrink: 0;
-  align-items: center;
-  gap: 6px;
-  min-height: 2.75rem;
-  padding: 0 var(--mantine-spacing-sm) 0 var(--mantine-spacing-xs);
-  border: 1px solid var(--mantine-color-gray-4);
-  border-radius: var(--mantine-radius-sm);
-  font-weight: 700;
 }
 
 .footer {

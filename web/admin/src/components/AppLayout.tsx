@@ -1,7 +1,7 @@
 import {
   AppShell,
   Box,
-  Burger,
+  Button,
   Group,
   Menu,
   NavLink,
@@ -24,10 +24,12 @@ import {
   Inbox,
   LogOut,
   type LucideIcon,
+  Menu as MenuIcon,
   Newspaper,
   Settings,
   Tags,
   UserRound,
+  X,
 } from "lucide-react";
 import { useEffect } from "react";
 import { api, errorMessage } from "../api/client";
@@ -95,16 +97,25 @@ export function AppLayout() {
             <Text fw={700} truncate aria-hidden={opened || undefined}>
               {opened ? "" : (site?.name ?? "サイト")}
             </Text>
-            <UnstyledButton
+            <Button
               onClick={toggle}
-              aria-label={opened ? "メニューを閉じる" : "メニューを開く"}
+              size="sm"
+              h="2.75rem"
+              px="sm"
               aria-expanded={opened}
               aria-controls={NAVBAR_ID}
+              leftSection={
+                opened ? (
+                  <X aria-hidden="true" size={20} />
+                ) : (
+                  <MenuIcon aria-hidden="true" size={20} />
+                )
+              }
               className={classes.menuButton}
             >
-              <Burger opened={opened} size="sm" component="span" aria-hidden="true" />
-              <span>{opened ? "閉じる" : "メニュー"}</span>
-            </UnstyledButton>
+              {/* One name in both states; aria-expanded tells whether it is open. */}
+              メニュー
+            </Button>
           </Group>
         </AppShell.Header>
 
@@ -263,18 +274,19 @@ function UserMenu() {
     <Menu position="top-start" width="target">
       <Menu.Target>
         {/* Named from its content (not aria-label), so the visible name is part of it. */}
-        <UnstyledButton className={classes.userButton}>
-          <Group gap="xs" wrap="nowrap">
-            <UserRound aria-hidden="true" size={18} className={classes.userIcon} />
-            <Box miw={0} style={{ flex: 1 }}>
-              <VisuallyHidden>アカウントのメニュー：</VisuallyHidden>
-              <Text size="sm" fw={600} truncate>
-                {name}
-              </Text>
-            </Box>
-            <ChevronsUpDown aria-hidden="true" size={16} className={classes.userIcon} />
-          </Group>
-        </UnstyledButton>
+        <Button
+          fullWidth
+          size="sm"
+          h="2.75rem"
+          mt="xs"
+          justify="space-between"
+          leftSection={<UserRound aria-hidden="true" size={18} />}
+          rightSection={<ChevronsUpDown aria-hidden="true" size={16} />}
+          classNames={{ label: classes.userLabel }}
+        >
+          <VisuallyHidden>アカウントのメニュー：</VisuallyHidden>
+          {name}
+        </Button>
       </Menu.Target>
       <Menu.Dropdown>
         <Menu.Label>{me.user.email} でログイン中</Menu.Label>
