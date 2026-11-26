@@ -1,0 +1,21 @@
+# 開発用の環境（本番用ではない）
+services:
+  db:
+    build: ./postgres
+    environment:
+      POSTGRES_USER: pagewright
+      POSTGRES_PASSWORD: pagewright
+      POSTGRES_DB: pagewright
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025" # Web UI
+      - "1025:1025" # SMTP
+
+volumes:
+  db-data:

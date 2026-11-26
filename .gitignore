@@ -1,0 +1,9 @@
+/dist/
+/bin/
+node_modules/
+web/admin/dist/
+.env
+.env.*
+*.local
+.DS_Store
+coverage/

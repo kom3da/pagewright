@@ -1,0 +1,31 @@
+[tools]
+go = "latest"
+node = "lts"
+pnpm = "latest"
+"aqua:sqlc-dev/sqlc" = "latest"
+"aqua:pressly/goose" = "latest"
+"aqua:golangci/golangci-lint" = "latest"
+"aqua:goreleaser/goreleaser" = "latest"
+
+[tasks.dev]
+description = "開発用のDBとMailpitを起動し、Go本体を起動する"
+run = [
+  "docker compose -f deploy/compose.dev.yaml up -d",
+  "go run ./cmd/pagewright serve",
+]
+
+[tasks.test]
+description = "Goのテスト（DBは compose.dev.yaml のものを使う）"
+run = "go test ./..."
+
+[tasks.lint]
+description = "Goのlint"
+run = "golangci-lint run"
+
+[tasks.gen]
+description = "sqlcでGoコードを生成する"
+run = "sqlc generate"
+
+[tasks.down]
+description = "開発用のDBとMailpitを止める"
+run = "docker compose -f deploy/compose.dev.yaml down"
