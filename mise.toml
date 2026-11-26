@@ -8,8 +8,14 @@ pnpm = "latest"
 "aqua:goreleaser/goreleaser" = "latest"
 "github:sbdchd/squawk" = "2.74.0"
 
+[tasks."admin:build"]
+description = "管理画面をビルドする（web/admin/dist）"
+dir = "web/admin"
+run = ["pnpm install --frozen-lockfile", "pnpm build"]
+
 [tasks.dev]
-description = "開発用のDBとMailpitを起動し、Go本体を起動する"
+description = "開発用のDBとMailpitを起動し、管理画面をビルドしてGo本体を起動する"
+depends = ["admin:build"]
 run = [
   "docker compose -f deploy/compose.dev.yaml up -d --wait",
   "go run ./cmd/pagewright migrate",
@@ -17,13 +23,14 @@ run = [
 ]
 
 [tasks.test]
-description = "Goのテスト（DBは compose.dev.yaml のものを使う）"
-run = "go test ./..."
+description = "Goと管理画面のテスト（GoのテストのDBは compose.dev.yaml のものを使う）"
+run = ["go test ./...", "pnpm --dir web/admin test"]
 
 [tasks.lint]
-description = "Goのlintとマイグレーションの検査"
+description = "Goのlint、マイグレーションの検査、管理画面のlint"
 run = [
   "golangci-lint run",
+  "pnpm --dir web/admin lint",
   "squawk internal/db/migrations/*.sql",
 ]
 
