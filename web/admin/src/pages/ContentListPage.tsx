@@ -1,9 +1,20 @@
-import { EmptyState, Stack, Text } from "@mantine/core";
-import { useQuery } from "@tanstack/react-query";
-import { FileText, Newspaper } from "lucide-react";
+import {
+  Box,
+  Button,
+  EmptyState,
+  Group,
+  NativeSelect,
+  Stack,
+  Text,
+  TextInput,
+} from "@mantine/core";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { FileText, Newspaper, Search } from "lucide-react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { errorMessage } from "../api/client";
 import { contentsQuery } from "../api/queries";
-import type { ContentType } from "../api/types";
+import type { ContentFilter, ContentStatus, ContentType } from "../api/types";
 import { NewContentButton } from "../components/NewContentButton";
 import { AnchorLink } from "../components/ui/AnchorLink";
 import { ExternalLink } from "../components/ui/ExternalLink";
@@ -13,7 +24,27 @@ import { ResponsiveList } from "../components/ui/ResponsiveList";
 import { ContentStatusBadges } from "../components/ui/StatusBadge";
 import { publicUrl } from "../config";
 import { formatDateTime, formatJapanDateTime } from "../lib/datetime";
-import { type PageRow, pageRows } from "../lib/pageTree";
+import { flatPageRows, type PageRow, pageRows } from "../lib/pageTree";
+
+/** The status filter: the API's statuses plus 「未公開の変更あり」 (published, then filtered here). */
+export type ListStatus = ContentStatus | "changed";
+/** Search params of the post and page lists (kept in the URL so back/forward work). */
+export type ListSearch = { q?: string; status?: ListStatus };
+
+const statusOptions: { value: ListStatus; label: string }[] = [
+  { value: "draft", label: "下書き" },
+  { value: "scheduled", label: "予約" },
+  { value: "published", label: "公開中" },
+  { value: "changed", label: "未公開の変更あり" },
+];
+
+const MAX_Q = 100;
+
+export function validateListSearch(search: Record<string, unknown>): ListSearch {
+  const q = typeof search.q === "string" ? search.q.trim().slice(0, MAX_Q) : "";
+  const status = statusOptions.find((o) => o.value === search.status)?.value;
+  return { ...(q && { q }), ...(status && { status }) };
+}
 
 const labels = {
   post: {
@@ -32,14 +63,32 @@ const labels = {
   },
 } as const;
 
-export function ContentListPage({ type }: { type: ContentType }) {
-  const { data, isPending, error } = useQuery(contentsQuery(type));
+export function ContentListPage({ type, search }: { type: ContentType; search: ListSearch }) {
   const label = labels[type];
-  // Pages are shown as a tree (parents first); posts keep the API order.
+  const filtered = Boolean(search.q || search.status);
+  const apiFilter: ContentFilter = {
+    q: search.q,
+    status: search.status === "changed" ? "published" : search.status,
+  };
+  const { data, isPending, isPlaceholderData, error } = useQuery({
+    ...contentsQuery(type, apiFilter),
+    // Keep showing the previous results while the next search loads (no flashing).
+    placeholderData: keepPreviousData,
+  });
+  // Search results lose their parents; the whole list (usually cached) supplies them.
+  const all = useQuery({ ...contentsQuery("page"), enabled: type === "page" && filtered });
+
+  const found = (data ?? []).filter((c) => search.status !== "changed" || c.hasUnpublishedChanges);
+  // Pages are shown as a tree (parents first) unless searching; posts keep the API order.
   const rows: PageRow[] =
-    type === "page"
-      ? pageRows(data ?? [])
-      : (data ?? []).map((c) => ({ ...c, depth: 0, ancestors: [] }));
+    type !== "page"
+      ? found.map((c) => ({ ...c, depth: 0, ancestors: [] }))
+      : filtered
+        ? flatPageRows(found, all.data ?? found)
+        : pageRows(found);
+
+  const statusLabel = statusOptions.find((o) => o.value === search.status)?.label;
+  const conditions = [search.q && `「${search.q}」`, statusLabel].filter(Boolean).join("・");
 
   return (
     <>
@@ -48,80 +97,168 @@ export function ContentListPage({ type }: { type: ContentType }) {
         description={label.description}
         actions={<NewContentButton type={type} label="新規作成" primary />}
       />
-      {isPending ? (
-        <Loading />
-      ) : error ? (
-        <ErrorMessage>{errorMessage(error)}</ErrorMessage>
-      ) : rows.length === 0 ? (
-        <EmptyState
-          icon={<label.icon aria-hidden="true" />}
-          title={label.empty}
-          description={label.emptyText}
-        />
-      ) : (
-        <ResponsiveList
-          items={rows}
-          getKey={(c) => c.id}
-          caption={`${label.title}の一覧（${type === "page" ? "親ページの下に子ページ" : "番号の新しい順"}）`}
-          columns={[
-            {
-              key: "title",
-              header: "タイトル",
-              render: (c) => (
-                <div style={{ paddingLeft: `${c.depth * 1.5}rem` }}>
-                  {c.ancestors.length > 0 && (
-                    <Text component="span" size="sm" c="dimmed" mr={4}>
-                      {c.ancestors.map((a) => `${a.title || "（タイトルなし）"} › `).join("")}
-                    </Text>
-                  )}
-                  <AnchorLink
-                    to={type === "post" ? "/posts/$id" : "/pages/$id"}
-                    params={{ id: String(c.id) }}
-                    fw={700}
-                  >
-                    {c.title || "（タイトルなし）"}
-                  </AnchorLink>
-                </div>
-              ),
-            },
-            {
-              key: "status",
-              header: "状態",
-              render: (c) => (
-                <Stack gap={4}>
-                  <ContentStatusBadges {...c} />
-                  {c.scheduledAt && (
-                    <Text size="sm" style={{ whiteSpace: "nowrap" }}>
-                      {formatJapanDateTime(c.scheduledAt)}に
-                      {c.status === "published" ? "更新" : "公開"}
-                    </Text>
-                  )}
-                </Stack>
-              ),
-            },
-            {
-              key: "url",
-              header: "公開中のURL",
-              render: (c) =>
-                c.url ? (
-                  <ExternalLink href={publicUrl(c.url)} size="sm">
-                    {c.url}
-                  </ExternalLink>
-                ) : (
-                  <Text size="sm" c="dimmed">
-                    未公開
-                  </Text>
+      <Stack gap="md">
+        {(filtered || rows.length > 0) && <Filters type={type} search={search} />}
+        <Text role="status" size="sm" c="dimmed" aria-live="polite">
+          {filtered && !isPending && !error
+            ? isPlaceholderData
+              ? "探しています…"
+              : `${conditions}の${label.title}：${rows.length}件`
+            : ""}
+        </Text>
+        {isPending ? (
+          <Loading />
+        ) : error ? (
+          <ErrorMessage>{errorMessage(error)}</ErrorMessage>
+        ) : rows.length === 0 && filtered ? (
+          <EmptyState
+            icon={<Search aria-hidden="true" />}
+            title={`条件に合う${label.title}はありません`}
+            description="言葉や状態を変えて、もう一度探してください。"
+          />
+        ) : rows.length === 0 ? (
+          <EmptyState
+            icon={<label.icon aria-hidden="true" />}
+            title={label.empty}
+            description={label.emptyText}
+          />
+        ) : (
+          <ResponsiveList
+            items={rows}
+            getKey={(c) => c.id}
+            caption={`${label.title}の一覧（${
+              filtered
+                ? `${conditions}で絞り込み`
+                : type === "page"
+                  ? "親ページの下に子ページ"
+                  : "番号の新しい順"
+            }）`}
+            columns={[
+              {
+                key: "title",
+                header: "タイトル",
+                render: (c) => (
+                  <div style={{ paddingLeft: `${c.depth * 1.5}rem` }}>
+                    {c.ancestors.length > 0 && (
+                      <Text component="span" size="sm" c="dimmed" mr={4}>
+                        {c.ancestors.map((a) => `${a.title || "（タイトルなし）"} › `).join("")}
+                      </Text>
+                    )}
+                    <AnchorLink
+                      to={type === "post" ? "/posts/$id" : "/pages/$id"}
+                      params={{ id: String(c.id) }}
+                      fw={700}
+                    >
+                      {c.title || "（タイトルなし）"}
+                    </AnchorLink>
+                  </div>
                 ),
-            },
-            {
-              key: "updatedAt",
-              header: "最終更新",
-              nowrap: true,
-              render: (c) => <Text size="sm">{formatDateTime(c.updatedAt)}</Text>,
-            },
-          ]}
-        />
-      )}
+              },
+              {
+                key: "status",
+                header: "状態",
+                render: (c) => (
+                  <Stack gap={4}>
+                    <ContentStatusBadges {...c} />
+                    {c.scheduledAt && (
+                      <Text size="sm" style={{ whiteSpace: "nowrap" }}>
+                        {formatJapanDateTime(c.scheduledAt)}に
+                        {c.status === "published" ? "更新" : "公開"}
+                      </Text>
+                    )}
+                  </Stack>
+                ),
+              },
+              {
+                key: "url",
+                header: "公開中のURL",
+                render: (c) =>
+                  c.url ? (
+                    <ExternalLink href={publicUrl(c.url)} size="sm">
+                      {c.url}
+                    </ExternalLink>
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      未公開
+                    </Text>
+                  ),
+              },
+              {
+                key: "updatedAt",
+                header: "最終更新",
+                nowrap: true,
+                render: (c) => <Text size="sm">{formatDateTime(c.updatedAt)}</Text>,
+              },
+            ]}
+          />
+        )}
+      </Stack>
     </>
+  );
+}
+
+/** Search box and status filter. Each change is a new history entry (back undoes it). */
+function Filters({ type, search }: { type: ContentType; search: ListSearch }) {
+  const navigate = useNavigate();
+  const [text, setText] = useState(search.q ?? "");
+  const input = useRef<HTMLInputElement>(null);
+  // Follow the URL when it changes from outside (back/forward, a link from the home screen).
+  useEffect(() => setText(search.q ?? ""), [search.q]);
+
+  const go = (next: ListSearch) =>
+    navigate({ to: type === "post" ? "/posts" : "/pages", search: validateListSearch(next) });
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    void go({ ...search, q: text });
+  };
+
+  const noun = labels[type].title;
+  return (
+    <Box component="form" role="search" aria-label={`${noun}を探す`} onSubmit={submit}>
+      <Group align="flex-end" gap="sm" wrap="wrap">
+        <TextInput
+          ref={input}
+          type="search"
+          label="タイトルやURLで探す"
+          value={text}
+          maxLength={MAX_Q}
+          onChange={(e) => setText(e.currentTarget.value)}
+          // Do not submit while a Japanese IME is converting.
+          onKeyDown={(e) => e.key === "Enter" && e.nativeEvent.isComposing && e.preventDefault()}
+          leftSection={<Search aria-hidden="true" size={16} />}
+          style={{ flex: "1 1 16rem" }}
+          maw="28rem"
+        />
+        <Button type="submit">探す</Button>
+        <NativeSelect
+          label="状態"
+          value={search.status ?? ""}
+          onChange={(e) =>
+            void go({ ...search, q: text, status: e.currentTarget.value as ListStatus })
+          }
+          style={{ flex: "0 1 14rem" }}
+        >
+          <option value="">すべて</option>
+          {statusOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </NativeSelect>
+        {(search.q || search.status) && (
+          <Button
+            variant="subtle"
+            onClick={() => {
+              void go({});
+              // The button disappears; keep the focus in the filters.
+              input.current?.focus();
+            }}
+          >
+            条件をクリア
+          </Button>
+        )}
+      </Group>
+    </Box>
   );
 }

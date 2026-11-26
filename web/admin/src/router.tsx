@@ -17,7 +17,7 @@ import { AnchorLink } from "./components/ui/AnchorLink";
 import { ErrorMessage, Loading } from "./components/ui/feedback";
 import { PageTitle } from "./components/ui/PageHeader";
 import { CategoriesPage } from "./pages/CategoriesPage";
-import { ContentListPage } from "./pages/ContentListPage";
+import { ContentListPage, validateListSearch } from "./pages/ContentListPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { SelectSitePage } from "./pages/SelectSitePage";
@@ -118,12 +118,17 @@ const homeRoute = createRoute({
   component: HomePage,
 });
 
-const listRoute = (path: "posts" | "pages", type: ContentType) =>
-  createRoute({
+const listRoute = (path: "posts" | "pages", type: ContentType) => {
+  const route = createRoute({
     getParentRoute: () => appRoute,
     path,
-    component: () => <ContentListPage type={type} />,
+    validateSearch: validateListSearch,
+    component: function List() {
+      return <ContentListPage type={type} search={route.useSearch()} />;
+    },
   });
+  return route;
+};
 
 const postsRoute = listRoute("posts", "post");
 const pagesRoute = listRoute("pages", "page");

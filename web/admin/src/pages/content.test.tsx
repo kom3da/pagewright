@@ -66,6 +66,65 @@ describe("content list", () => {
   });
 });
 
+describe("content list search and filter", () => {
+  const titles = async () =>
+    within(await screen.findByRole("table"))
+      .getAllByRole("row")
+      .slice(1)
+      .map((r) => within(r).getAllByRole("cell")[0].textContent);
+
+  it("searches by words and keeps the search in the URL", async () => {
+    const requests = recordRequests();
+    const { user, history } = renderApp("/posts");
+    await screen.findByRole("table");
+    const search = screen.getByRole("search", { name: "記事を探す" });
+    await user.type(within(search).getByLabelText("タイトルやURLで探す"), "営業{Enter}");
+    expect(await screen.findByRole("status", { name: "" })).toHaveTextContent(
+      "「営業」の記事：1件",
+    );
+    expect(await titles()).toEqual(["年末年始の営業について"]);
+    expect(history.location.search).toContain("q=");
+    expect(requests.some((r) => r.path === "/api/contents?type=post&q=%E5%96%B6%E6%A5%AD")).toBe(
+      true,
+    );
+    await expectNoAxeViolations();
+
+    // Back restores the full list and empties the box.
+    history.back();
+    await waitFor(() => expect(screen.queryByText(/の記事：/)).not.toBeInTheDocument());
+    expect(await titles()).toHaveLength(3);
+    expect(within(search).getByLabelText("タイトルやURLで探す")).toHaveValue("");
+  });
+
+  it("filters by status, including 未公開の変更あり", async () => {
+    const { user } = renderApp("/posts");
+    await screen.findByRole("table");
+    await user.selectOptions(screen.getByLabelText("状態"), "下書き");
+    await waitFor(async () => expect(await titles()).toEqual(["ホームページを公開しました"]));
+    await user.selectOptions(screen.getByLabelText("状態"), "未公開の変更あり");
+    await waitFor(async () => expect(await titles()).toEqual(["年末年始の営業について"]));
+    expect(screen.getByText("未公開の変更ありの記事：1件")).toBeInTheDocument();
+  });
+
+  it("opens with the filter from the URL and clears it", async () => {
+    const { user, history } = renderApp("/pages?status=published");
+    // Search results are flat (newest first), but still show the parent page.
+    await waitFor(async () => expect(await titles()).toEqual(["会社概要 › 沿革", "会社概要"]));
+    expect(screen.getByLabelText("状態")).toHaveValue("published");
+    const clear = screen.getByRole("button", { name: "条件をクリア" });
+    await user.click(clear);
+    await waitFor(async () => expect(await titles()).toHaveLength(3));
+    expect(history.location.search).toBe("");
+    expect(screen.getByLabelText("タイトルやURLで探す")).toHaveFocus();
+  });
+
+  it("explains when nothing matches", async () => {
+    renderApp("/posts?q=存在しない言葉");
+    expect(await screen.findByText("条件に合う記事はありません")).toBeInTheDocument();
+    expect(screen.getByLabelText("タイトルやURLで探す")).toHaveValue("存在しない言葉");
+  });
+});
+
 const openEditor = async (path = "/posts/1") => {
   const r = renderApp(path);
   await screen.findByRole("textbox", { name: "本文" });

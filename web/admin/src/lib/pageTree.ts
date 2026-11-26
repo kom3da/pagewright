@@ -18,6 +18,22 @@ export function pageRows(pages: ContentSummary[]): PageRow[] {
   return out;
 }
 
+/**
+ * Search results as a flat list: each page keeps its ancestors (looked up in `all`, the
+ * whole list) so that 「会社概要 › 沿革」 is still shown when only 沿革 matched.
+ */
+export function flatPageRows(found: ContentSummary[], all: ContentSummary[]): PageRow[] {
+  const byId = new Map(all.map((p) => [p.id, p]));
+  return found.map((p) => {
+    const ancestors: ContentSummary[] = [];
+    for (let a = byId.get(p.parentId ?? -1); a; a = byId.get(a.parentId ?? -1)) {
+      if (a.id === p.id || ancestors.includes(a)) break; // guards against cycles
+      ancestors.unshift(a);
+    }
+    return { ...p, depth: 0, ancestors };
+  });
+}
+
 /** Ids of the page and all its descendants (cannot be chosen as its parent). */
 export function descendantPageIds(pages: ContentSummary[], id: number): Set<number> {
   const out = new Set([id]);
