@@ -306,7 +306,8 @@ function TileLink({
 function InquiriesTile() {
   // Only the first page (newest 100) is needed to count the last 7 days.
   const { data, isPending, error } = useInfiniteQuery(submissionsQuery);
-  const first = data?.pages[0] ?? [];
+  const firstPage = data?.pages[0];
+  const first = firstPage?.items ?? [];
   const since = Date.now() - WEEK_MS;
   const recent = first.filter((s) => new Date(s.createdAt).getTime() >= since).length;
   return (
@@ -326,10 +327,7 @@ function InquiriesTile() {
         </Text>
       ) : (
         <>
-          <Count
-            n={recent}
-            more={recent === first.length && data?.pages.length === 1 && first.length >= 100}
-          />
+          <Count n={recent} more={recent === first.length && firstPage?.more} />
           <Text size="sm" c="dimmed">
             この7日間に届いたもの
             {first[0] && `。最新は${formatDateTime(first[0].createdAt)}`}

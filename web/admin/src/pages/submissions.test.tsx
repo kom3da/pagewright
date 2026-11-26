@@ -105,6 +105,28 @@ describe("contact messages", () => {
     ]);
   });
 
+  it("keeps もっと見る after deleting from a full page", async () => {
+    db.submissions = Array.from({ length: 150 }, (_, i) => ({
+      ...db.submissions[0],
+      id: i + 1,
+      name: `送信者${i + 1}`,
+      createdAt: new Date(Date.UTC(2026, 9, 1) + i * 3_600_000).toISOString(),
+    }));
+    const { user } = renderApp("/inquiries");
+    await user.click(
+      await screen.findByRole("button", { name: "送信者150 さんからのお問い合わせを開く" }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "お問い合わせの内容" });
+    await user.click(within(dialog).getByRole("button", { name: "このお問い合わせを削除" }));
+    const confirm = await screen.findByRole("alertdialog", {
+      name: "このお問い合わせを削除しますか？",
+    });
+    await user.click(within(confirm).getByRole("button", { name: "削除する" }));
+    await screen.findByRole("table", { name: /99件を表示/ });
+    await user.click(screen.getByRole("button", { name: "もっと見る" }));
+    await screen.findByRole("table", { name: /149件を表示/ });
+  });
+
   it("explains how to start when there are no messages", async () => {
     db.submissions = [];
     renderApp("/inquiries");

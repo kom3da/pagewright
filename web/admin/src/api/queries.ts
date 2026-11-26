@@ -41,10 +41,18 @@ export const buildsQuery = queryOptions({
 // as no screen shows them.
 export const submissionsQuery = infiniteQueryOptions({
   queryKey: ["submissions"],
-  queryFn: ({ pageParam }) => api.listSubmissions(pageParam),
+  // Whether there may be more, and where to continue, are decided from the page as it was
+  // fetched: deleting from the cached page must not hide 「もっと見る」.
+  queryFn: async ({ pageParam }) => {
+    const items = await api.listSubmissions(pageParam);
+    return {
+      items,
+      more: items.length >= SUBMISSIONS_PAGE_SIZE,
+      next: items.at(-1)?.id,
+    };
+  },
   initialPageParam: undefined as number | undefined,
   // A full page means there may be more; the next page starts below its last id.
-  getNextPageParam: (last) =>
-    last.length >= SUBMISSIONS_PAGE_SIZE ? last[last.length - 1].id : undefined,
+  getNextPageParam: (last) => (last.more ? last.next : undefined),
   gcTime: 0,
 });

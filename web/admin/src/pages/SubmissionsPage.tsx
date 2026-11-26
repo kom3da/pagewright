@@ -48,7 +48,7 @@ function Submissions() {
   // Personal data: kept in memory only while shown (see submissionsQuery), never in storage.
   const query = useInfiniteQuery(submissionsQuery);
   const { isPending, error } = query;
-  const data = query.data?.pages.flat() ?? [];
+  const data = query.data?.pages.flatMap((p) => p.items) ?? [];
   const queryClient = useQueryClient();
   const [open, setOpen] = useState<Submission | null>(null);
 
@@ -59,7 +59,11 @@ function Submissions() {
       // Not refetched: that would reload every page already shown.
       queryClient.setQueryData(
         submissionsQuery.queryKey,
-        (d) => d && { ...d, pages: d.pages.map((p) => p.filter((x) => x.id !== s.id)) },
+        (d) =>
+          d && {
+            ...d,
+            pages: d.pages.map((p) => ({ ...p, items: p.items.filter((x) => x.id !== s.id) })),
+          },
       );
       notify(`${s.name} さんからのお問い合わせを削除しました。`);
     },
