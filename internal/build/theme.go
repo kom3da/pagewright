@@ -58,6 +58,11 @@ type Page struct {
 	Content     *Content
 	Posts       []PostItem
 	Pagination  *Pagination
+	// Preview is set on preview pages: a notice shown at the top. BaseHref
+	// then points relative links at the public site.
+	Preview  string
+	BaseHref string
+	SelfURL  string // the preview page's own URL, for in-page links under <base>
 }
 
 // Content is a rendered post or page.

@@ -31,6 +31,9 @@ type Options struct {
 	// PagePath is the public path of the page being rendered; the contact
 	// form sends it so the reply page can link back.
 	PagePath string
+	// MediaPrefix replaces "/media/" at the start of image sources, for
+	// pages served from elsewhere than the site (previews).
+	MediaPrefix string
 }
 
 // Result is a rendered body.
@@ -236,6 +239,9 @@ func (r *renderer) image(n node) {
 		r.mediaIDs = append(r.mediaIDs, mediaID)
 	}
 	if key, ok := strings.CutPrefix(src, "/media/"); ok && key != "" {
+		if r.opts.MediaPrefix != "" {
+			src = r.opts.MediaPrefix + key
+		}
 		if u, err := url.PathUnescape(key); err == nil {
 			key = u
 		}

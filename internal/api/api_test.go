@@ -134,6 +134,7 @@ func newEnv(t *testing.T) *env {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", s.Handler())
 	mux.Handle("/f/", s.FormHandler())
+	mux.Handle("/p/", s.PreviewHandler())
 	e.srv = httptest.NewServer(mux)
 	t.Cleanup(e.srv.Close)
 	return e
@@ -902,5 +903,98 @@ func TestContactFormRateLimit(t *testing.T) {
 	}
 	if status, _ := e.postContact(e.tenantA, contactForm()); status != http.StatusTooManyRequests {
 		t.Errorf("11th post = %d, want 429", status)
+	}
+}
+
+// getPreview fetches a preview URL (issued for http://admin.test) from the
+// test server, without any session.
+func (e *env) getPreview(previewURL, suffix string) (int, http.Header, string) {
+	e.t.Helper()
+	path := strings.TrimPrefix(previewURL, "http://admin.test")
+	res, err := http.Get(e.srv.URL + path + suffix)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	b, _ := io.ReadAll(res.Body)
+	return res.StatusCode, res.Header, string(b)
+}
+
+func TestPreviewLinks(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	bob := e.login("bob@example.com")
+
+	var img mediaOut
+	alice.upload("a.png", pngBytes(t), "社屋", &img)
+	d := alice.newContent("post", "下書きの記事", false)
+	body := fmt.Sprintf(`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"まだ公開していない本文"}]},{"type":"image","attrs":{"src":%q,"alt":"社屋","mediaId":%d}}]}`, img.URL, img.ID)
+	alice.mustDo(http.MethodPut, fmt.Sprintf("/api/contents/%d/draft", d.ID), map[string]any{"title": "下書きの記事", "body": json.RawMessage(body)}, nil, http.StatusOK)
+
+	if got, _ := alice.errorCode(http.MethodPost, fmt.Sprintf("/api/contents/%d/preview-links", d.ID), map[string]any{"days": 31}); got != http.StatusUnprocessableEntity {
+		t.Errorf("31 days = %d, want 422", got)
+	}
+	var link struct {
+		ID        int64
+		URL       string
+		ExpiresAt time.Time
+	}
+	alice.mustDo(http.MethodPost, fmt.Sprintf("/api/contents/%d/preview-links", d.ID), map[string]any{"days": 1}, &link, http.StatusCreated)
+	if !strings.HasPrefix(link.URL, "http://admin.test/p/") || time.Until(link.ExpiresAt) > 25*time.Hour {
+		t.Fatalf("link = %+v", link)
+	}
+
+	status, hdr, page := e.getPreview(link.URL, "")
+	if status != http.StatusOK {
+		t.Fatalf("preview = %d:\n%s", status, page)
+	}
+	for _, want := range []string{"まだ公開していない本文", "これはプレビューです", `name="robots" content="noindex"`, `<base href="https://site-a.example/">`, link.URL + "media/"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("preview lacks %q", want)
+		}
+	}
+	if hdr.Get("X-Robots-Tag") == "" || hdr.Get("Referrer-Policy") != "no-referrer" {
+		t.Errorf("preview headers = %v", hdr)
+	}
+	key := strings.TrimPrefix(img.URL, "/media/")
+	if status, _, _ := e.getPreview(link.URL, "media/"+key); status != http.StatusOK {
+		t.Errorf("preview image = %d, want 200", status)
+	}
+
+	// The newest draft shows up without a new link.
+	alice.mustDo(http.MethodPut, fmt.Sprintf("/api/contents/%d/draft", d.ID), map[string]any{"title": "書き直した記事", "body": json.RawMessage(paragraph)}, nil, http.StatusOK)
+	if _, _, page := e.getPreview(link.URL, ""); !strings.Contains(page, "書き直した記事") {
+		t.Error("preview does not show the latest revision")
+	}
+
+	// Another site can neither see, revoke nor use A's links, and a link
+	// of A does not serve B's images.
+	if got, _ := bob.errorCode(http.MethodGet, fmt.Sprintf("/api/contents/%d/preview-links", d.ID), nil); got != http.StatusNotFound {
+		t.Errorf("B listing A's links = %d, want 404", got)
+	}
+	if got, _ := bob.errorCode(http.MethodDelete, fmt.Sprintf("/api/preview-links/%d", link.ID), nil); got != http.StatusNotFound {
+		t.Errorf("B revoking A's link = %d, want 404", got)
+	}
+	var bImg mediaOut
+	bob.upload("b.png", pngBytes(t), "B", &bImg)
+	if status, _, _ := e.getPreview(link.URL, "media/"+strings.TrimPrefix(bImg.URL, "/media/")); status != http.StatusNotFound {
+		t.Errorf("B's image through A's link = %d, want 404", status)
+	}
+
+	// Expired and revoked links stop working.
+	if _, err := e.db.Admin.Exec(context.Background(), "UPDATE preview_links SET expires_at = now() - interval '1 second' WHERE id = $1", link.ID); err != nil {
+		t.Fatal(err)
+	}
+	if status, _, _ := e.getPreview(link.URL, ""); status != http.StatusNotFound {
+		t.Errorf("expired link = %d, want 404", status)
+	}
+	var second struct {
+		ID  int64
+		URL string
+	}
+	alice.mustDo(http.MethodPost, fmt.Sprintf("/api/contents/%d/preview-links", d.ID), map[string]any{}, &second, http.StatusCreated)
+	alice.mustDo(http.MethodDelete, fmt.Sprintf("/api/preview-links/%d", second.ID), nil, nil, http.StatusNoContent)
+	if status, _, _ := e.getPreview(second.URL, ""); status != http.StatusNotFound {
+		t.Errorf("revoked link = %d, want 404", status)
 	}
 }

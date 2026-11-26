@@ -104,6 +104,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/contents/{id}/unpublish", s.site(s.unpublish))
 	mux.Handle("POST /api/contents/{id}/schedule", s.site(s.schedule))
 	mux.Handle("DELETE /api/contents/{id}/schedule", s.site(s.unschedule))
+	mux.Handle("POST /api/contents/{id}/preview-links", s.site(s.createPreviewLink))
+	mux.Handle("GET /api/contents/{id}/preview-links", s.site(s.listPreviewLinks))
+	mux.Handle("DELETE /api/preview-links/{id}", s.site(s.deletePreviewLink))
 	mux.Handle("DELETE /api/contents/{id}", s.site(s.deleteContent))
 
 	mux.Handle("GET /api/categories", s.site(s.listCategories))
@@ -306,6 +309,7 @@ var errorFields = map[string]string{
 	"invalid_publish_at": "publishAt",
 	"invalid_menu":       "menu",
 	"invalid_logo":       "logoMediaId",
+	"invalid_days":       "days",
 	"alt_required":       "altText",
 	"file_required":      "file",
 	"unsupported_type":   "file",

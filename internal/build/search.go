@@ -15,7 +15,7 @@ const searchPath = "/search/"
 // runPagefind indexes the staged site. Only elements marked
 // data-pagefind-body (content pages) are indexed.
 func runPagefind(ctx context.Context, bin, site string) error {
-	cmd := exec.CommandContext(ctx, bin, "--site", site, "--output-subdir", searchDir, "--force-language", "ja", "--silent")
+	cmd := exec.CommandContext(ctx, bin, "--site", site, "--output-subdir", searchDir, "--force-language", "ja", "--quiet")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("pagefind: %w: %s", err, out)

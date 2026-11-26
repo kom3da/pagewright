@@ -51,6 +51,7 @@ func runServe(ctx context.Context, cfg config.Config) error {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiServer.Handler())
 	mux.Handle("/f/", apiServer.FormHandler())
+	mux.Handle("/p/", apiServer.PreviewHandler())
 	mux.Handle("/admin/", adminui.Handler(adminFS(cfg)))
 	mux.Handle("GET /{$}", http.RedirectHandler("/admin/", http.StatusFound))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {

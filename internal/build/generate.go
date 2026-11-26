@@ -167,9 +167,7 @@ func (g *generator) index() {
 		}
 		return *m.Width, *m.Height, true
 	}}
-	if g.opts.FormBaseURL != "" {
-		renderOpts.ContactFormAction = g.opts.FormBaseURL + "/f/" + g.tenantID.String() + "/contact"
-	}
+	renderOpts.ContactFormAction = g.contactAction()
 
 	g.itemByID, g.itemByPath = map[int64]*item{}, map[string]*item{}
 	for _, row := range s.contents {
@@ -369,6 +367,14 @@ func (g *generator) posts() []*item {
 		}
 	}
 	return out
+}
+
+// contactAction is where contact forms post, or empty when forms are off.
+func (g *generator) contactAction() string {
+	if g.opts.FormBaseURL == "" {
+		return ""
+	}
+	return g.opts.FormBaseURL + "/f/" + g.tenantID.String() + "/contact"
 }
 
 func (g *generator) postItems(list []*item) []PostItem {

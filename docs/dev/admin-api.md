@@ -91,6 +91,15 @@ type ContentDetail = ContentSummary & {
 | `POST /api/contents/{id}/schedule` | `{"publishAt": "RFC 3339"}`（今から 1 分以上あと） | 200 `ContentDetail`。最新の版をその日時に公開する。もう一度呼ぶと予約を置き換える。過去の日時は 422 `invalid_publish_at` |
 | `DELETE /api/contents/{id}/schedule` | | 200 `ContentDetail`。予約を取り消す |
 | `DELETE /api/contents/{id}` | | 204。再ビルドを予約する |
+| `POST /api/contents/{id}/preview-links` | `{"days"?: 1〜30}`（省略時 3） | 201 `PreviewLink`（`url` 付き）。ログインなしで最新の版を見られるリンク。`url` はこのときしか返らない（保存しているのはハッシュだけ） |
+| `GET /api/contents/{id}/preview-links` | | 200 `PreviewLink[]`（有効なものだけ。`url` なし） |
+| `DELETE /api/preview-links/{id}` | | 204。リンクを取り消す |
+
+```ts
+type PreviewLink = { id: number; url?: string; expiresAt: string; createdAt: string };
+```
+
+プレビューのページ（`/p/{token}/`）は本体が描画する。帯で「プレビュー」と示し、検索エンジンには載せない。ページ内のリンクは公開サイトを指す。
 
 `slug` の検査：英小文字・数字・ハイフンのみ、数字だけは不可、1〜100 文字。日本語が入っていたら 422 `invalid_slug`（「ページのURLは英小文字・数字・ハイフンで入力してください」）。
 

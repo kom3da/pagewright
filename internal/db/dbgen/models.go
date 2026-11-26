@@ -112,6 +112,16 @@ type MenuItem struct {
 	Url       *string
 }
 
+type PreviewLink struct {
+	TenantID  uuid.UUID
+	ID        int64
+	TokenHash []byte
+	ContentID int64
+	ExpiresAt time.Time
+	CreatedBy *uuid.UUID
+	CreatedAt time.Time
+}
+
 type Route struct {
 	TenantID   uuid.UUID
 	ID         int64
