@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { db } from "../mocks/handlers";
-import { expectNoAxeViolations, failWith, renderApp } from "../test/utils";
+import { expectNoAxeViolations, failWith, recordRequests, renderApp } from "../test/utils";
 
 describe("categories", () => {
   it("lists categories as a tree", async () => {
@@ -93,6 +93,41 @@ describe("categories", () => {
 });
 
 describe("tags", () => {
+  it("edits a tag's name and URL", async () => {
+    const requests = recordRequests();
+    const { user } = renderApp("/tags");
+    await user.click(await screen.findByRole("button", { name: "「イベント」を編集" }));
+    const dialog = await screen.findByRole("dialog", { name: "タグを編集" });
+    expect(dialog).toHaveAccessibleDescription(/古いURLは新しいURLへ自動で転送/);
+    const name = within(dialog).getByLabelText(/タグの名前/);
+    const slug = within(dialog).getByLabelText(/タグのURL/);
+    expect(slug).toHaveValue("event");
+    await user.clear(name);
+    await user.type(name, "催し");
+    await user.clear(slug);
+    await user.type(slug, "events");
+    await user.click(within(dialog).getByRole("button", { name: "保存する" }));
+    expect(await screen.findByText("タグを保存しました。")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(await screen.findByRole("cell", { name: "催し" })).toBeInTheDocument();
+    expect(requests.find((r) => r.method === "PATCH")).toMatchObject({
+      path: "/api/tags/1",
+      body: { name: "催し", slug: "events" },
+    });
+  });
+
+  it("shows a duplicate URL error when editing a tag", async () => {
+    const { user } = renderApp("/tags");
+    await user.click(await screen.findByRole("button", { name: "「イベント」を編集" }));
+    const dialog = await screen.findByRole("dialog", { name: "タグを編集" });
+    const slug = within(dialog).getByLabelText(/タグのURL/);
+    await user.clear(slug);
+    await user.type(slug, "campaign");
+    await user.click(within(dialog).getByRole("button", { name: "保存する" }));
+    await waitFor(() => expect(slug).toHaveAccessibleDescription(/すでに使われています/));
+    expect(slug).toHaveFocus();
+  });
+
   it("adds and deletes tags", async () => {
     const { user } = renderApp("/tags");
     await screen.findByRole("table");
