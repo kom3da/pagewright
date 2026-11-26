@@ -73,6 +73,9 @@ services:
       PAGEWRIGHT_SMTP_TLS: ${PAGEWRIGHT_SMTP_TLS:-}
       # app はホストに公開せず、Caddy と nginx を通してだけ届く。その2つの
       # 送る X-Forwarded-For を信じて、回数制限を閲覧者ごとにかける。
+      # Caddy もロードバランサーも置かずに nginx を直接公開するなら、ここを
+      # nginx のIPだけにする（Docker のゲートウェイも信じてしまい、閲覧者が
+      # X-Forwarded-For を偽れるため）。docs/install.md の「HTTPS について」を参照。
       PAGEWRIGHT_TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
       PAGEWRIGHT_MAIL_FROM: ${PAGEWRIGHT_MAIL_FROM:?.env に PAGEWRIGHT_MAIL_FROM を書いてください}
       # サイト内検索（Pagefind）。off で使わない
@@ -105,6 +108,8 @@ services:
 
   # HTTPS（証明書の自動取得）。クラウドのロードバランサーでHTTPSを終端するなら、
   # このサービスを消し、nginx に ports: ["80:8080"] を付けてそちらへ向ける。
+  # ロードバランサーなしで nginx を直接公開するときは、app の
+  # PAGEWRIGHT_TRUSTED_PROXIES も変える（docs/install.md の「HTTPS について」）。
   caddy:
     image: caddy:2
     restart: unless-stopped
