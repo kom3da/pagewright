@@ -506,6 +506,7 @@ func TestTenantIsolation(t *testing.T) {
 
 	// Bob's site B data.
 	bPost := bob.newContent("post", "Bの記事", true)
+	bPage := bob.newContent("page", "Bのページ", true)
 	var bCat, bTag struct{ ID int64 }
 	bob.mustDo(http.MethodPost, "/api/categories", map[string]any{"name": "B", "slug": "b-cat"}, &bCat, http.StatusCreated)
 	bob.mustDo(http.MethodPost, "/api/tags", map[string]any{"name": "B", "slug": "b-tag"}, &bTag, http.StatusCreated)
@@ -516,11 +517,12 @@ func TestTenantIsolation(t *testing.T) {
 
 	// Alice's site A data.
 	aPost := alice.newContent("post", "Aの記事", true)
+	aPage := alice.newContent("page", "Aのページ", true)
 	var aCat struct{ ID int64 }
 	alice.mustDo(http.MethodPost, "/api/categories", map[string]any{"name": "A", "slug": "a-cat"}, &aCat, http.StatusCreated)
 
 	// Lists show only A.
-	lists := map[string]int{"/api/contents?type=post": 1, "/api/categories": 1, "/api/tags": 0, "/api/media": 0}
+	lists := map[string]int{"/api/contents?type=post": 1, "/api/contents?type=page": 1, "/api/categories": 1, "/api/tags": 0, "/api/media": 0}
 	for path, want := range lists {
 		var got []json.RawMessage
 		alice.mustDo(http.MethodGet, path, nil, &got, http.StatusOK)
@@ -542,6 +544,7 @@ func TestTenantIsolation(t *testing.T) {
 		{http.MethodPost, fmt.Sprintf("/api/contents/%d/schedule", bPost.ID), map[string]any{"publishAt": time.Now().Add(time.Hour)}},
 		{http.MethodDelete, fmt.Sprintf("/api/contents/%d/schedule", bPost.ID), nil},
 		{http.MethodDelete, fmt.Sprintf("/api/contents/%d", bPost.ID), nil},
+		{http.MethodPost, fmt.Sprintf("/api/contents/%d/preview-links", bPost.ID), map[string]any{"days": 1}},
 		{http.MethodPatch, fmt.Sprintf("/api/categories/%d", bCat.ID), map[string]any{"name": "x"}},
 		{http.MethodDelete, fmt.Sprintf("/api/categories/%d", bCat.ID), nil},
 		{http.MethodPatch, fmt.Sprintf("/api/tags/%d", bTag.ID), map[string]any{"name": "x"}},
@@ -565,6 +568,9 @@ func TestTenantIsolation(t *testing.T) {
 		if got, _ := alice.errorCode(http.MethodPatch, fmt.Sprintf("/api/contents/%d", aPost.ID), in); got != http.StatusUnprocessableEntity {
 			t.Errorf("attach B's %v to A = %d, want 422", in, got)
 		}
+	}
+	if got, _ := alice.errorCode(http.MethodPatch, fmt.Sprintf("/api/contents/%d", aPage.ID), map[string]any{"parentId": bPage.ID}); got != http.StatusUnprocessableEntity {
+		t.Errorf("A's page under B's page = %d, want 422", got)
 	}
 	if got, _ := alice.errorCode(http.MethodPost, "/api/categories", map[string]any{"name": "x", "slug": "x", "parentId": bCat.ID}); got != http.StatusUnprocessableEntity {
 		t.Errorf("category under B's category = %d, want 422", got)
