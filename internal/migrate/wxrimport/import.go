@@ -163,6 +163,7 @@ type importer struct {
 	keys       map[string]int64    // storage key → attachment ID
 	alts       map[string]string   // urlKey → attachment alt
 	segments   map[int64]string    // content number → last URL segment
+	byID       map[int64]model.Item
 }
 
 func (im *importer) log(ctx context.Context) {
@@ -488,16 +489,18 @@ func (im *importer) pagewrightPath(it model.Item) string {
 	if it.Type == model.TypePost {
 		return pathOf("posts", im.segment(it.SourceID, it))
 	}
-	var segs []string
-	byID := map[int64]model.Item{}
-	for _, x := range im.exp.Items {
-		byID[x.SourceID] = x
+	if im.byID == nil {
+		im.byID = make(map[int64]model.Item, len(im.exp.Items))
+		for _, x := range im.exp.Items {
+			im.byID[x.SourceID] = x
+		}
 	}
+	var segs []string
 	seen := map[int64]bool{}
 	for cur := it; ; {
 		segs = append([]string{im.segment(cur.SourceID, cur)}, segs...)
 		seen[cur.SourceID] = true
-		parent, ok := byID[cur.ParentID]
+		parent, ok := im.byID[cur.ParentID]
 		if cur.ParentID == 0 || !ok || seen[parent.SourceID] {
 			break
 		}
