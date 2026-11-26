@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/kom3da/pagewright/internal/db/dbgen"
+	"github.com/kom3da/pagewright/internal/routing"
 )
 
 const slugMessage = "ページのURLは英小文字・数字・ハイフンで入力してください（数字だけにはできません）"
@@ -46,9 +47,6 @@ type tagJSON struct {
 func toCategory(c dbgen.Category) categoryJSON {
 	return categoryJSON{ID: c.ID, Name: c.Name, Slug: c.Slug, ParentID: c.ParentID, Position: c.Position}
 }
-
-func categoryPath(slug string) string { return "/posts/category/" + slug + "/" }
-func tagPath(slug string) string      { return "/posts/tag/" + slug + "/" }
 
 func checkName(name string) (string, error) {
 	name = strings.TrimSpace(name)
@@ -97,7 +95,7 @@ func (s *Server) createCategory(w http.ResponseWriter, r *http.Request, sess *se
 		if err != nil {
 			return err
 		}
-		if err := moveCanonical(ctx, q, dbgen.Route{}, false, categoryPath(c.Slug), dbgen.CreateRouteParams{CategoryID: &c.ID}); err != nil {
+		if err := routing.MoveCanonical(ctx, q, dbgen.Route{}, false, routing.CategoryPath(c.Slug), dbgen.CreateRouteParams{CategoryID: &c.ID}); err != nil {
 			return err
 		}
 		out = toCategory(c)
@@ -176,7 +174,7 @@ func (s *Server) patchCategory(w http.ResponseWriter, r *http.Request, sess *ses
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
-			if err := moveCanonical(ctx, q, route, hasRoute, categoryPath(c.Slug), dbgen.CreateRouteParams{CategoryID: &id}); err != nil {
+			if err := routing.MoveCanonical(ctx, q, route, hasRoute, routing.CategoryPath(c.Slug), dbgen.CreateRouteParams{CategoryID: &id}); err != nil {
 				return err
 			}
 		}
@@ -259,7 +257,7 @@ func (s *Server) createTag(w http.ResponseWriter, r *http.Request, sess *session
 		if err != nil {
 			return err
 		}
-		if err := moveCanonical(ctx, q, dbgen.Route{}, false, tagPath(t.Slug), dbgen.CreateRouteParams{TagID: &t.ID}); err != nil {
+		if err := routing.MoveCanonical(ctx, q, dbgen.Route{}, false, routing.TagPath(t.Slug), dbgen.CreateRouteParams{TagID: &t.ID}); err != nil {
 			return err
 		}
 		out = tagJSON{ID: t.ID, Name: t.Name, Slug: t.Slug}

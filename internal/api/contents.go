@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 
 	"github.com/kom3da/pagewright/internal/body"
 	"github.com/kom3da/pagewright/internal/db/dbgen"
+	"github.com/kom3da/pagewright/internal/routing"
 )
 
 type contentSummary struct {
@@ -369,12 +369,12 @@ func (s *Server) patchContent(w http.ResponseWriter, r *http.Request, sess *sess
 			if err != nil {
 				return err
 			}
-			if _, err := contentPath(ctx, q, updated); err != nil {
+			if _, err := routing.ContentPath(ctx, q, updated); err != nil {
 				return err
 			}
 		}
 		if urlChanged {
-			if err := syncContentRoute(ctx, q, id); err != nil {
+			if err := routing.SyncContent(ctx, q, id); err != nil {
 				return err
 			}
 		}
@@ -453,7 +453,7 @@ func (s *Server) setPublished(w http.ResponseWriter, r *http.Request, sess *sess
 			return err
 		}
 		if publish {
-			if err := syncContentRoute(ctx, q, id); err != nil {
+			if err := routing.SyncContent(ctx, q, id); err != nil {
 				return err
 			}
 		}
@@ -491,110 +491,6 @@ func (s *Server) deleteContent(w http.ResponseWriter, r *http.Request, sess *ses
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
-}
-
-// contentPath is the MVP URL of a content: /posts/{seg}/ for posts and
-// /{ancestor segs}/{seg}/ for pages, where seg is the slug or the number.
-func contentPath(ctx context.Context, q *dbgen.Queries, c dbgen.Content) (string, error) {
-	seg := func(slug *string, number int64) string {
-		if slug != nil {
-			return *slug
-		}
-		return strconv.FormatInt(number, 10)
-	}
-	if c.Type != "page" {
-		return "/posts/" + seg(c.Slug, c.Number) + "/", nil
-	}
-	chain, err := q.ContentAncestry(ctx, c.ID)
-	if err != nil {
-		return "", err
-	}
-	parts := make([]string, 0, len(chain))
-	for _, a := range chain {
-		parts = append(parts, seg(a.Slug, a.Number))
-	}
-	path := "/" + strings.Join(parts, "/") + "/"
-	for _, reserved := range reservedPrefixes {
-		if strings.HasPrefix(path, reserved) {
-			return "", invalid("reserved_slug", "「posts」と「media」はサイトの仕組みで使っているため、いちばん上の固定ページのURLには使えません")
-		}
-	}
-	return path, nil
-}
-
-// reservedPrefixes are paths the site itself uses (post lists, media).
-var reservedPrefixes = []string{"/posts/", "/media/"}
-
-// syncContentRoute makes the canonical route of a content match its URL.
-// A previous canonical URL is kept as a redirect. Pages below it follow.
-// Contents that were never published (no route yet) are left alone until
-// they are published.
-func syncContentRoute(ctx context.Context, q *dbgen.Queries, id int64) error {
-	c, err := q.GetContent(ctx, id)
-	if err != nil {
-		return err
-	}
-	cur, err := q.GetCanonicalRouteForContent(ctx, &id)
-	hasRoute := err == nil
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
-	}
-	if !hasRoute && c.PublishedRevisionID == nil {
-		return nil
-	}
-	path, err := contentPath(ctx, q, c)
-	if err != nil {
-		return err
-	}
-	if hasRoute && cur.Path == path {
-		return nil
-	}
-	if err := moveCanonical(ctx, q, cur, hasRoute, path, dbgen.CreateRouteParams{ContentID: &id}); err != nil {
-		return err
-	}
-	if c.Type != "page" {
-		return nil
-	}
-	children, err := q.ListChildContentIDs(ctx, &id)
-	if err != nil {
-		return err
-	}
-	for _, child := range children {
-		if err := syncContentRoute(ctx, q, child); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// moveCanonical points the target at path: the old canonical route (if
-// any) becomes a redirect, and a redirect of the same target already at
-// path is replaced. Another target at path is a conflict.
-func moveCanonical(ctx context.Context, q *dbgen.Queries, cur dbgen.Route, hasCur bool, path string, target dbgen.CreateRouteParams) error {
-	if hasCur {
-		if err := q.DemoteRouteToRedirect(ctx, cur.ID); err != nil {
-			return err
-		}
-	}
-	existing, err := q.GetRouteByPath(ctx, path)
-	switch {
-	case err == nil:
-		if !sameTarget(existing, target) {
-			return errURLTaken
-		}
-		if err := q.DeleteRoute(ctx, existing.ID); err != nil {
-			return err
-		}
-	case !errors.Is(err, pgx.ErrNoRows):
-		return err
-	}
-	target.Path, target.Kind = path, "canonical"
-	_, err = q.CreateRoute(ctx, target)
-	return err
-}
-
-func sameTarget(r dbgen.Route, t dbgen.CreateRouteParams) bool {
-	return equalPtr(r.ContentID, t.ContentID) && equalPtr(r.CategoryID, t.CategoryID) && equalPtr(r.TagID, t.TagID)
 }
 
 func equalPtr[T comparable](a, b *T) bool {

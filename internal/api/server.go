@@ -23,6 +23,7 @@ import (
 	"github.com/kom3da/pagewright/internal/db"
 	"github.com/kom3da/pagewright/internal/mail"
 	"github.com/kom3da/pagewright/internal/media"
+	"github.com/kom3da/pagewright/internal/routing"
 )
 
 // BuildQueue schedules a full build of a tenant's site. The job is added
@@ -222,6 +223,10 @@ func (s *Server) finish(w http.ResponseWriter, r *http.Request, err error) {
 	var pe *pgconn.PgError
 	switch {
 	case errors.As(err, &ae):
+	case errors.Is(err, routing.ErrURLTaken):
+		ae = errURLTaken
+	case errors.Is(err, routing.ErrReservedPath):
+		ae = invalid("reserved_slug", "「posts」と「media」はサイトの仕組みで使っているため、いちばん上の固定ページのURLには使えません")
 	case errors.As(err, &be):
 		ae = invalid("invalid_body", be.Message)
 	case errors.Is(err, pgx.ErrNoRows):
