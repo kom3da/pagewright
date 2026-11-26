@@ -23,3 +23,15 @@
 .button[data-disabled] {
   background: transparent;
 }
+
+/* A button with the separator that starts its group. */
+.item {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+/* 段落の種類: wide enough for 「小見出し」. */
+.select {
+  width: 7.5rem;
+  margin-inline-end: 2px;
+}

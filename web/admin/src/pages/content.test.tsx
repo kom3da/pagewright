@@ -270,27 +270,71 @@ describe("editor", () => {
     expect(JSON.stringify(put?.body)).toContain('"marks":[{"type":"bold"}]');
   });
 
-  it("moves between toolbar buttons with the arrow keys, including disabled ones", async () => {
+  it("moves between toolbar controls with the arrow keys, including disabled ones", async () => {
     const { user } = await openEditor();
     const toolbar = screen.getByRole("toolbar", { name: "本文の書式" });
-    const buttons = within(toolbar).getAllByRole("button");
-    expect(buttons.filter((b) => b.tabIndex === 0)).toEqual([buttons[0]]);
+    expect(toolbar).toHaveAccessibleDescription(/左右の矢印キー/);
+    const select = within(toolbar).getByRole("combobox", { name: "段落の種類" });
+    expect(select).toHaveAttribute("tabindex", "0");
+    expect(
+      within(toolbar)
+        .getAllByRole("button")
+        .every((b) => b.tabIndex === -1),
+    ).toBe(true);
 
     await user.click(screen.getByLabelText("タイトル"));
     await user.tab();
-    expect(within(toolbar).getByRole("button", { name: "本文（段落）" })).toHaveFocus();
+    expect(select).toHaveFocus();
     await user.keyboard("{ArrowRight}");
-    expect(within(toolbar).getByRole("button", { name: "大見出し" })).toHaveFocus();
+    expect(within(toolbar).getByRole("button", { name: "太字" })).toHaveFocus();
     await user.keyboard("{End}");
     const redo = within(toolbar).getByRole("button", { name: "やり直す" });
     expect(redo).toHaveFocus();
     expect(redo).toHaveAttribute("aria-disabled", "true");
     await user.keyboard("{ArrowRight}");
-    expect(within(toolbar).getByRole("button", { name: "本文（段落）" })).toHaveFocus();
+    expect(select).toHaveFocus();
     await user.keyboard("{ArrowLeft}");
     expect(redo).toHaveFocus();
     await user.tab();
     expect(screen.getByRole("textbox", { name: "本文" })).toHaveFocus();
+  });
+
+  it("keeps rarely used formats behind 「ほか」 on phones", async () => {
+    window.innerWidth = 390;
+    const { user } = await openEditor();
+    const toolbar = screen.getByRole("toolbar", { name: "本文の書式" });
+    expect(within(toolbar).getByRole("button", { name: "太字" })).toBeInTheDocument();
+    expect(within(toolbar).getByRole("button", { name: "画像を入れる" })).toBeInTheDocument();
+    expect(within(toolbar).queryByRole("button", { name: "引用" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("textbox", { name: "本文" }));
+    await user.click(within(toolbar).getByRole("button", { name: "ほかの書式" }));
+    await user.click(await screen.findByRole("menuitem", { name: "引用" }));
+    expect(
+      screen.getByRole("textbox", { name: "本文" }).querySelector("blockquote"),
+    ).not.toBeNull();
+  });
+
+  it("sets headings from the 段落の種類 select and has no inline code button", async () => {
+    const requests = recordRequests();
+    const { user } = await openEditor();
+    await user.click(screen.getByRole("textbox", { name: "本文" }));
+    const select = screen.getByRole("combobox", { name: "段落の種類" });
+    expect(select).toHaveValue("paragraph");
+    expect(
+      within(select)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["本文", "大見出し", "中見出し", "小見出し"]);
+    await user.selectOptions(select, "中見出し");
+    expect(select).toHaveValue("h3");
+    expect(screen.queryByRole("button", { name: "コード" })).not.toBeInTheDocument();
+    // Insert buttons show their words.
+    expect(screen.getByRole("button", { name: "画像を入れる" })).toHaveTextContent("画像");
+    expect(screen.getByRole("button", { name: "表を入れる" })).toHaveTextContent("表");
+    await user.click(screen.getByRole("button", { name: "下書き保存" }));
+    await screen.findByText("下書きを保存しました。");
+    const put = requests.find((r) => r.method === "PUT");
+    expect(JSON.stringify(put?.body)).toContain('"type":"heading","attrs":{"level":3}');
   });
 
   it("inserts the contact form from the toolbar and saves it as a contactForm block", async () => {

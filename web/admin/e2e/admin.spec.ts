@@ -145,9 +145,9 @@ test("editor is accessible and keyboard operable", async ({ page }) => {
   // The toolbar is a single Tab stop; arrow keys move between buttons.
   await page.getByLabel("タイトル").focus();
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("button", { name: "本文（段落）" })).toBeFocused();
+  await expect(page.getByRole("combobox", { name: "段落の種類" })).toBeFocused();
   await page.keyboard.press("ArrowRight");
-  await expect(page.getByRole("button", { name: "大見出し" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "太字" })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(body).toBeFocused();
 
