@@ -1,18 +1,10 @@
 -- name: CreateContent :one
--- Takes the next per-tenant number from tenants.last_content_number. The
--- tenant row stays locked until the transaction ends, so keep transactions
--- that create content short. Returns pgx.ErrNoRows if the current tenant
--- does not exist.
-WITH n AS (
-  UPDATE tenants SET last_content_number = last_content_number + 1
-  WHERE id = app_current_tenant()
-  RETURNING last_content_number
-)
-INSERT INTO contents (number, type, title, slug, parent_id, body, body_schema_version,
+-- The number is assigned by the contents_assign_number trigger, which locks
+-- the tenant row until the transaction ends; keep such transactions short.
+INSERT INTO contents (type, title, slug, parent_id, body, body_schema_version,
   status, published_at, author_id, fields)
-SELECT n.last_content_number, @type, @title, @slug, @parent_id, @body, @body_schema_version,
-  @status, @published_at, @author_id, @fields
-FROM n
+VALUES (@type, @title, @slug, @parent_id, @body, @body_schema_version,
+  @status, @published_at, @author_id, @fields)
 RETURNING *;
 
 -- name: GetContent :one

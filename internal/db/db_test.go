@@ -230,6 +230,16 @@ func TestAppRoleIsSubjectToRLS(t *testing.T) {
 	if user != "pagewright_app" || super || bypass {
 		t.Fatalf("app runs as %s (super=%v, bypassrls=%v); want pagewright_app without either", user, super, bypass)
 	}
+	// Owners bypass RLS (it is not FORCEd), so the app must own nothing.
+	var owned int
+	err = e.app.QueryRow(context.Background(),
+		"SELECT count(*) FROM pg_class WHERE relowner = (SELECT oid FROM pg_roles WHERE rolname = current_user)").Scan(&owned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owned != 0 {
+		t.Errorf("app role owns %d relations, want 0", owned)
+	}
 }
 
 func TestTenantCannotReadOtherTenant(t *testing.T) {
@@ -513,6 +523,49 @@ func TestContentNumbersArePerTenant(t *testing.T) {
 	})
 }
 
+func TestExplicitContentNumberAdvancesCounter(t *testing.T) {
+	e := newTestEnv(t)
+	// As when keeping a WordPress post ID on import.
+	err := e.execInTenant(e.tenantA,
+		"INSERT INTO contents (number, type, body, body_schema_version) VALUES (241, 'post', '{}', 1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.inA(t, func(q *dbgen.Queries) error {
+		c, err := q.CreateContent(e.ctxA, newPost("after import", e.alice))
+		if err != nil {
+			return err
+		}
+		if c.Number != 242 {
+			t.Errorf("number after importing 241 = %d, want 242", c.Number)
+		}
+		return nil
+	})
+}
+
+func TestAllDigitSlugIsRejected(t *testing.T) {
+	e := newTestEnv(t)
+	err := e.db.InTenant(e.ctxA, func(q *dbgen.Queries) error {
+		p := newPost("x", e.alice)
+		slug := "1"
+		p.Slug = &slug
+		_, err := q.CreateContent(e.ctxA, p)
+		return err
+	})
+	if code := pgCode(err); code != "23514" {
+		t.Errorf("slug %q: err = %v, want SQLSTATE 23514 (check violation)", "1", err)
+	}
+}
+
+func TestRemovingAnAuthorIsRefused(t *testing.T) {
+	e := newTestEnv(t)
+	_, err := e.admin.Exec(context.Background(),
+		"DELETE FROM memberships WHERE tenant_id = $1 AND user_id = $2", e.tenantA, e.alice)
+	if code := pgCode(err); code != "23503" {
+		t.Errorf("removing alice from A: err = %v, want SQLSTATE 23503", err)
+	}
+}
+
 func TestConcurrentContentNumbersAreUnique(t *testing.T) {
 	e := newTestEnv(t)
 	const n = 10
@@ -571,6 +624,13 @@ func TestAppCannotCreateTenantsOrUsers(t *testing.T) {
 		"INSERT INTO tenants (name) VALUES ('x')",
 		"INSERT INTO users (email) VALUES ('x@example.com')",
 		"UPDATE users SET email = 'x@example.com'",
+		// A user can belong to several tenants, so no tenant may edit them.
+		"UPDATE users SET display_name = 'renamed'",
+		// Membership changes come with invitations; adding a member would
+		// also expose that user's profile to the tenant.
+		"INSERT INTO memberships (user_id, role) VALUES ('" + e.bob.String() + "', 'admin')",
+		"UPDATE memberships SET role = 'admin'",
+		"DELETE FROM memberships",
 	} {
 		err := e.execInTenant(e.tenantA, q)
 		if code := pgCode(err); code != "42501" {

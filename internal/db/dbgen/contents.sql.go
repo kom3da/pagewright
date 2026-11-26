@@ -41,16 +41,10 @@ func (q *Queries) AddContentTag(ctx context.Context, arg AddContentTagParams) er
 }
 
 const createContent = `-- name: CreateContent :one
-WITH n AS (
-  UPDATE tenants SET last_content_number = last_content_number + 1
-  WHERE id = app_current_tenant()
-  RETURNING last_content_number
-)
-INSERT INTO contents (number, type, title, slug, parent_id, body, body_schema_version,
+INSERT INTO contents (type, title, slug, parent_id, body, body_schema_version,
   status, published_at, author_id, fields)
-SELECT n.last_content_number, $1, $2, $3, $4, $5, $6,
-  $7, $8, $9, $10
-FROM n
+VALUES ($1, $2, $3, $4, $5, $6,
+  $7, $8, $9, $10)
 RETURNING tenant_id, id, number, type, title, slug, parent_id, body, body_schema_version, status, published_at, author_id, fields, created_at, updated_at
 `
 
@@ -67,10 +61,8 @@ type CreateContentParams struct {
 	Fields            []byte
 }
 
-// Takes the next per-tenant number from tenants.last_content_number. The
-// tenant row stays locked until the transaction ends, so keep transactions
-// that create content short. Returns pgx.ErrNoRows if the current tenant
-// does not exist.
+// The number is assigned by the contents_assign_number trigger, which locks
+// the tenant row until the transaction ends; keep such transactions short.
 func (q *Queries) CreateContent(ctx context.Context, arg CreateContentParams) (Content, error) {
 	row := q.db.QueryRow(ctx, createContent,
 		arg.Type,
