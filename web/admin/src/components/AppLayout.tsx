@@ -4,6 +4,7 @@ import { LogOut, RefreshCw } from "lucide-react";
 import { type FormEvent, useId, useState } from "react";
 import { api, errorMessage } from "../api/client";
 import { meQuery } from "../api/queries";
+import { useIsAdmin } from "../lib/useIsAdmin";
 import { useNotify } from "./Toaster";
 import { Button } from "./ui/Button";
 
@@ -13,6 +14,8 @@ const navItems = [
   { to: "/pages", label: "固定ページ" },
   { to: "/categories", label: "カテゴリ" },
   { to: "/tags", label: "タグ" },
+  { to: "/inquiries", label: "お問い合わせ", adminOnly: true },
+  { to: "/settings", label: "サイトの設定", adminOnly: true },
 ] as const;
 
 export function AppLayout() {
@@ -20,6 +23,7 @@ export function AppLayout() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const notify = useNotify();
+  const isAdmin = useIsAdmin();
 
   const logout = useMutation({
     mutationFn: api.logout,
@@ -76,17 +80,19 @@ export function AppLayout() {
         </div>
         <nav aria-label="メインメニュー" className="mx-auto max-w-6xl px-4">
           <ul className="flex flex-wrap gap-1">
-            {navItems.map((item) => (
-              <li key={item.to}>
-                <Link
-                  to={item.to}
-                  activeOptions={{ exact: "exact" in item }}
-                  className="block border-b-4 border-transparent px-3 py-2 font-semibold text-slate-800 hover:bg-slate-100 aria-[current=page]:border-blue-700 aria-[current=page]:text-blue-800"
-                >
-                  {item.label}
-                </Link>
-              </li>
-            ))}
+            {navItems
+              .filter((item) => isAdmin || !("adminOnly" in item))
+              .map((item) => (
+                <li key={item.to}>
+                  <Link
+                    to={item.to}
+                    activeOptions={{ exact: "exact" in item }}
+                    className="block border-b-4 border-transparent px-3 py-2 font-semibold text-slate-800 hover:bg-slate-100 aria-[current=page]:border-blue-700 aria-[current=page]:text-blue-800"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
           </ul>
         </nav>
       </header>

@@ -68,6 +68,7 @@ const fullDoc: BodyNode = {
     },
     { type: "embed", attrs: { provider: "youtube", url: "https://www.youtube.com/watch?v=x" } },
     { type: "rawHtml", attrs: { html: '<div class="old">移行<script>x</script></div>' } },
+    { type: "contactForm" },
   ],
 };
 
@@ -136,6 +137,19 @@ describe("body JSON v1", () => {
     expect(raw?.textContent).toContain("カスタムHTML");
     expect(dom.querySelector("script")).toBeNull();
     expect(dom.querySelector("[data-pw-embed]")?.textContent).toContain("YouTube");
+  });
+
+  it("shows the contact form as a read-only card and inserts it with a command", () => {
+    const e = load({ type: "doc", content: [p(text("ご連絡ください"))] });
+    e.chain().setTextSelection(e.state.doc.content.size).insertContactForm().run();
+    const card = e.view.dom.querySelector("[data-pw-contact-form]");
+    expect(card?.getAttribute("contenteditable")).toBe("false");
+    expect(card?.textContent).toContain("お問い合わせフォーム");
+    expect(card?.textContent).toContain("公開サイトでは");
+    const out = normalizeBody(e.getJSON() as BodyNode);
+    expect(out.content?.some((n) => n.type === "contactForm" && !n.attrs && !n.content)).toBe(true);
+    // The card's text is not saved as content.
+    expect(JSON.stringify(out)).not.toContain("公開サイトでは");
   });
 
   it("applies and removes ruby with commands", () => {

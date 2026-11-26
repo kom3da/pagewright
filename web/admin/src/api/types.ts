@@ -95,4 +95,39 @@ export type Media = {
   createdAt: string;
 };
 
+/** A menu entry: exactly one of contentId and url is set. A null label uses the content's title. */
+export type MenuItem = { label: string | null; contentId: number | null; url: string | null };
+
+export type SiteFont = "gothic" | "mincho";
+
+export type SiteSettings = {
+  name: string;
+  logoMediaId: number | null;
+  /** Output only. */
+  logo: Media | null;
+  /** "#RRGGBB"; empty or missing means the theme's default. */
+  primaryColor?: string;
+  footerColor?: string;
+  font?: SiteFont;
+  timeZone?: string;
+  /** Empty or missing sends contact messages to every admin. */
+  contactEmail?: string;
+  /** Empty: top-level pages and お知らせ are listed automatically. */
+  menu: MenuItem[];
+};
+
+/** PUT /api/site replaces everything. `logo` must not be sent (the server rejects unknown keys). */
+export type SiteSettingsInput = Omit<SiteSettings, "logo">;
+
+export type Submission = {
+  id: number;
+  name: string;
+  kana: string;
+  email: string;
+  phone: string;
+  message: string;
+  pagePath: string;
+  createdAt: string;
+};
+
 export type ApiErrorBody = { error: { code: string; message: string; field?: string } };

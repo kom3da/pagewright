@@ -6,8 +6,12 @@ import type {
   ContentType,
   Me,
   Media,
+  MenuItem,
+  SiteSettings,
+  Submission,
   Tag,
 } from "../api/types";
+import { contrast, isHexColor, MIN_CONTRAST } from "../lib/color";
 import { slugProblem } from "../lib/slug";
 
 // In-memory mock of docs/dev/admin-api.md, used by the unit tests and `pnpm dev:mock`.
@@ -19,6 +23,9 @@ type Db = {
   categories: Category[];
   tags: Tag[];
   media: Media[];
+  /** Settings of the current site. The mock keeps one set for every site. */
+  site: SiteSettings;
+  submissions: Submission[];
   builds: number;
   nextId: number;
 };
@@ -118,6 +125,35 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
       { id: 2, name: "キャンペーン", slug: "campaign" },
     ],
     media: [],
+    site: {
+      name: "山田工務店",
+      logoMediaId: null,
+      logo: null,
+      timeZone: "Asia/Tokyo",
+      menu: [],
+    },
+    submissions: [
+      {
+        id: 2,
+        name: "佐藤花子",
+        kana: "さとうはなこ",
+        email: "hanako@example.jp",
+        phone: "090-1234-5678",
+        message: "キッチンのリフォームについて相談したいです。\n見積もりは無料でしょうか。",
+        pagePath: "/contact/",
+        createdAt: "2026-11-21T03:15:00Z",
+      },
+      {
+        id: 1,
+        name: "鈴木一郎",
+        kana: "",
+        email: "ichiro@example.com",
+        phone: "",
+        message: "見学会の日程を教えてください。",
+        pagePath: "/contact/",
+        createdAt: "2026-11-19T23:40:00Z",
+      },
+    ],
     builds: 0,
     nextId: 100,
     ...overrides,
@@ -140,6 +176,8 @@ const errorFields: Record<string, string> = {
   invalid_publish_at: "publishAt",
   alt_required: "altText",
   file_required: "file",
+  invalid_menu: "menu",
+  invalid_logo: "logoMediaId",
 };
 
 const error = (status: number, code: string, message: string) =>
@@ -171,6 +209,121 @@ function guard(request: Request, { site = true } = {}) {
   if (site && !db.me.currentSiteId) return error(403, "no_site", "サイトを選んでください。");
   return null;
 }
+
+const fieldError = (code: string, message: string, field: string) =>
+  HttpResponse.json({ error: { code, message, field } }, { status: 422 });
+
+const currentRole = () => db.me.sites.find((s) => s.id === db.me.currentSiteId)?.role;
+
+/** Like guard, plus the admin-only check of the settings and contact endpoints. */
+function adminGuard(request: Request, message: string) {
+  return guard(request) ?? (currentRole() === "admin" ? null : error(403, "forbidden", message));
+}
+
+const siteKeys = new Set([
+  "name",
+  "logoMediaId",
+  "primaryColor",
+  "footerColor",
+  "font",
+  "timeZone",
+  "contactEmail",
+  "menu",
+]);
+
+/** Mirrors putSite in internal/api/site.go and Validate in internal/site/settings.go. */
+function validateSite(input: Record<string, unknown>) {
+  // The server rejects unknown keys, including the output-only `logo`.
+  if (Object.keys(input).some((k) => !siteKeys.has(k))) {
+    return error(422, "invalid_json", "送信された内容を読み取れませんでした");
+  }
+  const s = input as Partial<SiteSettings>;
+  const name = (s.name ?? "").trim();
+  if (!name || [...name].length > 100) {
+    return fieldError("invalid_name", "サイトの名前を100文字以内で入力してください", "name");
+  }
+  for (const [field, label] of [
+    ["primaryColor", "テーマカラー"],
+    ["footerColor", "フッターの色"],
+  ] as const) {
+    const v = s[field];
+    if (!v) continue;
+    if (!isHexColor(v)) {
+      return fieldError(
+        "invalid_setting",
+        `${label}は #1a73e8 のような6桁の色コードで指定してください`,
+        field,
+      );
+    }
+    const r = contrast(v);
+    if (r < MIN_CONTRAST) {
+      return fieldError(
+        "invalid_setting",
+        `${label}が明るすぎて、白い文字や背景との差が足りません（コントラスト比 ${r.toFixed(1)}:1、4.5:1 以上が必要です）。もっと濃い色を選んでください`,
+        field,
+      );
+    }
+  }
+  if (s.font && s.font !== "gothic" && s.font !== "mincho") {
+    return fieldError(
+      "invalid_setting",
+      "文字の書体はゴシック体か明朝体から選んでください",
+      "font",
+    );
+  }
+  if (s.timeZone) {
+    try {
+      new Intl.DateTimeFormat("ja-JP", { timeZone: s.timeZone });
+    } catch {
+      return fieldError("invalid_setting", "タイムゾーンが正しくありません", "timeZone");
+    }
+  }
+  if (s.contactEmail && !/^[^\s@<>]+@[^\s@<>]+$/.test(s.contactEmail)) {
+    return fieldError(
+      "invalid_setting",
+      "お問い合わせの送り先メールアドレスの形式が正しくありません",
+      "contactEmail",
+    );
+  }
+  const menu = s.menu ?? [];
+  if (menu.length > 20) return fieldError("invalid_menu", "メニューは20項目までです", "menu");
+  for (const [i, it] of menu.entries()) {
+    const n = i + 1;
+    if ((it.contentId == null) === (it.url == null)) {
+      return fieldError(
+        "invalid_menu",
+        `メニューの${n}番目は、ページかURLのどちらか一方を指定してください`,
+        "menu",
+      );
+    }
+    if (it.label != null && (!it.label.trim() || [...it.label.trim()].length > 50)) {
+      return fieldError(
+        "invalid_menu",
+        `メニューの${n}番目の表示名を50文字以内で入力してください`,
+        "menu",
+      );
+    }
+    if (it.url != null && (!/^(\/|https?:\/\/)\S*$/.test(it.url) || it.label == null)) {
+      return fieldError(
+        "invalid_menu",
+        `メニューの${n}番目のURLは / か https:// で始め、表示名も入れてください`,
+        "menu",
+      );
+    }
+    if (it.contentId != null && !db.contents.some((c) => c.id === it.contentId)) {
+      return error(422, "invalid_reference", "指定したものが見つかりません");
+    }
+  }
+  if (s.logoMediaId != null && !db.media.some((m) => m.id === s.logoMediaId)) {
+    return fieldError("invalid_logo", "ロゴの画像が見つかりません", "logoMediaId");
+  }
+  return null;
+}
+
+const siteResponse = (): SiteSettings => ({
+  ...db.site,
+  logo: db.media.find((m) => m.id === db.site.logoMediaId) ?? null,
+});
 
 const invalidSlug = () =>
   error(422, "invalid_slug", "ページのURLは英小文字・数字・ハイフンで入力してください");
@@ -526,6 +679,61 @@ export const handlers = [
       (ch) => ch.charCodeAt(0),
     );
     return new HttpResponse(png, { headers: { "Content-Type": "image/png" } });
+  }),
+
+  http.get("/api/site", ({ request }) => guard(request) ?? HttpResponse.json(siteResponse())),
+
+  http.put("/api/site", async ({ request }) => {
+    const denied = adminGuard(request, "サイトの設定を変えられるのは管理者だけです");
+    if (denied) return denied;
+    const input = (await request.json()) as Record<string, unknown>;
+    const invalid = validateSite(input);
+    if (invalid) return invalid;
+    const s = input as unknown as SiteSettings;
+    // Like the server's omitempty, empty optional settings are dropped.
+    db.site = {
+      name: s.name.trim(),
+      logoMediaId: s.logoMediaId ?? null,
+      logo: null,
+      ...(s.primaryColor && { primaryColor: s.primaryColor }),
+      ...(s.footerColor && { footerColor: s.footerColor }),
+      ...(s.font && { font: s.font }),
+      ...(s.timeZone && { timeZone: s.timeZone }),
+      ...(s.contactEmail && { contactEmail: s.contactEmail }),
+      menu: (s.menu ?? []).map(
+        (it): MenuItem => ({
+          label: it.label?.trim() ?? null,
+          contentId: it.contentId ?? null,
+          url: it.url ?? null,
+        }),
+      ),
+    };
+    db.builds++;
+    return HttpResponse.json(siteResponse());
+  }),
+
+  http.get("/api/forms/submissions", ({ request }) => {
+    const denied = adminGuard(request, "お問い合わせの内容を見られるのは管理者だけです");
+    if (denied) return denied;
+    const before = Number(
+      new URL(request.url).searchParams.get("before") ?? Number.POSITIVE_INFINITY,
+    );
+    return HttpResponse.json(
+      db.submissions
+        .filter((f) => f.id < before)
+        .sort((a, b) => b.id - a.id)
+        .slice(0, 100),
+    );
+  }),
+
+  http.delete("/api/forms/submissions/:id", ({ request, params }) => {
+    const denied = adminGuard(request, "お問い合わせの内容を見られるのは管理者だけです");
+    if (denied) return denied;
+    const id = Number(params.id);
+    if (!db.submissions.some((f) => f.id === id))
+      return error(404, "not_found", "見つかりません。");
+    db.submissions = db.submissions.filter((f) => f.id !== id);
+    return new HttpResponse(null, { status: 204 });
   }),
 
   http.post("/api/site/build", ({ request }) => {

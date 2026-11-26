@@ -4,7 +4,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { mediaFileUrl } from "../api/client";
 
 // Editor schema for schema/body-v1.md. Node and mark names follow Tiptap's standard
-// extensions; Ruby, Image, Embed and RawHtml are defined here.
+// extensions; Ruby, Image, Embed, RawHtml and ContactForm are defined here.
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -19,6 +19,9 @@ declare module "@tiptap/core" {
         mediaId: number | null;
         title?: string | null;
       }) => ReturnType;
+    };
+    contactForm: {
+      insertContactForm: () => ReturnType;
     };
   }
 }
@@ -214,6 +217,48 @@ export const RawHtml = Node.create({
   },
 });
 
+/**
+ * The contact form (fixed fields). The public site renders the form; the editor shows a
+ * read-only card in its place.
+ */
+export const ContactForm = Node.create({
+  name: "contactForm",
+  group: "block",
+  atom: true,
+  selectable: true,
+  draggable: true,
+
+  parseHTML() {
+    return [{ tag: "div[data-pw-contact-form]" }];
+  },
+
+  renderHTML() {
+    return [
+      "div",
+      {
+        "data-pw-contact-form": "",
+        class: "pw-placeholder-block pw-contact-form",
+        contenteditable: "false",
+      },
+      ["p", { class: "pw-placeholder-title" }, "お問い合わせフォーム"],
+      [
+        "p",
+        {},
+        "公開サイトでは、ここにお問い合わせフォーム（お名前・ふりがな・メールアドレス・電話番号・お問い合わせ内容）が表示されます。届いた内容は管理画面の「お問い合わせ」で見られます。",
+      ],
+    ];
+  },
+
+  addCommands() {
+    return {
+      insertContactForm:
+        () =>
+        ({ commands }) =>
+          commands.insertContent({ type: this.name }),
+    };
+  },
+});
+
 export const extensions: Extensions = [
   StarterKit.configure({
     heading: { levels: [2, 3, 4] },
@@ -232,4 +277,5 @@ export const extensions: Extensions = [
   Image,
   Embed,
   RawHtml,
+  ContactForm,
 ];

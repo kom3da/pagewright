@@ -60,6 +60,60 @@ describe("api client", () => {
     ]);
   });
 
+  it("reads and replaces the site settings", async () => {
+    const requests = recordRequests();
+    const site = await api.getSite();
+    expect(site).toMatchObject({ name: "山田工務店", logo: null, menu: [] });
+    const { logo: _, ...input } = site;
+    const saved = await api.saveSite({
+      ...input,
+      primaryColor: "#0a4f8f",
+      menu: [{ label: null, contentId: 4, url: null }],
+    });
+    expect(saved).toMatchObject({ primaryColor: "#0a4f8f", menu: [{ contentId: 4 }] });
+    expect(requests.map((r) => [r.method, r.path, r.headers.get("X-Pagewright")])).toEqual([
+      ["GET", "/api/site", null],
+      ["PUT", "/api/site", "1"],
+    ]);
+    expect(requests[1].body).not.toHaveProperty("logo");
+  });
+
+  it("returns setting errors with the field, and 403 for editors", async () => {
+    const site = await api.getSite();
+    const { logo: _, ...input } = site;
+    const err = await api.saveSite({ ...input, footerColor: "#7fb3ff" }).catch((e) => e);
+    expect(err).toMatchObject({ status: 422, code: "invalid_setting", field: "footerColor" });
+    expect(err.message).toMatch(/コントラスト比 2\.\d:1/);
+    const menuErr = await api
+      .saveSite({ ...input, menu: [{ label: null, contentId: null, url: "/a/" }] })
+      .catch((e) => e);
+    expect(errorField(menuErr)).toBe("menu");
+
+    await api.selectSite("22222222-2222-4222-8222-222222222222");
+    expect(await api.saveSite(input).catch((e) => e)).toMatchObject({
+      status: 403,
+      code: "forbidden",
+    });
+    expect(await api.listSubmissions().catch((e) => e)).toMatchObject({ status: 403 });
+  });
+
+  it("lists and deletes contact messages", async () => {
+    const list = await api.listSubmissions();
+    expect(list.map((s) => s.id)).toEqual([2, 1]);
+    const requests = recordRequests();
+    await api.deleteSubmission(2);
+    expect(requests.map((r) => [r.method, r.path])).toEqual([
+      ["DELETE", "/api/forms/submissions/2"],
+    ]);
+    expect((await api.listSubmissions()).map((s) => s.id)).toEqual([1]);
+  });
+
+  it("pages contact messages with ?before", async () => {
+    const requests = recordRequests();
+    expect((await api.listSubmissions(2)).map((s) => s.id)).toEqual([1]);
+    expect(requests.map((r) => r.path)).toEqual(["/api/forms/submissions?before=2"]);
+  });
+
   it("sends media as multipart with the alt text", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const file = new File(["x"], "photo.png", { type: "image/png" });

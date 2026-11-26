@@ -32,11 +32,47 @@ test("lists and management screens are accessible", async ({ page }) => {
     ["pages", "固定ページの一覧"],
     ["categories", "カテゴリ"],
     ["tags", "タグ"],
+    ["settings", "サイトの設定"],
+    ["inquiries", "お問い合わせ"],
   ] as const) {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
     await expectAccessible(page);
   }
+});
+
+test("site settings: contrast check, keyboard menu editing and saving", async ({ page }) => {
+  await page.goto("settings");
+  await expect(page.getByRole("heading", { level: 1, name: "サイトの設定" })).toBeVisible();
+
+  // A light theme color is explained and blocks saving.
+  const theme = page.getByRole("group", { name: "テーマカラー" });
+  await theme.getByLabel(/色コード/).fill("#7fb3ff");
+  await expect(theme.getByText(/明るすぎて/)).toBeVisible();
+  await page.getByRole("button", { name: "設定を保存する" }).click();
+  await expect(theme.getByLabel(/色コード/)).toBeFocused();
+  await theme.getByLabel(/色コード/).fill("#0a4f8f");
+  await expect(theme.getByText(/明るすぎて/)).toBeHidden();
+
+  // Add two menu items and reorder them with the keyboard only.
+  const menu = page.getByRole("region", { name: "メニュー" });
+  for (const title of ["会社概要", "沿革"]) {
+    await menu.getByRole("button", { name: "メニューに項目を追加" }).click();
+    const dialog = page.getByRole("dialog", { name: "メニューに項目を追加" });
+    await dialog.getByRole("combobox", { name: /ページや記事/ }).selectOption({ label: title });
+    await dialog.getByRole("button", { name: "追加する" }).click();
+    await expect(dialog).toBeHidden();
+  }
+  await expectAccessible(page);
+  await menu.getByRole("button", { name: "「沿革」を上へ移動" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(menu.getByRole("listitem").first()).toContainText("沿革");
+  await expect(menu.getByRole("button", { name: "「沿革」を下へ移動" })).toBeFocused();
+
+  await page.getByRole("button", { name: "設定を保存する" }).click();
+  await expect(page.getByText(/サイトの設定を保存しました/)).toBeVisible();
+  await page.getByRole("link", { name: "タグ" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "タグ" })).toBeVisible();
 });
 
 test("editor is accessible and keyboard operable", async ({ page }) => {

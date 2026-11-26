@@ -20,6 +20,7 @@ const nodeAttrs: Record<string, readonly string[]> = {
   tableCell: ["colspan", "rowspan"],
   embed: ["provider", "url"],
   rawHtml: ["html"],
+  contactForm: [],
   hardBreak: [],
   text: [],
 };

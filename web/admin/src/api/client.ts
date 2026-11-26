@@ -9,6 +9,9 @@ import type {
   DraftInput,
   Me,
   Media,
+  SiteSettings,
+  SiteSettingsInput,
+  Submission,
   Tag,
   TagInput,
   TagPatch,
@@ -45,6 +48,8 @@ const fieldsByCode: Record<string, string> = {
   file_required: "file",
   unsupported_type: "file",
   too_large: "file",
+  invalid_menu: "menu",
+  invalid_logo: "logoMediaId",
 };
 
 /** The input field an API error is about, or undefined when it is not about one. */
@@ -145,8 +150,18 @@ export const api = {
   patchMedia: (id: number, altText: string) => patch<Media>(`/media/${id}`, { altText }),
   deleteMedia: (id: number) => del(`/media/${id}`),
 
+  getSite: () => get<SiteSettings>("/site"),
+  saveSite: (input: SiteSettingsInput) => put<SiteSettings>("/site", input),
   buildSite: () => post<void>("/site/build"),
+
+  /** Newest first, SUBMISSIONS_PAGE_SIZE at a time; `before` is the last id received. */
+  listSubmissions: (before?: number) =>
+    get<Submission[]>(`/forms/submissions${before === undefined ? "" : `?before=${before}`}`),
+  deleteSubmission: (id: number) => del(`/forms/submissions/${id}`),
 };
+
+/** Page size of GET /api/forms/submissions. */
+export const SUBMISSIONS_PAGE_SIZE = 100;
 
 /** URL the admin uses to display a media file (requires login). */
 export const mediaFileUrl = (mediaId: number) => `/api/media/${mediaId}/file`;
