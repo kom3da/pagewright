@@ -286,7 +286,7 @@ func TestTenantCannotReadOtherTenant(t *testing.T) {
 			t.Errorf("GetCurrentTenant = %v, want A", tenant.ID)
 		}
 
-		posts, err := q.ListContents(ctx, "post")
+		posts, err := q.ListContents(ctx, dbgen.ListContentsParams{Type: "post"})
 		if err != nil {
 			return err
 		}
@@ -544,7 +544,7 @@ func TestTenantSettingDoesNotOutliveTransaction(t *testing.T) {
 	// A single connection, so the query after InTenant reuses its connection.
 	one := openDB(t, e.url+"&pool_max_conns=1")
 	err := one.InTenant(e.ctxA, func(q *dbgen.Queries) error {
-		posts, err := q.ListContents(e.ctxA, "post")
+		posts, err := q.ListContents(e.ctxA, dbgen.ListContentsParams{Type: "post"})
 		if len(posts) == 0 {
 			t.Error("tenant A sees no contents inside InTenant")
 		}

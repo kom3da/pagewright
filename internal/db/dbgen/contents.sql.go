@@ -371,8 +371,20 @@ LEFT JOIN LATERAL (
 ) lr ON true
 LEFT JOIN routes r ON r.content_id = c.id AND r.kind = 'canonical'
 WHERE c.type = $1
+  AND ($2::text IS NULL OR lr.title ILIKE $2::text ESCAPE '\' OR c.slug ILIKE $2::text ESCAPE '\')
+  AND ($3::text IS NULL OR $3::text = CASE
+        WHEN c.published_revision_id IS NOT NULL THEN 'published'
+        WHEN c.scheduled_revision_id IS NOT NULL THEN 'scheduled'
+        ELSE 'draft' END)
 ORDER BY c.number DESC
+LIMIT 1000
 `
+
+type ListContentsParams struct {
+	Type   string
+	Q      *string
+	Status *string
+}
 
 type ListContentsRow struct {
 	TenantID            uuid.UUID
@@ -396,9 +408,10 @@ type ListContentsRow struct {
 }
 
 // Contents of a type, newest number first, with the title and id of their
-// latest revision and their canonical URL.
-func (q *Queries) ListContents(ctx context.Context, type_ string) ([]ListContentsRow, error) {
-	rows, err := q.db.Query(ctx, listContents, type_)
+// latest revision and their canonical URL. q (an ILIKE pattern, already
+// escaped) matches the title or slug; status filters by derived status.
+func (q *Queries) ListContents(ctx context.Context, arg ListContentsParams) ([]ListContentsRow, error) {
+	rows, err := q.db.Query(ctx, listContents, arg.Type, arg.Q, arg.Status)
 	if err != nil {
 		return nil, err
 	}

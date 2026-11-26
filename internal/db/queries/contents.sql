@@ -13,7 +13,8 @@ SELECT * FROM contents WHERE number = $1;
 
 -- name: ListContents :many
 -- Contents of a type, newest number first, with the title and id of their
--- latest revision and their canonical URL.
+-- latest revision and their canonical URL. q (an ILIKE pattern, already
+-- escaped) matches the title or slug; status filters by derived status.
 SELECT c.*, coalesce(lr.title, '')::text AS title, coalesce(lr.id, 0)::bigint AS latest_revision_id,
   r.path AS url
 FROM contents c
@@ -22,8 +23,14 @@ LEFT JOIN LATERAL (
   WHERE content_id = c.id ORDER BY id DESC LIMIT 1
 ) lr ON true
 LEFT JOIN routes r ON r.content_id = c.id AND r.kind = 'canonical'
-WHERE c.type = $1
-ORDER BY c.number DESC;
+WHERE c.type = @type
+  AND (sqlc.narg(q)::text IS NULL OR lr.title ILIKE sqlc.narg(q)::text ESCAPE '\' OR c.slug ILIKE sqlc.narg(q)::text ESCAPE '\')
+  AND (sqlc.narg(status)::text IS NULL OR sqlc.narg(status)::text = CASE
+        WHEN c.published_revision_id IS NOT NULL THEN 'published'
+        WHEN c.scheduled_revision_id IS NOT NULL THEN 'scheduled'
+        ELSE 'draft' END)
+ORDER BY c.number DESC
+LIMIT 1000;
 
 -- name: GetContentURL :one
 SELECT r.path FROM routes r WHERE r.content_id = $1 AND r.kind = 'canonical';

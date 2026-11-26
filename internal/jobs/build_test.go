@@ -134,3 +134,21 @@ func TestBuildSiteJobWithoutTenantIsCancelled(t *testing.T) {
 		t.Fatal("Work without tenant succeeded")
 	}
 }
+
+func TestBuildSiteJobRecordsResult(t *testing.T) {
+	env := dbtest.New(t)
+	tenant := env.CreateTenant(t, "記録株式会社")
+	client := newRiver(t, env, NewWorkers(env.DB, build.Options{OutDir: t.TempDir()}, nil))
+	if _, err := client.Insert(context.Background(), BuildSiteArgs{TenantID: tenant}, nil); err != nil {
+		t.Fatal(err)
+	}
+	runUntil(t, client, 1)
+	var files int64
+	var failed *string
+	if err := env.Admin.QueryRow(context.Background(), "SELECT files, error FROM site_builds WHERE tenant_id = $1", tenant).Scan(&files, &failed); err != nil {
+		t.Fatalf("no build record: %v", err)
+	}
+	if files == 0 || failed != nil {
+		t.Errorf("record: files=%d error=%v", files, failed)
+	}
+}

@@ -7,6 +7,7 @@ package jobs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/kom3da/pagewright/internal/build"
 	"github.com/kom3da/pagewright/internal/db"
+	"github.com/kom3da/pagewright/internal/db/dbgen"
 	"github.com/kom3da/pagewright/internal/mail"
 )
 
@@ -85,7 +87,9 @@ func (w *BuildSiteWorker) Work(ctx context.Context, job *river.Job[BuildSiteArgs
 		log.Info("build_site: skipped, a later build is waiting")
 		return nil
 	}
+	started := time.Now()
 	res, err := w.build(ctx, w.db, tenantID, w.opts)
+	w.record(ctx, tenantID, started, res, err)
 	if err != nil {
 		return fmt.Errorf("build_site: %w", err)
 	}
@@ -112,4 +116,34 @@ func laterBuildWaiting(ctx context.Context, job *river.Job[BuildSiteArgs]) (bool
 		return false, err
 	}
 	return len(res.Jobs) > 0, nil
+}
+
+// record keeps the outcome of a build for the admin. Failing to record
+// does not fail the build.
+func (w *BuildSiteWorker) record(ctx context.Context, tenantID uuid.UUID, started time.Time, res build.Result, buildErr error) {
+	warnings, _ := json.Marshal(nonNilStrings(res.Warnings))
+	var msg *string
+	if buildErr != nil {
+		m := buildErr.Error()
+		msg = &m
+	}
+	err := w.db.InTenant(db.WithTenant(ctx, tenantID), func(q *dbgen.Queries) error {
+		if err := q.RecordBuild(ctx, dbgen.RecordBuildParams{
+			StartedAt: started, Files: int64(res.Files), Changed: int64(len(res.Changed)),
+			Removed: int64(len(res.Removed)), Warnings: warnings, Error: msg,
+		}); err != nil {
+			return err
+		}
+		return q.PruneBuilds(ctx)
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "build_site: record result", "tenant_id", tenantID, "err", err)
+	}
+}
+
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

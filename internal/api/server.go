@@ -126,6 +126,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("POST /api/site/build", s.site(s.buildSite))
 	mux.Handle("GET /api/site", s.site(s.getSite))
+	mux.Handle("GET /api/site/builds", s.site(s.listBuilds))
 	mux.Handle("PUT /api/site", s.site(s.putSite))
 	mux.Handle("GET /api/forms/submissions", s.site(s.listSubmissions))
 	mux.Handle("DELETE /api/forms/submissions/{id}", s.site(s.deleteSubmission))

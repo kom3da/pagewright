@@ -8,7 +8,9 @@ import (
 	"io/fs"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -163,6 +165,44 @@ func (s *Server) putSite(w http.ResponseWriter, r *http.Request, sess *session) 
 			return err
 		}
 		out, err = loadSite(ctx, q)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, out)
+	return nil
+}
+
+type buildJSON struct {
+	ID         int64     `json:"id"`
+	StartedAt  time.Time `json:"startedAt"`
+	FinishedAt time.Time `json:"finishedAt"`
+	Files      int64     `json:"files"`
+	Changed    int64     `json:"changed"`
+	Removed    int64     `json:"removed"`
+	Warnings   []string  `json:"warnings"`
+	Error      *string   `json:"error"`
+}
+
+func (s *Server) listBuilds(w http.ResponseWriter, r *http.Request, _ *session) error {
+	limit := int32(5)
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err != nil || n < 1 || n > 50 {
+			return invalid("invalid_limit", "件数は1から50で指定してください")
+		}
+		limit = int32(n)
+	}
+	out := []buildJSON{}
+	err := s.DB.InTenant(r.Context(), func(q *dbgen.Queries) error {
+		rows, err := q.ListBuilds(r.Context(), limit)
+		for _, b := range rows {
+			var warnings []string
+			_ = json.Unmarshal(b.Warnings, &warnings)
+			out = append(out, buildJSON{ID: b.ID, StartedAt: b.StartedAt, FinishedAt: b.FinishedAt, Files: b.Files,
+				Changed: b.Changed, Removed: b.Removed, Warnings: nonNil(warnings), Error: b.Error})
+		}
 		return err
 	})
 	if err != nil {

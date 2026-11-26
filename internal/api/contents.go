@@ -71,6 +71,9 @@ func summary(c dbgen.Content, title string, latestRevisionID int64, url *string)
 	}
 }
 
+// likeEscaper escapes ILIKE wildcards so searches match text literally.
+var likeEscaper = strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`)
+
 func contentType(t string) error {
 	if t != "post" && t != "page" {
 		return invalid("invalid_type", "種類は記事か固定ページを選んでください")
@@ -79,13 +82,28 @@ func contentType(t string) error {
 }
 
 func (s *Server) listContents(w http.ResponseWriter, r *http.Request, _ *session) error {
-	typ := r.URL.Query().Get("type")
+	query := r.URL.Query()
+	typ := query.Get("type")
 	if err := contentType(typ); err != nil {
 		return err
 	}
+	params := dbgen.ListContentsParams{Type: typ}
+	if q := strings.TrimSpace(query.Get("q")); q != "" {
+		if len([]rune(q)) > 100 || !plainText(q, false) {
+			return invalid("invalid_q", "検索する言葉は100文字以内で入力してください")
+		}
+		pattern := "%" + likeEscaper.Replace(q) + "%"
+		params.Q = &pattern
+	}
+	if st := query.Get("status"); st != "" {
+		if st != "draft" && st != "scheduled" && st != "published" {
+			return invalid("invalid_status", "状態の指定が正しくありません")
+		}
+		params.Status = &st
+	}
 	out := []contentSummary{}
 	err := s.DB.InTenant(r.Context(), func(q *dbgen.Queries) error {
-		rows, err := q.ListContents(r.Context(), typ)
+		rows, err := q.ListContents(r.Context(), params)
 		for _, row := range rows {
 			c := dbgen.Content{
 				TenantID: row.TenantID, ID: row.ID, Number: row.Number, Type: row.Type, Slug: row.Slug,

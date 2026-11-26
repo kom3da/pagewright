@@ -141,6 +141,18 @@ type Session struct {
 	CreatedAt time.Time
 }
 
+type SiteBuild struct {
+	TenantID   uuid.UUID
+	ID         int64
+	StartedAt  time.Time
+	FinishedAt time.Time
+	Files      int64
+	Changed    int64
+	Removed    int64
+	Warnings   []byte
+	Error      *string
+}
+
 type Tag struct {
 	TenantID  uuid.UUID
 	ID        int64

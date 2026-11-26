@@ -998,3 +998,57 @@ func TestPreviewLinks(t *testing.T) {
 		t.Errorf("revoked link = %d, want 404", status)
 	}
 }
+
+func TestContentSearchAndBuilds(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	bob := e.login("bob@example.com")
+	alice.newContent("post", "夏のセール 50%オフ", true)
+	alice.newContent("post", "秋のお知らせ", false)
+	bob.newContent("post", "夏のセール（B）", true)
+
+	tests := []struct {
+		query string
+		want  []string
+	}{
+		{"q=" + url.QueryEscape("セール"), []string{"夏のセール 50%オフ"}},
+		{"q=" + url.QueryEscape("50%"), []string{"夏のセール 50%オフ"}},
+		{"q=" + url.QueryEscape("%"), []string{"夏のセール 50%オフ"}}, // % is literal
+		{"status=draft", []string{"秋のお知らせ"}},
+		{"status=published&q=" + url.QueryEscape("秋"), nil},
+	}
+	for _, tt := range tests {
+		var got []detail
+		alice.mustDo(http.MethodGet, "/api/contents?type=post&"+tt.query, nil, &got, http.StatusOK)
+		var titles []string
+		for _, d := range got {
+			titles = append(titles, d.Title)
+		}
+		if diff := cmp.Diff(tt.want, titles); diff != "" {
+			t.Errorf("%s (-want +got):\n%s", tt.query, diff)
+		}
+	}
+	if got, _ := alice.errorCode(http.MethodGet, "/api/contents?type=post&status=gone", nil); got != http.StatusUnprocessableEntity {
+		t.Errorf("bad status = %d, want 422", got)
+	}
+
+	// Build records are per site.
+	for _, s := range []struct {
+		tenant  uuid.UUID
+		warning string
+	}{{e.tenantA, "Aの警告"}, {e.tenantB, "Bの警告"}} {
+		if _, err := e.db.Admin.Exec(context.Background(),
+			`INSERT INTO site_builds (tenant_id, started_at, files, changed, warnings) VALUES ($1, now(), 10, 2, jsonb_build_array($2::text))`,
+			s.tenant, s.warning); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var builds []struct {
+		Changed  int64
+		Warnings []string
+	}
+	alice.mustDo(http.MethodGet, "/api/site/builds", nil, &builds, http.StatusOK)
+	if len(builds) != 1 || builds[0].Changed != 2 || len(builds[0].Warnings) != 1 || builds[0].Warnings[0] != "Aの警告" {
+		t.Errorf("A's builds = %+v", builds)
+	}
+}

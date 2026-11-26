@@ -81,7 +81,7 @@ type ContentDetail = ContentSummary & {
 
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
-| `GET /api/contents?type=post` | `type`：`post` / `page` | 200 `ContentSummary[]`（番号の降順） |
+| `GET /api/contents?type=post&q=...&status=...` | `type`：`post` / `page`。`q`（省略可）：タイトルか「ページのURL」の部分一致、100文字まで。`status`（省略可）：`draft` / `scheduled` / `published` | 200 `ContentSummary[]`（番号の降順、1000 件まで） |
 | `POST /api/contents` | `{"type": "post"}` | 201 `ContentDetail`（空の版を 1 つ作る） |
 | `GET /api/contents/{id}` | | 200 `ContentDetail` |
 | `PUT /api/contents/{id}/draft` | `{"title": "...", "body": {...}, "fields": {...}, "baseRevisionId": 12}`（`fields`・`baseRevisionId` は省略可） | 200 `ContentDetail`。保存のたびに新しい版を作る。`baseRevisionId`（編集を始めたときの `revision.id`）が最新の版と違えば、ほかの人が先に保存したので 409 `edit_conflict` |
@@ -179,6 +179,16 @@ type SiteSettings = {
 | `GET /api/site` | | 200 `SiteSettings` |
 | `PUT /api/site` | `SiteSettings`（`logo` を除く。全体を置き換える） | 200 `SiteSettings`。管理者だけ（編集者は 403）。不正な値は 422、`field` に項目名（`primaryColor` など、メニューは `menu`）。再ビルドを予約する |
 | `POST /api/site/build` | なし | 202。全体ビルドを予約する（手動で再ビルドしたいとき） |
+| `GET /api/site/builds?limit=5` | `limit`：1〜50（省略時 5） | 200 `Build[]`（新しい順）。公開サイトの書き出しの記録 |
+
+```ts
+type Build = {
+  id: number; startedAt: string; finishedAt: string;
+  files: number; changed: number; removed: number;  // 全ファイル数、変わった数、消えた数
+  warnings: string[];   // 書き出せなかった記事など、利用者に見せる注意
+  error: string | null; // 失敗したときだけ
+};
+```
 
 ## お問い合わせ
 
