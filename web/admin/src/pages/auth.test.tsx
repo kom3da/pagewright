@@ -111,7 +111,7 @@ describe("session and sites", () => {
     renderApp("/");
     expect(await screen.findByRole("heading", { level: 1, name: "ようこそ" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: `アカウントのメニュー（${db.me.user.email}）` }),
+      screen.getByRole("button", { name: /^アカウントのメニュー：\s*taro@example\.jp$/ }),
     ).toBeInTheDocument();
   });
 });

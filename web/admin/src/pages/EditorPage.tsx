@@ -585,7 +585,8 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
     if (!heading) return;
     heading.setAttribute("tabindex", "-1");
     heading.scrollIntoView({ block: "start" });
-    heading.focus({ preventScroll: true });
+    // After the menu has returned focus to its button (Mantine does that 10ms after closing).
+    setTimeout(() => heading.focus({ preventScroll: true }), 50);
   };
 
   const actionBar = (

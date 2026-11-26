@@ -616,7 +616,7 @@ describe("editor", () => {
   it("jumps from 「その他」 to the settings under the body", async () => {
     const { user } = await openEditor();
     await chooseMore(user, "公開日・URL・カテゴリなどの設定へ移動");
-    expect(screen.getByRole("heading", { name: "公開" })).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "公開" })).toHaveFocus());
   });
 
   it("returns focus to 「その他」 after a dialog opened from it closes", async () => {

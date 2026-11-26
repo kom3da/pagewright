@@ -262,27 +262,22 @@ function UserMenu() {
   return (
     <Menu position="top-start" width="target">
       <Menu.Target>
-        <UnstyledButton
-          className={classes.userButton}
-          aria-label={`アカウントのメニュー（${name}）`}
-        >
+        {/* Named from its content (not aria-label), so the visible name is part of it. */}
+        <UnstyledButton className={classes.userButton}>
           <Group gap="xs" wrap="nowrap">
             <UserRound aria-hidden="true" size={18} className={classes.userIcon} />
             <Box miw={0} style={{ flex: 1 }}>
+              <VisuallyHidden>アカウントのメニュー：</VisuallyHidden>
               <Text size="sm" fw={600} truncate>
                 {name}
               </Text>
-              {me.user.displayName && (
-                <Text size="xs" c="dimmed" truncate>
-                  {me.user.email}
-                </Text>
-              )}
             </Box>
             <ChevronsUpDown aria-hidden="true" size={16} className={classes.userIcon} />
           </Group>
         </UnstyledButton>
       </Menu.Target>
       <Menu.Dropdown>
+        <Menu.Label>{me.user.email} でログイン中</Menu.Label>
         <Menu.Item
           leftSection={<LogOut aria-hidden="true" size={16} />}
           onClick={() => logout.mutate()}
