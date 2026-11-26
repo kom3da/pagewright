@@ -81,3 +81,6 @@ body {
 .pw-prose .pw-placeholder-block {
   @apply rounded border-2 border-dashed border-slate-400 bg-slate-100 p-3 text-sm text-slate-700;
 }
+.pw-prose .pw-placeholder-title {
+  @apply font-bold text-slate-900;
+}

@@ -12,6 +12,7 @@ import {
   List,
   ListOrdered,
   type LucideIcon,
+  Mail,
   Minus,
   Pilcrow,
   Quote,
@@ -244,6 +245,11 @@ export function Toolbar({ editor }: { editor: Editor }) {
           icon={Table}
           disabled={s.table}
           onClick={() => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+        />
+        <ToolButton
+          label="お問い合わせフォームを入れる"
+          icon={Mail}
+          onClick={() => chain().insertContactForm().run()}
         />
         {tableTools}
         <Separator />

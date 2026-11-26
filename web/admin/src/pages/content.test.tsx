@@ -189,6 +189,18 @@ describe("editor", () => {
     expect(JSON.stringify(put?.body)).toContain('"marks":[{"type":"bold"}]');
   });
 
+  it("inserts the contact form from the toolbar and saves it as a contactForm block", async () => {
+    const requests = recordRequests();
+    const { user } = await openEditor();
+    await user.click(screen.getByRole("textbox", { name: "本文" }));
+    await user.click(screen.getByRole("button", { name: "お問い合わせフォームを入れる" }));
+    expect(screen.getByText(/ここにお問い合わせフォーム/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "下書き保存" }));
+    await screen.findByText("下書きを保存しました。");
+    const put = requests.find((r) => r.method === "PUT");
+    expect(JSON.stringify(put?.body)).toContain('{"type":"contactForm"}');
+  });
+
   it("guides immediately when Japanese is typed in the page URL", async () => {
     const { user } = await openEditor();
     await user.click(screen.getByText("詳細設定"));
