@@ -11,7 +11,8 @@ pnpm = "latest"
 [tasks.dev]
 description = "開発用のDBとMailpitを起動し、Go本体を起動する"
 run = [
-  "docker compose -f deploy/compose.dev.yaml up -d",
+  "docker compose -f deploy/compose.dev.yaml up -d --wait",
+  "go run ./cmd/pagewright migrate",
   "go run ./cmd/pagewright serve",
 ]
 

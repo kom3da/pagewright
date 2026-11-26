@@ -10,6 +10,11 @@ services:
       - "5432:5432"
     volumes:
       - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "pagewright", "-d", "pagewright"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
 
   mailpit:
     image: axllent/mailpit:latest
