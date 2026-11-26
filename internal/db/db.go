@@ -34,14 +34,39 @@ func TenantFrom(ctx context.Context) (uuid.UUID, bool) {
 	return id, ok && id != uuid.Nil
 }
 
-// DB wraps a pool whose connections log in as the pagewright_app role.
+// AppRole is the database role every connection switches to. It is not a
+// superuser and has no BYPASSRLS, so row level security always applies.
+const AppRole = "pagewright_app"
+
+// DB is a connection pool whose connections all run as AppRole.
 type DB struct {
 	pool *pgxpool.Pool
 }
 
-// New returns a DB using pool.
-func New(pool *pgxpool.Pool) *DB {
-	return &DB{pool: pool}
+// Open connects to PostgreSQL. Each connection runs SET ROLE to AppRole
+// right after connecting, so RLS applies even when connString names a
+// superuser; the login user only needs to be a member of AppRole.
+func Open(ctx context.Context, connString string) (*DB, error) {
+	cfg, err := pgxpool.ParseConfig(connString)
+	if err != nil {
+		return nil, fmt.Errorf("parse connection string: %w", err)
+	}
+	cfg.AfterConnect = func(ctx context.Context, c *pgx.Conn) error {
+		if _, err := c.Exec(ctx, "SET ROLE "+AppRole); err != nil {
+			return fmt.Errorf("set role %s: %w", AppRole, err)
+		}
+		return nil
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("open pool: %w", err)
+	}
+	return &DB{pool: pool}, nil
+}
+
+// Close closes the pool.
+func (d *DB) Close() {
+	d.pool.Close()
 }
 
 // InTenant runs fn in a transaction scoped to the tenant in ctx. The

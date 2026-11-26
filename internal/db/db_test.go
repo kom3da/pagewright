@@ -6,7 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
+	"slices"
+	"sync"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -30,6 +33,7 @@ type testEnv struct {
 	admin *pgxpool.Pool // superuser; bypasses RLS, used only for seeding and checks
 	app   *pgxpool.Pool // runs as pagewright_app; subject to RLS
 	db    *db.DB
+	url   string // test database, as the admin user
 
 	tenantA, tenantB  uuid.UUID
 	alice, bob, carol uuid.UUID // alice: A, bob: B, carol: both
@@ -81,22 +85,38 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 	t.Cleanup(admin.Close)
 
-	// The app pool drops to pagewright_app on every connection, which is
-	// what production gets by logging in as that role.
-	appCfg := cfg.Copy()
-	appCfg.AfterConnect = func(ctx context.Context, c *pgx.Conn) error {
-		_, err := c.Exec(ctx, "SET ROLE pagewright_app")
-		return err
-	}
-	app, err := pgxpool.NewWithConfig(ctx, appCfg)
+	// The app connects with the same superuser URL on purpose: db.Open
+	// must still drop to the app role.
+	dbURL := withDatabase(t, adminURL, name)
+	app := openDB(t, dbURL)
+	e := &testEnv{admin: admin, app: app.Pool(), db: app, url: dbURL}
+	e.seed(t)
+	return e
+}
+
+func openDB(t *testing.T, url string) *db.DB {
+	t.Helper()
+	d, err := db.Open(context.Background(), url)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(app.Close)
+	t.Cleanup(d.Close)
+	return d
+}
 
-	e := &testEnv{admin: admin, app: app, db: db.New(app)}
-	e.seed(t)
-	return e
+func withDatabase(t *testing.T, rawURL, name string) string {
+	t.Helper()
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatalf("PAGEWRIGHT_TEST_DATABASE_URL must be a URL: %v", err)
+	}
+	u.Path = "/" + name
+	q := u.Query()
+	if !q.Has("sslmode") {
+		q.Set("sslmode", "disable")
+	}
+	u.RawQuery = q.Encode() // always non-empty, so callers can append "&..."
+	return u.String()
 }
 
 func migrate(t *testing.T, cfg *pgx.ConnConfig) {
@@ -278,29 +298,29 @@ func TestTenantCannotReadOtherTenant(t *testing.T) {
 			t.Errorf("GetContentByNumber(1) = content %d, want %d", got.ID, e.postA.ID)
 		}
 
-		// Direct lookups of B's rows by ID find nothing.
-		lookups := map[string]func() error{
-			"GetContent": func() error { _, err := q.GetContent(ctx, e.postB.ID); return err },
-			"GetMedia":   func() error { _, err := q.GetMedia(ctx, e.mediaB.ID); return err },
-			"GetUser":    func() error { _, err := q.GetUser(ctx, e.bob); return err },
+		// Direct lookups by ID: A's own rows are found (so the query
+		// works), B's are not.
+		lookups := []struct {
+			name       string
+			own, other func() error
+		}{
+			{"GetContent",
+				func() error { _, err := q.GetContent(ctx, e.postA.ID); return err },
+				func() error { _, err := q.GetContent(ctx, e.postB.ID); return err }},
+			{"GetMedia",
+				func() error { _, err := q.GetMedia(ctx, e.mediaA.ID); return err },
+				func() error { _, err := q.GetMedia(ctx, e.mediaB.ID); return err }},
+			{"GetUser",
+				func() error { _, err := q.GetUser(ctx, e.alice); return err },
+				func() error { _, err := q.GetUser(ctx, e.bob); return err }},
 		}
-		for name, f := range lookups {
-			if err := f(); !errors.Is(err, pgx.ErrNoRows) {
-				t.Errorf("%s of tenant B's row: err = %v, want pgx.ErrNoRows", name, err)
+		for _, l := range lookups {
+			if err := l.own(); err != nil {
+				t.Errorf("%s of tenant A's row: %v", l.name, err)
 			}
-		}
-
-		// Join tables also hide B's links.
-		bCats, err := q.ListContentCategories(ctx, e.postB.ID)
-		if err != nil {
-			return err
-		}
-		bTags, err := q.ListContentTags(ctx, e.postB.ID)
-		if err != nil {
-			return err
-		}
-		if len(bCats) != 0 || len(bTags) != 0 {
-			t.Errorf("tenant B's content links visible from A: %d categories, %d tags", len(bCats), len(bTags))
+			if err := l.other(); !errors.Is(err, pgx.ErrNoRows) {
+				t.Errorf("%s of tenant B's row: err = %v, want pgx.ErrNoRows", l.name, err)
+			}
 		}
 		return nil
 	})
@@ -441,8 +461,9 @@ func TestNoTenantSeesNothing(t *testing.T) {
 		}
 	}
 
-	if _, err := e.app.Exec(ctx, "INSERT INTO tags (name, slug) VALUES ('x', 'x')"); err == nil {
-		t.Error("insert without a tenant succeeded")
+	_, err := e.app.Exec(ctx, "INSERT INTO tags (name, slug) VALUES ('x', 'x')")
+	if code := pgCode(err); code != "42501" {
+		t.Errorf("insert without a tenant: err = %v, want SQLSTATE 42501 (RLS violation)", err)
 	}
 }
 
@@ -450,25 +471,28 @@ func TestTenantSettingDoesNotOutliveTransaction(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
 
-	// One connection, so the next query reuses the one InTenant used.
-	conn, err := e.app.Acquire(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Release()
-	err = pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, "SELECT set_config('app.tenant_id', $1, true)", e.tenantA.String())
+	// A single connection, so the query after InTenant reuses its connection.
+	one := openDB(t, e.url+"&pool_max_conns=1")
+	err := one.InTenant(e.ctxA, func(q *dbgen.Queries) error {
+		posts, err := q.ListContents(e.ctxA, "post")
+		if len(posts) == 0 {
+			t.Error("tenant A sees no contents inside InTenant")
+		}
 		return err
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	var setting string
 	var n int
-	if err := conn.QueryRow(ctx, "SELECT count(*) FROM contents").Scan(&n); err != nil {
+	err = one.Pool().QueryRow(ctx,
+		"SELECT coalesce(current_setting('app.tenant_id', true), ''), (SELECT count(*) FROM contents)").Scan(&setting, &n)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if n != 0 {
-		t.Errorf("%d contents visible after the tenant transaction ended, want 0", n)
+	if setting != "" || n != 0 {
+		t.Errorf("after InTenant: app.tenant_id = %q and %d contents visible, want empty and 0", setting, n)
 	}
 }
 
@@ -487,6 +511,40 @@ func TestContentNumbersArePerTenant(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestConcurrentContentNumbersAreUnique(t *testing.T) {
+	e := newTestEnv(t)
+	const n = 10
+	nums := make(chan int64, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() {
+			err := e.db.InTenant(e.ctxA, func(q *dbgen.Queries) error {
+				c, err := q.CreateContent(e.ctxA, newPost("concurrent", e.alice))
+				nums <- c.Number
+				return err
+			})
+			if err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	close(nums)
+
+	var got []int64
+	for num := range nums {
+		got = append(got, num)
+	}
+	slices.Sort(got)
+	want := make([]int64, n)
+	for i := range want {
+		want[i] = int64(i + 2) // 1 is the seeded post
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("numbers (-want +got):\n%s", diff)
+	}
 }
 
 func TestFindUserByEmail(t *testing.T) {

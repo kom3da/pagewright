@@ -67,7 +67,10 @@ type CreateContentParams struct {
 	Fields            []byte
 }
 
-// Takes the next per-tenant number from tenants.last_content_number.
+// Takes the next per-tenant number from tenants.last_content_number. The
+// tenant row stays locked until the transaction ends, so keep transactions
+// that create content short. Returns pgx.ErrNoRows if the current tenant
+// does not exist.
 func (q *Queries) CreateContent(ctx context.Context, arg CreateContentParams) (Content, error) {
 	row := q.db.QueryRow(ctx, createContent,
 		arg.Type,

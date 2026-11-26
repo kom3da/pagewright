@@ -1,5 +1,8 @@
 -- name: CreateContent :one
--- Takes the next per-tenant number from tenants.last_content_number.
+-- Takes the next per-tenant number from tenants.last_content_number. The
+-- tenant row stays locked until the transaction ends, so keep transactions
+-- that create content short. Returns pgx.ErrNoRows if the current tenant
+-- does not exist.
 WITH n AS (
   UPDATE tenants SET last_content_number = last_content_number + 1
   WHERE id = app_current_tenant()
