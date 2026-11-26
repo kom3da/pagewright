@@ -8,7 +8,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!mock-public", "!playwright-report", "!test-results"]
+    "includes": ["**", "!mock-public", "!playwright-report", "!test-results", "!dist-mock"]
   },
   "formatter": {
     "enabled": true,
