@@ -87,11 +87,15 @@ func (q *Queries) ListAdminEmails(ctx context.Context) ([]string, error) {
 }
 
 const listFormSubmissions = `-- name: ListFormSubmissions :many
-SELECT tenant_id, id, name, kana, email, phone, message, page_path, created_at FROM form_submissions ORDER BY created_at DESC, id DESC LIMIT 500
+SELECT tenant_id, id, name, kana, email, phone, message, page_path, created_at FROM form_submissions
+WHERE $1::bigint IS NULL OR id < $1::bigint
+ORDER BY id DESC
+LIMIT 100
 `
 
-func (q *Queries) ListFormSubmissions(ctx context.Context) ([]FormSubmission, error) {
-	rows, err := q.db.Query(ctx, listFormSubmissions)
+// Newest first, a page at a time: pass the last id seen as before.
+func (q *Queries) ListFormSubmissions(ctx context.Context, before *int64) ([]FormSubmission, error) {
+	rows, err := q.db.Query(ctx, listFormSubmissions, before)
 	if err != nil {
 		return nil, err
 	}

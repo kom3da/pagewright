@@ -53,6 +53,13 @@ func (w *PublishScheduledWorker) Work(ctx context.Context, job *river.Job[Publis
 	return w.db.InTenantTx(ctx, func(tx pgx.Tx, q *dbgen.Queries) error {
 		_, err := q.PublishScheduled(ctx, dbgen.PublishScheduledParams{ContentID: a.ContentID, RevisionID: &a.RevisionID})
 		if errors.Is(err, pgx.ErrNoRows) {
+			// Still scheduled but not due by the database clock (River
+			// wakes jobs by this process's clock): wait instead of losing it.
+			c, err := q.GetContent(ctx, a.ContentID)
+			if err == nil && c.ScheduledRevisionID != nil && *c.ScheduledRevisionID == a.RevisionID &&
+				c.ScheduledAt != nil && c.ScheduledAt.After(time.Now().Add(-time.Minute)) {
+				return river.JobSnooze(max(time.Until(*c.ScheduledAt), time.Second))
+			}
 			return nil
 		}
 		if err != nil {

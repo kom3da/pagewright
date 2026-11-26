@@ -4,7 +4,11 @@ VALUES (@name, @kana, @email, @phone, @message, @page_path)
 RETURNING *;
 
 -- name: ListFormSubmissions :many
-SELECT * FROM form_submissions ORDER BY created_at DESC, id DESC LIMIT 500;
+-- Newest first, a page at a time: pass the last id seen as before.
+SELECT * FROM form_submissions
+WHERE sqlc.narg(before)::bigint IS NULL OR id < sqlc.narg(before)::bigint
+ORDER BY id DESC
+LIMIT 100;
 
 -- name: DeleteFormSubmission :execrows
 DELETE FROM form_submissions WHERE id = $1;

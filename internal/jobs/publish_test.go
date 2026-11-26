@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/riverqueue/river"
 
 	"github.com/kom3da/pagewright/internal/build"
 	"github.com/kom3da/pagewright/internal/db/dbtest"
@@ -66,9 +67,9 @@ func TestPublishScheduledIgnoresStaleJobs(t *testing.T) {
 	contentID, revisionID := scheduledPost(t, env, tenant, time.Now().Add(time.Hour))
 	client := newRiver(t, env, NewWorkers(env.DB, build.Options{OutDir: t.TempDir()}, nil))
 
+	// (A job for the same revision that fires early snoozes until the
+	// schedule is due; see TestPublishScheduledWaitsWhenEarly.)
 	stale := []PublishScheduledArgs{
-		// The schedule was moved an hour later: the old job finds it not due.
-		{TenantID: tenant, ContentID: contentID, RevisionID: revisionID, At: time.Now().Add(-time.Minute)},
 		// A newer revision was scheduled instead.
 		{TenantID: tenant, ContentID: contentID, RevisionID: revisionID + 1000, At: time.Now().Add(-time.Minute)},
 		// Another tenant's job cannot touch this content.
@@ -87,5 +88,29 @@ func TestPublishScheduledIgnoresStaleJobs(t *testing.T) {
 	}
 	if published != nil {
 		t.Errorf("stale jobs published revision %d", *published)
+	}
+}
+
+func TestPublishScheduledWaitsWhenEarly(t *testing.T) {
+	env := dbtest.New(t)
+	tenant := env.CreateTenant(t, "予約株式会社")
+	at := time.Now().Add(3 * time.Second).UTC().Truncate(time.Second)
+	contentID, revisionID := scheduledPost(t, env, tenant, at)
+	client := newRiver(t, env, NewWorkers(env.DB, build.Options{OutDir: t.TempDir()}, nil))
+
+	// The job fires early, as with a clock ahead of the database's.
+	if _, err := client.Insert(context.Background(), PublishScheduledArgs{
+		TenantID: tenant, ContentID: contentID, RevisionID: revisionID, At: at,
+	}, &river.InsertOpts{ScheduledAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	runUntil(t, client, 2) // the publish after its snooze, then the build
+
+	var published *int64
+	if err := env.Admin.QueryRow(context.Background(), "SELECT published_revision_id FROM contents WHERE id = $1", contentID).Scan(&published); err != nil {
+		t.Fatal(err)
+	}
+	if published == nil || *published != revisionID {
+		t.Errorf("published = %v, want %d after waiting", published, revisionID)
 	}
 }

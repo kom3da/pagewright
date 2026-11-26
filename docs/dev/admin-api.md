@@ -179,5 +179,5 @@ type Submission = {
 
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
-| `GET /api/forms/submissions` | | 200 `Submission[]`（新しい順、500 件まで）。管理者だけ（編集者は 403） |
+| `GET /api/forms/submissions?before={id}` | `before` は省略可 | 200 `Submission[]`（新しい順に 100 件まで）。続きは、受け取った最後の `id` を `before` に入れて取る。管理者だけ（編集者は 403） |
 | `DELETE /api/forms/submissions/{id}` | | 204。管理者だけ |

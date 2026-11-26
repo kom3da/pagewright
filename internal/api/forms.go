@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/mail"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -253,9 +254,17 @@ func (s *Server) listSubmissions(w http.ResponseWriter, r *http.Request, sess *s
 	if err := requireAdmin(sess); err != nil {
 		return err
 	}
+	var before *int64
+	if v := r.URL.Query().Get("before"); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			return invalid("invalid_before", "ページの指定が正しくありません")
+		}
+		before = &id
+	}
 	out := []submissionJSON{}
 	err := s.DB.InTenant(r.Context(), func(q *dbgen.Queries) error {
-		rows, err := q.ListFormSubmissions(r.Context())
+		rows, err := q.ListFormSubmissions(r.Context(), before)
 		for _, f := range rows {
 			out = append(out, submissionJSON{ID: f.ID, Name: f.Name, Kana: f.Kana, Email: f.Email, Phone: f.Phone,
 				Message: f.Message, PagePath: f.PagePath, CreatedAt: f.CreatedAt})
