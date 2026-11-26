@@ -1,0 +1,92 @@
+{{define "base" -}}
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Title}}{{.Title}} | {{end}}{{.Site.Name}}</title>
+{{- with .Description}}
+<meta name="description" content="{{.}}">
+{{- end}}
+{{- if .NoIndex}}
+<meta name="robots" content="noindex">
+{{- else}}
+<link rel="canonical" href="{{.Canonical}}">
+<meta property="og:type" content="{{if eq .Kind "post" "page"}}article{{else}}website{{end}}">
+<meta property="og:title" content="{{if .Title}}{{.Title}}{{else}}{{.Site.Name}}{{end}}">
+<meta property="og:url" content="{{.Canonical}}">
+<meta property="og:site_name" content="{{.Site.Name}}">
+<meta property="og:locale" content="ja_JP">
+{{- with .Description}}
+<meta property="og:description" content="{{.}}">
+{{- end}}
+{{- end}}
+<link rel="stylesheet" href="{{.Site.StylesheetURL}}">
+<link rel="alternate" type="application/rss+xml" title="{{.Site.Name}} お知らせ" href="{{.Site.FeedURL}}">
+</head>
+<body>
+<a class="skip-link" href="#main">本文へ移動</a>
+<header class="site-header">
+  <div class="container site-header__inner">
+    <p class="site-name"><a href="/"{{if eq .Path "/"}} aria-current="page"{{end}}>{{.Site.Name}}</a></p>
+    {{- with .Site.Menu}}
+    <nav class="global-nav" aria-label="メインメニュー">
+      <ul>
+        {{- range .}}
+        <li><a href="{{.URL}}"{{with current $.Path .URL}} aria-current="{{.}}"{{end}}>{{.Title}}</a></li>
+        {{- end}}
+      </ul>
+    </nav>
+    {{- end}}
+  </div>
+</header>
+{{- with .Breadcrumbs}}
+<nav class="breadcrumbs" aria-label="パンくずリスト">
+  <ol class="container">
+    {{- range $i, $c := .}}
+    <li>{{if $c.URL}}<a href="{{$c.URL}}">{{$c.Title}}</a>{{else}}<span aria-current="page">{{$c.Title}}</span>{{end}}</li>
+    {{- end}}
+  </ol>
+</nav>
+{{- end}}
+<main id="main" class="site-main" tabindex="-1">
+{{template "main" .}}
+</main>
+<footer class="site-footer">
+  <div class="container">
+    {{- with .Site.Menu}}
+    <nav aria-label="フッターメニュー">
+      <ul class="footer-nav">
+        <li><a href="/">ホーム</a></li>
+        {{- range .}}
+        <li><a href="{{.URL}}">{{.Title}}</a></li>
+        {{- end}}
+      </ul>
+    </nav>
+    {{- end}}
+    <p class="copyright"><small>&copy; {{.Site.Name}}</small></p>
+  </div>
+</footer>
+</body>
+</html>
+{{end}}
+
+{{define "post-list" -}}
+{{if . -}}
+<ul class="post-list">
+  {{- range .}}
+  <li class="post-list__item">
+    <div class="post-list__meta">
+      <time datetime="{{isoDate .PublishedAt}}">{{date .PublishedAt}}</time>
+      {{- range .Categories}}
+      <span class="badge">{{.Title}}</span>
+      {{- end}}
+    </div>
+    <a class="post-list__title" href="{{.URL}}">{{.Title}}</a>
+  </li>
+  {{- end}}
+</ul>
+{{- else -}}
+<p>お知らせはまだありません。</p>
+{{- end}}
+{{- end}}
