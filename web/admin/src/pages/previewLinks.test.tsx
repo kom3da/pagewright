@@ -6,8 +6,8 @@ import { expectNoAxeViolations, failWith, recordRequests, renderApp } from "../t
 const openPreviewDialog = async (path = "/posts/1") => {
   const r = renderApp(path);
   await screen.findByRole("textbox", { name: "本文" });
-  await r.user.click(screen.getByRole("button", { name: "プレビュー用のリンク" }));
-  const dialog = await screen.findByRole("dialog", { name: "プレビュー用のリンク" });
+  await r.user.click(screen.getByRole("button", { name: "確認用のリンクを作る" }));
+  const dialog = await screen.findByRole("dialog", { name: "確認用のリンク" });
   return { ...r, dialog };
 };
 
@@ -24,7 +24,7 @@ describe("preview links", () => {
     await expectNoAxeViolations(dialog);
 
     await user.click(within(dialog).getByRole("button", { name: "リンクを作る" }));
-    const url = await within(dialog).findByRole("textbox", { name: "プレビュー用のリンク（URL）" });
+    const url = await within(dialog).findByRole("textbox", { name: "確認用のリンク（URL）" });
     expect(url).toHaveValue("http://localhost:8080/p/token-100/");
     expect(url).toHaveAttribute("readonly");
     expect(url).toHaveAccessibleDescription(/今だけ表示されます/);
@@ -48,9 +48,9 @@ describe("preview links", () => {
     // Closing forgets the URL: it cannot be shown again.
     await user.click(within(dialog).getByRole("button", { name: "閉じて編集に戻る" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "プレビュー用のリンク" })).toHaveFocus();
-    await user.click(screen.getByRole("button", { name: "プレビュー用のリンク" }));
-    const again = await screen.findByRole("dialog", { name: "プレビュー用のリンク" });
+    expect(screen.getByRole("button", { name: "確認用のリンクを作る" })).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "確認用のリンクを作る" }));
+    const again = await screen.findByRole("dialog", { name: "確認用のリンク" });
     expect(await within(again).findAllByRole("listitem")).toHaveLength(1);
     expect(within(again).queryByRole("textbox")).not.toBeInTheDocument();
   });
@@ -69,7 +69,7 @@ describe("preview links", () => {
     const r = renderApp("/posts/1");
     await screen.findByRole("textbox", { name: "本文" });
     await r.user.type(screen.getByLabelText("タイトル"), "（改訂）");
-    await r.user.click(screen.getByRole("button", { name: "プレビュー用のリンク" }));
+    await r.user.click(screen.getByRole("button", { name: "確認用のリンクを作る" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/保存していない変更があります/)).toBeInTheDocument();
     await r.user.click(within(dialog).getByRole("button", { name: "保存してリンクを作る" }));
@@ -87,12 +87,12 @@ describe("preview links", () => {
     await r.user.type(screen.getByLabelText("タイトル"), "！");
     const c = db.contents.find((x) => x.id === 1);
     if (c) c.revision.id = 999; // someone else saved meanwhile
-    await r.user.click(screen.getByRole("button", { name: "プレビュー用のリンク" }));
+    await r.user.click(screen.getByRole("button", { name: "確認用のリンクを作る" }));
     await r.user.click(await screen.findByRole("button", { name: "保存してリンクを作る" }));
     expect(
       await screen.findByRole("dialog", { name: "ほかの人が先に保存しました" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "プレビュー用のリンク" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "確認用のリンク" })).not.toBeInTheDocument();
     expect(db.previewLinks).toEqual([]);
   });
 

@@ -608,13 +608,7 @@ export const handlers = [
       fields?: Record<string, unknown>;
       baseRevisionId?: number;
     };
-    if (input.baseRevisionId !== undefined && input.baseRevisionId !== c.revision.id) {
-      return error(
-        409,
-        "edit_conflict",
-        "ほかの人がこの内容を先に保存しました。いまの編集内容を控えてから、画面を読み込み直してください",
-      );
-    }
+    if (staleBase(c, input.baseRevisionId)) return editConflict();
     c.revision = {
       id: c.revision.id + 1,
       title: input.title,
@@ -661,11 +655,14 @@ export const handlers = [
     return HttpResponse.json(c);
   }),
 
-  http.post("/api/contents/:id/publish", ({ request, params }) => {
+  http.post("/api/contents/:id/publish", async ({ request, params }) => {
     const denied = guard(request);
     if (denied) return denied;
     const c = findContent(params.id);
     if (!c) return error(404, "not_found", "見つかりません。");
+    const text = await request.text();
+    const input = (text ? JSON.parse(text) : {}) as { baseRevisionId?: number };
+    if (staleBase(c, input.baseRevisionId)) return editConflict();
     // Like the server, publishing now cancels a pending schedule.
     Object.assign(c, {
       publishedRevisionId: c.revision.id,
@@ -695,7 +692,11 @@ export const handlers = [
     if (denied) return denied;
     const c = findContent(params.id);
     if (!c) return error(404, "not_found", "見つかりません。");
-    const { publishAt } = (await request.json()) as { publishAt: string };
+    const { publishAt, baseRevisionId } = (await request.json()) as {
+      publishAt: string;
+      baseRevisionId?: number;
+    };
+    if (staleBase(c, baseRevisionId)) return editConflict();
     const at = new Date(publishAt);
     if (Number.isNaN(at.getTime()) || at.getTime() < Date.now() + 60_000) {
       return error(422, "invalid_publish_at", "公開する日時は、今から1分以上あとにしてください");
@@ -1013,6 +1014,16 @@ export const handlers = [
     return HttpResponse.json(db.buildLog.slice(0, limit));
   }),
 ];
+
+/** Someone saved a newer revision than the one the editor sent as its base. */
+const staleBase = (c: ContentDetail, base: number | undefined) =>
+  base !== undefined && base !== c.revision.id;
+const editConflict = () =>
+  error(
+    409,
+    "edit_conflict",
+    "ほかの人がこの内容を先に保存しました。いまの編集内容を控えてから、画面を読み込み直してください",
+  );
 
 async function readUpload(request: Request) {
   try {

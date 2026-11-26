@@ -134,10 +134,12 @@ export const api = {
   getContent: (id: number) => get<ContentDetail>(`/contents/${id}`),
   saveDraft: (id: number, input: DraftInput) => put<ContentDetail>(`/contents/${id}/draft`, input),
   patchContent: (id: number, input: ContentPatch) => patch<ContentDetail>(`/contents/${id}`, input),
-  publish: (id: number) => post<ContentDetail>(`/contents/${id}/publish`),
+  /** `baseRevisionId`: the revision the editor shows; another one is 409 edit_conflict. */
+  publish: (id: number, baseRevisionId?: number) =>
+    post<ContentDetail>(`/contents/${id}/publish`, baseRevisionId ? { baseRevisionId } : undefined),
   unpublish: (id: number) => post<ContentDetail>(`/contents/${id}/unpublish`),
-  schedule: (id: number, publishAt: string) =>
-    post<ContentDetail>(`/contents/${id}/schedule`, { publishAt }),
+  schedule: (id: number, publishAt: string, baseRevisionId?: number) =>
+    post<ContentDetail>(`/contents/${id}/schedule`, { publishAt, baseRevisionId }),
   unschedule: (id: number) => request<ContentDetail>("DELETE", `/contents/${id}/schedule`),
   deleteContent: (id: number) => del(`/contents/${id}`),
 

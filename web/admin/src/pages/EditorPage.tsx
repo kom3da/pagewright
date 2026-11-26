@@ -11,11 +11,20 @@ import {
   Text,
   Textarea,
   TextInput,
+  VisuallyHidden,
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
-import { CalendarClock, ChevronDown, EyeOff, Link2, SlidersHorizontal, Trash2 } from "lucide-react";
+import {
+  CalendarClock,
+  ChevronDown,
+  ExternalLink as ExternalLinkIcon,
+  EyeOff,
+  Link2,
+  SlidersHorizontal,
+  Trash2,
+} from "lucide-react";
 import {
   type CSSProperties,
   type KeyboardEvent,
@@ -97,7 +106,7 @@ const publishedSchema = z.object({ date: z.string(), time: z.string() }).superRe
     ctx.addIssue({
       code: "custom",
       message:
-        "公開日は今より前の日時にしてください。先の日時に公開するときは「日時を指定して公開」を使ってください。",
+        "公開日は今より前の日時にしてください。先の日時に変更を公開するときは「変更の公開を予約する」を使ってください。",
     });
   }
 });
@@ -140,7 +149,11 @@ type Busy =
   | "unschedule"
   | "delete"
   | "preview"
+  | "view"
   | null;
+
+/** A preview link for 「プレビューを見る」 is reused while it is valid at least this long. */
+const PREVIEW_REUSE_MS = 60 * 60 * 1000;
 
 function EditorForm({ content: initial }: { content: ContentDetail }) {
   const { id, type } = initial;
@@ -153,7 +166,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   const [title, setTitle] = useState(initial.revision.title);
   const [savedTitle, setSavedTitle] = useState(initial.revision.title);
   const [titleError, setTitleError] = useState<string>();
-  const titleRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
 
   // The revision this editor's content is based on. Sent with every draft save so the
   // server can tell when someone else saved in between (409 edit_conflict).
@@ -182,6 +195,8 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   const previewButtonRef = useRef<HTMLButtonElement>(null);
   // Set when saving before creating a preview link failed: focus then goes to the problem.
   const previewSaveFailed = useRef(false);
+  // The link 「プレビューを見る」 opens; kept for the visit so that each click does not add one.
+  const viewLink = useRef<{ url: string; expiresAt: string } | null>(null);
 
   // The action bar is sticky at the top on desktop and fixed at the bottom on phones. Its
   // height keeps the body toolbar below it (desktop) and the page end above it (phones).
@@ -201,16 +216,24 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   // Items of the 「その他」 menu disappear when chosen: focus returns to the menu button.
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const focusMoreButton = () => moreButtonRef.current?.focus();
+  // The schedule dialog opens from the 公開 card or from 「その他」: focus goes back there.
+  const scheduleButtonRef = useRef<HTMLButtonElement>(null);
+  const scheduleOpener = useRef<"card" | "menu">("menu");
   const scheduleSaveFailed = useRef(false);
   const afterScheduleClose = () => {
     if (scheduleSaveFailed.current) {
       scheduleSaveFailed.current = false;
       return;
     }
+    if (scheduleOpener.current === "card" && scheduleButtonRef.current) {
+      scheduleButtonRef.current.focus();
+      return;
+    }
     focusMoreButton();
   };
   const settingsHeadingId = `${useId()}-settings`;
 
+  const isPublic = content.status === "published";
   const titleDirty = title !== savedTitle;
   const dirty = titleDirty || bodyDirty || settingsDirty;
 
@@ -318,7 +341,19 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         notify("変更はありません。");
         return;
       }
-      if (await persist()) notify("下書きを保存しました。");
+      const settingsChanged = settingsDirty;
+      if (!(await persist())) return;
+      if (!isPublic) {
+        notify("下書きを保存しました。");
+        return;
+      }
+      // Only the title and body wait for 「変更を公開する」; the settings are live at once
+      // (PATCH /api/contents rebuilds the site for published contents).
+      notify(
+        settingsChanged
+          ? "保存しました。公開日・URL・カテゴリとタグの変更は、もう公開サイトに反映されています。タイトルと本文の変更は「変更を公開する」を押すまで公開されません。"
+          : "保存しました。「変更を公開する」を押すまで、公開サイトは変わりません。",
+      );
     });
 
   const publish = () =>
@@ -327,7 +362,15 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       // The server cancels a pending schedule when publishing now.
       const hadSchedule = content.scheduledAt !== null;
       if (!(await persist())) return;
-      update(await api.publish(id));
+      try {
+        update(await api.publish(id, baseRevisionId.current));
+      } catch (e) {
+        if (isApiError(e, 409, "edit_conflict")) {
+          setConflict(true);
+          return;
+        }
+        throw e;
+      }
       notify(
         `公開しました。${hadSchedule ? "予約は取り消しました。" : ""}公開サイトに反映されるまで少しお待ちください。`,
       );
@@ -340,7 +383,8 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
     return false;
   };
 
-  const openSchedule = () => {
+  const openSchedule = (from: "card" | "menu") => {
+    scheduleOpener.current = from;
     if (!requireTitle("予約するにはタイトルを入力してください。")) return;
     setScheduleError(null);
     setScheduleOpen(true);
@@ -357,8 +401,14 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
           setScheduleOpen(false);
           return;
         }
-        update(await api.schedule(id, publishAt));
+        update(await api.schedule(id, publishAt, baseRevisionId.current));
       } catch (e) {
+        if (isApiError(e, 409, "edit_conflict")) {
+          scheduleSaveFailed.current = true;
+          setScheduleOpen(false);
+          setConflict(true);
+          return;
+        }
         setScheduleError({ message: errorMessage(e), field: errorField(e) === "publishAt" });
         return;
       }
@@ -381,6 +431,39 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
     } finally {
       setBusy(null);
     }
+  };
+
+  // 「プレビューを見る」: the preview page is drawn by the server from a login-free link
+  // (/p/{token}/) and always shows the latest saved revision. Unsaved changes are saved
+  // first, and one short-lived link is reused while it is valid.
+  const viewPreview = () => {
+    if (busy) return;
+    // Opened now, while the click still counts as the user's: after the awaits below a
+    // browser may block a new tab.
+    const tab = window.open("about:blank", "_blank");
+    if (tab) tab.opener = null;
+    void run("view", async () => {
+      try {
+        if (dirty && !(await persist())) {
+          tab?.close();
+          return;
+        }
+        const cached = viewLink.current;
+        let url = cached?.url;
+        if (!cached || new Date(cached.expiresAt).getTime() - Date.now() < PREVIEW_REUSE_MS) {
+          const link = await api.createPreviewLink(id, 1);
+          if (!link.url) throw new Error("プレビューのリンクを作れませんでした。");
+          viewLink.current = { url: link.url, expiresAt: link.expiresAt };
+          url = link.url;
+        }
+        if (!url) return;
+        if (tab) tab.location.href = url;
+        else window.open(url, "_blank", "noopener");
+      } catch (e) {
+        tab?.close();
+        throw e;
+      }
+    });
   };
 
   const afterPreviewClose = () => {
@@ -483,7 +566,11 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
     }
   };
 
-  const isPublic = content.status === "published";
+  const scheduleLabel = content.scheduledAt
+    ? "予約し直す"
+    : isPublic
+      ? "変更の公開を予約する"
+      : "日時を決めて公開する";
   // Saved after scheduling: the schedule still points at an older revision.
   const scheduleOutdated =
     content.scheduledRevisionId !== null && content.scheduledRevisionId !== content.revision.id;
@@ -513,6 +600,18 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
           <Text size="sm" c="dimmed" aria-live="polite" className={classes.saveState}>
             {dirty ? "保存していない変更があります" : ""}
           </Text>
+          {desktop && (
+            <Button
+              variant="subtle"
+              onClick={viewPreview}
+              disabled={busy !== null}
+              loading={busy === "view"}
+              rightSection={<ExternalLinkIcon aria-hidden="true" size={16} />}
+            >
+              プレビューを見る
+              <VisuallyHidden>（新しいタブで開きます）</VisuallyHidden>
+            </Button>
+          )}
           <Group gap="xs" wrap="nowrap">
             <Button
               size={desktop ? "md" : "sm"}
@@ -520,7 +619,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
               disabled={busy !== null}
               loading={busy === "save"}
             >
-              下書き保存
+              {isPublic ? (desktop ? "保存（まだ公開しない）" : "保存") : "下書き保存"}
             </Button>
             <Button
               size={desktop ? "md" : "sm"}
@@ -545,18 +644,27 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
                 </Button>
               </Menu.Target>
               <Menu.Dropdown>
+                {!desktop && (
+                  <Menu.Item
+                    leftSection={<ExternalLinkIcon aria-hidden="true" size={16} />}
+                    onClick={viewPreview}
+                  >
+                    プレビューを見る
+                    <VisuallyHidden>（新しいタブで開きます）</VisuallyHidden>
+                  </Menu.Item>
+                )}
                 <Menu.Item
                   leftSection={<CalendarClock aria-hidden="true" size={16} />}
-                  onClick={openSchedule}
+                  onClick={() => openSchedule("menu")}
                 >
-                  {content.scheduledAt ? "予約し直す" : "日時を指定して公開"}
+                  {scheduleLabel}
                 </Menu.Item>
                 {!wide && (
                   <Menu.Item
                     leftSection={<SlidersHorizontal aria-hidden="true" size={16} />}
                     onClick={goToSettings}
                   >
-                    公開日・URL・プレビューなどの設定へ移動
+                    公開日・URL・カテゴリなどの設定へ移動
                   </Menu.Item>
                 )}
                 {isPublic && (
@@ -613,16 +721,23 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
 
       <Box className={classes.layout}>
         <Stack gap="lg" miw={0}>
-          <TextInput
+          {/* Wraps instead of cutting a long title; a title has no line breaks. */}
+          <Textarea
             label="タイトル"
             ref={titleRef}
             value={title}
             onChange={(e) => {
-              setTitle(e.target.value);
+              setTitle(e.target.value.replace(/[\r\n]+/g, " "));
               setTitleError(undefined);
+            }}
+            onKeyDown={(e) => {
+              // Enter would add a line break; while an IME converts, Enter is the IME's.
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) e.preventDefault();
             }}
             error={titleError}
             size="lg"
+            autosize
+            minRows={1}
             classNames={{ input: classes.titleInput }}
           />
           <BodyEditor editor={editor} />
@@ -654,33 +769,54 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
               </Paper>
             )}
             {isPublic ? (
-              <Controller
-                control={form.control}
-                name="published"
-                render={({ field, fieldState }) => (
-                  <DateTimeFields
-                    legend="公開日（日本時間）"
-                    hint="サイトに表示される公開日です。今より前の日時に変えられます。保存すると公開サイトにも反映されます。"
-                    value={field.value}
-                    onChange={field.onChange}
-                    error={fieldState.error?.message}
-                    dateRef={field.ref}
-                    cols={{ base: 1, xs: 2, lg: 1 }}
-                  />
-                )}
-              />
+              <>
+                <Text size="sm">
+                  {content.publishedAt &&
+                    `${formatJapanDateTime(content.publishedAt)} に公開しました。`}
+                  直したタイトルと本文は、「変更を公開する」を押すまで公開サイトに出ません。
+                </Text>
+                <Controller
+                  control={form.control}
+                  name="published"
+                  render={({ field, fieldState }) => (
+                    <DateTimeFields
+                      legend="公開日（日本時間）"
+                      hint="サイトに表示される公開日です。今より前の日時に変えられます。ほかの設定と同じく、保存するとすぐ公開サイトに反映されます（「保存（まだ公開しない）」でも反映されます）。"
+                      value={field.value}
+                      onChange={field.onChange}
+                      error={fieldState.error?.message}
+                      dateRef={field.ref}
+                      cols={{ base: 1, xs: 2, lg: 1 }}
+                      summary={(at) => `サイトには公開日を ${at} と表示します`}
+                    />
+                  )}
+                />
+              </>
             ) : (
               !content.scheduledAt && (
-                <Text size="sm" c="dimmed">
-                  まだ公開していません。「公開する」ですぐに公開できます。日時を決めて公開するときは「その他」から予約します。
+                <Text size="sm">
+                  まだ公開していません。「公開する」ですぐに公開できます。先の日時に公開するときは「日時を決めて公開する」で予約します。
                 </Text>
               )
+            )}
+            {/* Scheduling is offered where it matters: a draft, or changes not yet public. */}
+            {!content.scheduledAt && (!isPublic || content.hasUnpublishedChanges || dirty) && (
+              <Group>
+                <Button
+                  ref={scheduleButtonRef}
+                  onClick={() => openSchedule("card")}
+                  disabled={busy !== null}
+                  leftSection={<CalendarClock aria-hidden="true" size={16} />}
+                >
+                  {scheduleLabel}
+                </Button>
+              </Group>
             )}
           </Section>
 
           <Section
-            title="プレビュー"
-            description={`公開する前に、ログインしていない人にも${label}を見てもらえるリンクを作れます。`}
+            title="ほかの人に見せる"
+            description={`公開する前の${label}を、ログインしていない人に見てもらうリンクを作れます。`}
           >
             <Group>
               <Button
@@ -689,7 +825,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
                 disabled={busy !== null}
                 leftSection={<Link2 aria-hidden="true" size={16} />}
               >
-                プレビュー用のリンク
+                確認用のリンクを作る
               </Button>
             </Group>
           </Section>
@@ -755,6 +891,13 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       </Box>
 
       <ScheduleDialog
+        title={
+          content.scheduledAt
+            ? "予約し直す"
+            : isPublic
+              ? "変更の公開を予約する"
+              : "日時を決めて公開する"
+        }
         open={scheduleOpen}
         onOpenChange={setScheduleOpen}
         scheduledAt={content.scheduledAt}

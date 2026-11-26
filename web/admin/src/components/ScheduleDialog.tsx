@@ -9,6 +9,8 @@ import { ErrorMessage } from "./ui/feedback";
 export type ScheduleError = { message: string; field: boolean };
 
 type Props = {
+  /** The name of the button that opened it (「日時を決めて公開する」「変更の公開を予約する」). */
+  title: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** The current schedule, to start from. */
@@ -23,6 +25,7 @@ type Props = {
 
 /** Date + time (Japan time) for scheduled publishing. */
 export function ScheduleDialog({
+  title,
   open,
   onOpenChange,
   scheduledAt,
@@ -32,12 +35,7 @@ export function ScheduleDialog({
   onCloseFocus,
 }: Props) {
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="日時を指定して公開"
-      onCloseFocus={onCloseFocus}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange} title={title} onCloseFocus={onCloseFocus}>
       {open && (
         <ScheduleForm
           scheduledAt={scheduledAt}
@@ -57,7 +55,7 @@ function ScheduleForm({
   error,
   onSubmit,
   onCancel,
-}: Omit<Props, "open" | "onOpenChange"> & { onCancel: () => void }) {
+}: Omit<Props, "title" | "open" | "onOpenChange"> & { onCancel: () => void }) {
   const [value, setValue] = useState(() =>
     scheduledAt ? toJapanInputs(scheduledAt) : defaultScheduleInputs(),
   );

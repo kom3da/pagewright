@@ -32,7 +32,7 @@ export function PreviewLinksDialog({ open, onOpenChange, label, onCloseFocus, ..
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title="プレビュー用のリンク"
+      title="確認用のリンク"
       description={`ログインしなくても、公開前の${label}を見てもらえるリンクです。リンクを知っている人なら誰でも、有効期限まで、この${label}の最新の保存内容を見られます。公開サイトには出ません。`}
       onCloseFocus={onCloseFocus}
       wide
@@ -180,7 +180,7 @@ function PreviewLinks({
             <Group align="flex-end" gap="sm" wrap="wrap">
               <TextInput
                 ref={urlRef}
-                label="プレビュー用のリンク（URL）"
+                label="確認用のリンク（URL）"
                 description="このURLは今だけ表示されます。あとから見ることはできないので、いまコピーして、見てほしい人に送ってください。"
                 readOnly
                 value={created.url}

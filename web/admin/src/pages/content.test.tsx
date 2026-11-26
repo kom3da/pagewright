@@ -1,5 +1,5 @@
 import { screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { db } from "../mocks/handlers";
 import { expectNoAxeViolations, failWith, recordRequests, renderApp } from "../test/utils";
 
@@ -241,6 +241,69 @@ describe("editor", () => {
       100, 150,
     ]);
     expect(db.contents.find((c) => c.id === 1)?.title).toBe("わたしのタイトル");
+  });
+
+  it("does not publish a revision the editor has not seen (409 edit_conflict)", async () => {
+    const requests = recordRequests();
+    const { user } = await openEditor();
+    saveElsewhere();
+    await user.click(screen.getByRole("button", { name: "公開する" }));
+    expect(
+      await screen.findByRole("dialog", { name: "ほかの人が先に保存しました" }),
+    ).toBeInTheDocument();
+    expect(requests.find((r) => r.path === "/api/contents/1/publish")?.body).toEqual({
+      baseRevisionId: 100,
+    });
+    expect(db.contents.find((c) => c.id === 1)?.publishedRevisionId).toBeNull();
+  });
+
+  it("opens the preview in a new tab, saving first and reusing one link", async () => {
+    const requests = recordRequests();
+    const tab = { opener: {}, location: { href: "" }, close: () => {} };
+    const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    const { user } = await openEditor();
+    await user.type(screen.getByLabelText("タイトル"), "（改）");
+    await user.click(screen.getByRole("button", { name: /^プレビューを見る/ }));
+    await waitFor(() => expect(tab.location.href).toMatch(/\/p\/.+\/$/));
+    expect(open).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(tab.opener).toBeNull();
+    expect(requests.some((r) => r.method === "PUT")).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: /^プレビューを見る/ }));
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    expect(requests.filter((r) => r.path.endsWith("/preview-links"))).toHaveLength(1);
+    open.mockRestore();
+  });
+
+  it("offers scheduling in the 公開 card, named for the content's state", async () => {
+    const { user } = await openEditor();
+    const card = screen.getByRole("region", { name: "公開" });
+    await user.click(within(card).getByRole("button", { name: "日時を決めて公開する" }));
+    const dialog = await screen.findByRole("dialog", { name: "日時を決めて公開する" });
+    await user.click(within(dialog).getByRole("button", { name: "キャンセル" }));
+    await waitFor(() =>
+      expect(within(card).getByRole("button", { name: "日時を決めて公開する" })).toHaveFocus(),
+    );
+  });
+
+  it("names the buttons of a published post after what they do", async () => {
+    await openEditor("/posts/3");
+    expect(screen.getByRole("button", { name: "保存（まだ公開しない）" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "変更を公開する" })).toBeInTheDocument();
+    const card = screen.getByRole("region", { name: "公開" });
+    expect(card).toHaveTextContent("「変更を公開する」を押すまで公開サイトに出ません");
+    expect(within(card).getByRole("button", { name: "変更の公開を予約する" })).toBeInTheDocument();
+  });
+
+  it("keeps the title on one logical line that wraps instead of being cut", async () => {
+    const { user } = await openEditor();
+    const title = screen.getByLabelText("タイトル");
+    expect(title.tagName).toBe("TEXTAREA");
+    await user.clear(title);
+    await user.type(title, "一行目{Enter}続き");
+    expect(title).toHaveValue("一行目続き");
+    await user.paste("\n貼り付け");
+    expect(title).toHaveValue("一行目続き 貼り付け");
   });
 
   it("on an edit conflict, can load the latest content instead", async () => {
@@ -542,7 +605,7 @@ describe("editor", () => {
 
   it("shows the settings as sections with one heading each", async () => {
     await openEditor();
-    for (const name of ["公開", "プレビュー", "URL", "カテゴリとタグ"]) {
+    for (const name of ["公開", "ほかの人に見せる", "URL", "カテゴリとタグ"]) {
       expect(screen.getByRole("region", { name })).toBeInTheDocument();
     }
     expect(screen.getByRole("region", { name: "保存と公開" })).toBeInTheDocument();
@@ -552,14 +615,14 @@ describe("editor", () => {
 
   it("jumps from 「その他」 to the settings under the body", async () => {
     const { user } = await openEditor();
-    await chooseMore(user, "公開日・URL・プレビューなどの設定へ移動");
+    await chooseMore(user, "公開日・URL・カテゴリなどの設定へ移動");
     expect(screen.getByRole("heading", { name: "公開" })).toHaveFocus();
   });
 
   it("returns focus to 「その他」 after a dialog opened from it closes", async () => {
     const { user } = await openEditor();
-    await chooseMore(user, "日時を指定して公開");
-    const dialog = await screen.findByRole("dialog", { name: "日時を指定して公開" });
+    await chooseMore(user, "日時を決めて公開する");
+    const dialog = await screen.findByRole("dialog", { name: "日時を決めて公開する" });
     await user.click(within(dialog).getByRole("button", { name: "キャンセル" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "その他" })).toHaveFocus());
   });
@@ -575,7 +638,7 @@ describe("editor", () => {
     await expectNoAxeViolations();
     await user.click(within(bar).getByRole("button", { name: "その他" }));
     expect(
-      screen.getByRole("menuitem", { name: "公開日・URL・プレビューなどの設定へ移動" }),
+      screen.getByRole("menuitem", { name: "公開日・URL・カテゴリなどの設定へ移動" }),
     ).toBeInTheDocument();
     await expectNoAxeViolations();
   });
@@ -601,9 +664,13 @@ describe("publication date", () => {
     expect(within(group()).getByLabelText("日付")).toHaveValue("2026-11-20");
     expect(within(group()).getByLabelText("時刻")).toHaveValue("10:00");
     await setDate(user, "2026-01-15");
+    expect(
+      within(group()).getByText("サイトには公開日を 2026年1月15日 10:00 と表示します"),
+    ).toBeInTheDocument();
     expect(screen.getByText("保存していない変更があります")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "下書き保存" }));
-    expect(await screen.findByText("下書きを保存しました。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "保存（まだ公開しない）" }));
+    // Settings of a published post are live at once; the notice says so.
+    expect(await screen.findByText(/もう公開サイトに反映されています/)).toBeInTheDocument();
     expect(requests.find((r) => r.method === "PATCH")?.body).toMatchObject({
       publishedAt: "2026-01-15T01:00:00Z",
     });
@@ -614,8 +681,8 @@ describe("publication date", () => {
     const requests = recordRequests();
     const { user } = await openEditor("/posts/3");
     await user.type(screen.getByLabelText("ページのURL（英数字）"), "-2");
-    await user.click(screen.getByRole("button", { name: "下書き保存" }));
-    await screen.findByText("下書きを保存しました。");
+    await user.click(screen.getByRole("button", { name: "保存（まだ公開しない）" }));
+    await screen.findByText(/^保存しました。/);
     expect(requests.find((r) => r.method === "PATCH")?.body).not.toHaveProperty("publishedAt");
   });
 
@@ -626,7 +693,7 @@ describe("publication date", () => {
     expect(date).toHaveAttribute("aria-invalid", "true");
     expect(date).toHaveAccessibleDescription(/今より前の日時にしてください/);
     expect(within(group()).getByLabelText("時刻")).toHaveAttribute("aria-invalid", "true");
-    await user.click(screen.getByRole("button", { name: "下書き保存" }));
+    await user.click(screen.getByRole("button", { name: "保存（まだ公開しない）" }));
     await waitFor(() => expect(date).toHaveFocus());
     expect(requests.some((r) => r.method === "PATCH")).toBe(false);
   });
@@ -642,7 +709,7 @@ describe("publication date", () => {
     );
     const { user } = await openEditor("/posts/3");
     const date = await setDate(user, "2026-01-15");
-    await user.click(screen.getByRole("button", { name: "下書き保存" }));
+    await user.click(screen.getByRole("button", { name: "保存（まだ公開しない）" }));
     await waitFor(() =>
       expect(date).toHaveAccessibleDescription(/公開日は今より前の日時にしてください$/),
     );
@@ -669,8 +736,8 @@ describe("scheduled publishing", () => {
   it("schedules with a Japan-time date and time and shows the schedule", async () => {
     const requests = recordRequests();
     const { user } = await openEditor();
-    await chooseMore(user, "日時を指定して公開");
-    const dialog = await screen.findByRole("dialog", { name: "日時を指定して公開" });
+    await chooseMore(user, "日時を決めて公開する");
+    const dialog = await screen.findByRole("dialog", { name: "日時を決めて公開する" });
     expect(within(dialog).getByRole("group", { name: "公開する日時（日本時間）" })).toBeVisible();
     await expectNoAxeViolations(dialog);
     await fillSchedule(user, dialog, "2099-12-01", "21:00");
@@ -686,6 +753,7 @@ describe("scheduled publishing", () => {
     expect(screen.getByRole("menuitem", { name: "予約し直す" })).toBeInTheDocument();
     expect(requests.find((r) => r.path === "/api/contents/1/schedule")?.body).toEqual({
       publishAt: "2099-12-01T00:00:00Z",
+      baseRevisionId: 100,
     });
     expect(db.contents.find((c) => c.id === 1)).toMatchObject({
       status: "scheduled",
@@ -695,7 +763,7 @@ describe("scheduled publishing", () => {
 
   it("checks the date on the client before sending", async () => {
     const { user } = await openEditor();
-    await chooseMore(user, "日時を指定して公開");
+    await chooseMore(user, "日時を決めて公開する");
     const dialog = await screen.findByRole("dialog");
     await fillSchedule(user, dialog, "2020-01-01", "09:00");
     await user.click(within(dialog).getByRole("button", { name: "この日時で予約する" }));
@@ -715,7 +783,7 @@ describe("scheduled publishing", () => {
       "publishAt",
     );
     const { user } = await openEditor();
-    await chooseMore(user, "日時を指定して公開");
+    await chooseMore(user, "日時を決めて公開する");
     const dialog = await screen.findByRole("dialog");
     await fillSchedule(user, dialog, "2099-12-01", "09:00");
     await user.click(within(dialog).getByRole("button", { name: "この日時で予約する" }));

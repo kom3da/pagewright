@@ -172,7 +172,7 @@ test("on a phone, the editor's actions stay in a slim bottom bar", async ({ page
 
   // The settings follow the body; 「その他」 jumps there.
   await bar.getByRole("button", { name: "その他" }).click();
-  await page.getByRole("menuitem", { name: "公開日・URL・プレビューなどの設定へ移動" }).click();
+  await page.getByRole("menuitem", { name: "公開日・URL・カテゴリなどの設定へ移動" }).click();
   await expect(page.getByRole("heading", { name: "公開", exact: true })).toBeFocused();
   await expect(page.getByRole("group", { name: "公開日（日本時間）" })).toBeInViewport();
   await expect(bar.getByRole("button", { name: "変更を公開する" })).toBeInViewport();
@@ -224,8 +224,8 @@ test("unsaved changes are confirmed before leaving", async ({ page }) => {
 test("scheduling a post is accessible and keyboard operable", async ({ page }) => {
   await page.goto("posts/1");
   await page.getByRole("button", { name: "その他" }).click();
-  await page.getByRole("menuitem", { name: "日時を指定して公開" }).click();
-  const dialog = page.getByRole("dialog", { name: "日時を指定して公開" });
+  await page.getByRole("menuitem", { name: "日時を決めて公開する" }).click();
+  const dialog = page.getByRole("dialog", { name: "日時を決めて公開する" });
   await expect(dialog.getByLabel("日付")).toBeVisible();
   await expectAccessible(page);
 
@@ -246,8 +246,8 @@ test("preview links are accessible and keyboard operable", async ({ page, contex
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("posts/1");
   await page.getByLabel("タイトル").fill("プレビューの確認");
-  await page.getByRole("button", { name: "プレビュー用のリンク" }).click();
-  const dialog = page.getByRole("dialog", { name: "プレビュー用のリンク" });
+  await page.getByRole("button", { name: "確認用のリンクを作る" }).click();
+  const dialog = page.getByRole("dialog", { name: "確認用のリンク" });
   await expect(dialog.getByText("有効なリンクはありません。")).toBeVisible();
   await expectAccessible(page);
 
@@ -256,7 +256,7 @@ test("preview links are accessible and keyboard operable", async ({ page, contex
   await page.keyboard.press("ArrowRight");
   await expect(dialog.getByRole("radio", { name: "7日" })).toBeChecked();
   await dialog.getByRole("button", { name: "保存してリンクを作る" }).click();
-  const url = dialog.getByRole("textbox", { name: "プレビュー用のリンク（URL）" });
+  const url = dialog.getByRole("textbox", { name: "確認用のリンク（URL）" });
   await expect(url).toBeFocused();
   await expect(url).toHaveValue(/\/p\/.+\/$/);
   await expect(page.getByText("保存していない変更があります", { exact: true })).toBeHidden();
@@ -275,5 +275,5 @@ test("preview links are accessible and keyboard operable", async ({ page, contex
   await expect(url).toBeHidden();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole("button", { name: "プレビュー用のリンク" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "確認用のリンクを作る" })).toBeFocused();
 });
