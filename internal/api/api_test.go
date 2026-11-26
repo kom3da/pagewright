@@ -456,6 +456,7 @@ func TestValidation(t *testing.T) {
 		{"editor adds html", dave, http.MethodPut, path + "/draft", map[string]any{"title": "x", "body": json.RawMessage(`{"type":"doc","content":[{"type":"rawHtml","attrs":{"html":"<b>x</b>"}}]}`)}, 403, "forbidden"},
 		{"parent on a post", alice, http.MethodPatch, path, map[string]any{"parentId": d.ID}, 422, "invalid_parent"},
 		{"page at /posts/", alice, http.MethodPatch, fmt.Sprintf("/api/contents/%d", page.ID), map[string]any{"slug": "posts"}, 422, "reserved_slug"},
+		{"page at /search/", alice, http.MethodPatch, fmt.Sprintf("/api/contents/%d", page.ID), map[string]any{"slug": "search"}, 422, "reserved_slug"},
 		{"category slug", alice, http.MethodPost, "/api/categories", map[string]any{"name": "x", "slug": "カテゴリ"}, 422, "invalid_slug"},
 		{"bad email", alice, http.MethodPost, "/api/auth/login-link", map[string]any{"email": "not an email"}, 422, "invalid_email"},
 	}

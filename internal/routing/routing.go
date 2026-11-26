@@ -56,8 +56,10 @@ func ContentPath(ctx context.Context, q *dbgen.Queries, c dbgen.Content) (string
 	return path, nil
 }
 
-// reservedPrefixes are paths the site itself uses (post lists, media).
-var reservedPrefixes = []string{"/posts/", "/media/"}
+// reservedPrefixes are paths the site itself uses: post lists, media, the
+// search page and its index, and theme assets. Keep in step with
+// internal/build (postsBase, searchPath, searchDir, assetsDir).
+var reservedPrefixes = []string{"/posts/", "/media/", "/search/", "/pagefind/", "/_assets/"}
 
 // SyncContent makes the canonical route of a content match its URL.
 // A previous canonical URL is kept as a redirect. Pages below it follow,
