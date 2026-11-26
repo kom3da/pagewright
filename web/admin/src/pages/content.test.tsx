@@ -134,6 +134,62 @@ describe("editor", () => {
     expect(db.contents.find((c) => c.id === 2)?.slug).toBe("works-2026");
   });
 
+  it("shows server errors at the field named by error.field", async () => {
+    failWith(
+      "put",
+      "/api/contents/1/draft",
+      422,
+      "invalid_title",
+      "タイトルは200文字以内で",
+      "title",
+    );
+    const { user } = await openEditor();
+    await user.type(screen.getByLabelText("タイトル"), "追記");
+    await user.click(screen.getByRole("button", { name: "下書き保存" }));
+    const title = screen.getByLabelText("タイトル");
+    await waitFor(() => expect(title).toHaveAccessibleDescription("タイトルは200文字以内で"));
+    expect(title).toHaveFocus();
+    expect(screen.getAllByText("タイトルは200文字以内で")).toHaveLength(1);
+  });
+
+  it("shows a parent page error on the parent field", async () => {
+    failWith(
+      "patch",
+      "/api/contents/6",
+      422,
+      "invalid_parent",
+      "この親ページは選べません",
+      "parentId",
+    );
+    const { user } = await openEditor("/pages/6");
+    await screen.findByRole("option", { name: "会社概要" });
+    await user.selectOptions(screen.getByLabelText("親ページ"), "会社概要");
+    await user.click(screen.getByRole("button", { name: "下書き保存" }));
+    const parent = screen.getByLabelText("親ページ");
+    await waitFor(() => expect(parent).toHaveAccessibleDescription(/この親ページは選べません/));
+    expect(parent).toHaveAttribute("aria-invalid", "true");
+    expect(parent).toHaveFocus();
+  });
+
+  it("shows an inline tag error at the field from error.field", async () => {
+    failWith(
+      "post",
+      "/api/tags",
+      422,
+      "invalid_name",
+      "名前を100文字以内で入力してください",
+      "name",
+    );
+    const { user } = await openEditor();
+    await user.click(screen.getByText("詳細設定"));
+    await user.type(screen.getByLabelText("タグの名前"), "採用");
+    await user.type(screen.getByLabelText("タグのURL（英数字）"), "recruit");
+    await user.click(screen.getByRole("button", { name: "タグを追加して選ぶ" }));
+    const name = screen.getByLabelText("タグの名前");
+    await waitFor(() => expect(name).toHaveAccessibleDescription(/100文字以内/));
+    expect(name).toHaveFocus();
+  });
+
   it("creates a tag inline and selects it", async () => {
     const { user } = await openEditor();
     await user.click(screen.getByText("詳細設定"));
@@ -238,6 +294,25 @@ describe("images", () => {
       type: "image",
       attrs: { src: media.url, alt: "事務所の外観", mediaId: media.id },
     });
+  });
+
+  it("shows an upload error at the file field", async () => {
+    failWith("post", "/api/media", 422, "unsupported_type", "この形式の画像は使えません", "file");
+    const { user } = await openEditor();
+    await user.click(screen.getByRole("textbox", { name: "本文" }));
+    await user.click(screen.getByRole("button", { name: "画像を入れる" }));
+    const dialog = await screen.findByRole("dialog", { name: "画像を入れる" });
+    await user.upload(
+      within(dialog).getByLabelText(/画像ファイル/),
+      new File(["png"], "a.png", { type: "image/png" }),
+    );
+    await user.type(within(dialog).getByLabelText(/画像の説明/), "説明");
+    await user.click(within(dialog).getByRole("button", { name: "アップロードして入れる" }));
+    const file = within(dialog).getByLabelText(/画像ファイル/);
+    await waitFor(() => expect(file).toHaveAccessibleDescription(/この形式の画像は使えません/));
+    expect(file).toHaveFocus();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
   it("picks an uploaded image from the library", async () => {

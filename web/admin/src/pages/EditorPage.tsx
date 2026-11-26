@@ -2,10 +2,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, ExternalLink } from "lucide-react";
-import { type KeyboardEvent, useRef, useState } from "react";
+import { type KeyboardEvent, type Ref, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
-import { api, errorMessage, isApiError } from "../api/client";
+import { api, errorField, errorMessage, isApiError } from "../api/client";
 import { contentQuery, contentsQuery } from "../api/queries";
 import type { ContentDetail, ContentPatch, ContentSummary, ContentType } from "../api/types";
 import { CategoryCheckboxes } from "../components/CategoryCheckboxes";
@@ -113,10 +113,26 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
     withResolver: true,
   });
 
-  const showSlugError = (message?: string) => {
-    if (message) form.setError("slug", { message });
+  const showSettingsError = (name: "slug" | "parentId", message?: string) => {
+    if (message) form.setError(name, { message });
     setDetailsOpen(true);
-    setTimeout(() => form.setFocus("slug"));
+    setTimeout(() => form.setFocus(name));
+  };
+
+  /** Shows an API error at the input it is about. Returns false when it is not about one. */
+  const showFieldError = (e: unknown) => {
+    const field = errorField(e);
+    if (!isApiError(e) || !field) return false;
+    if (field === "title") {
+      setTitleError(e.message);
+      titleRef.current?.focus();
+      return true;
+    }
+    if (field === "slug" || field === "parentId") {
+      showSettingsError(field, e.message);
+      return true;
+    }
+    return false;
   };
 
   const update = (detail: ContentDetail) => {
@@ -127,7 +143,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   /** Saves settings and the draft if they changed. Returns null when input is invalid. */
   const persist = async (): Promise<ContentDetail | null> => {
     if (!(await form.trigger())) {
-      showSlugError();
+      showSettingsError("slug");
       return null;
     }
     let detail = content;
@@ -135,10 +151,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       try {
         detail = await api.patchContent(id, toPatch(form.getValues()));
       } catch (e) {
-        if (isApiError(e, 409) || isApiError(e, 422, "invalid_slug")) {
-          showSlugError(e.message);
-          return null;
-        }
+        if (showFieldError(e)) return null;
         throw e;
       }
       form.reset(settingsFrom(detail));
@@ -146,11 +159,16 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
     if (titleDirty || bodyDirty) {
       const sentTitle = title;
       const sentChanges = bodyChanges.current;
-      detail = await api.saveDraft(id, {
-        title: sentTitle,
-        body: normalizeBody(editor.getJSON()),
-        fields: content.revision.fields,
-      });
+      try {
+        detail = await api.saveDraft(id, {
+          title: sentTitle,
+          body: normalizeBody(editor.getJSON()),
+          fields: content.revision.fields,
+        });
+      } catch (e) {
+        if (showFieldError(e)) return null;
+        throw e;
+      }
       setSavedTitle(sentTitle);
       // Keep the dirty flag if the user kept typing while saving.
       if (bodyChanges.current === sentChanges) setBodyDirty(false);
@@ -263,7 +281,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
             value={title}
             onChange={(e) => {
               setTitle(e.target.value);
-              if (e.target.value.trim()) setTitleError(undefined);
+              setTitleError(undefined);
             }}
             className={`${inputClass} text-xl font-bold`}
           />
@@ -311,11 +329,13 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
             <Controller
               control={form.control}
               name="parentId"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <ParentSelect
+                  ref={field.ref}
                   pages={pages.filter((p) => p.id !== id)}
                   value={field.value}
                   onChange={field.onChange}
+                  error={fieldState.error?.message}
                 />
               )}
             />
@@ -409,19 +429,28 @@ function urlPreview(type: ContentType, last: string, parentId: string, pages: Co
 }
 
 function ParentSelect({
+  ref,
   pages,
   value,
   onChange,
+  error,
 }: {
+  ref: Ref<HTMLSelectElement>;
   pages: ContentSummary[];
   value: string;
   onChange: (value: string) => void;
+  error?: string;
 }) {
   return (
-    <Field label="親ページ" hint="選ぶと、URLが「/親ページのURL/このページのURL/」になります。">
+    <Field
+      label="親ページ"
+      hint="選ぶと、URLが「/親ページのURL/このページのURL/」になります。"
+      error={error}
+    >
       {(ids) => (
         <select
           {...ids}
+          ref={ref}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className={inputClass}

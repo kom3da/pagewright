@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type KeyboardEvent, useState } from "react";
-import { api, errorMessage, isApiError } from "../api/client";
+import { type KeyboardEvent, useRef, useState } from "react";
+import { api, errorField, errorMessage } from "../api/client";
 import { tagsQuery } from "../api/queries";
 import { slugProblem } from "../lib/slug";
 import { Button } from "./ui/Button";
@@ -68,6 +68,8 @@ function NewTag({ onCreated }: { onCreated: (id: number) => void }) {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [errors, setErrors] = useState<{ name?: string; slug?: string; form?: string }>({});
+  const nameRef = useRef<HTMLInputElement>(null);
+  const slugRef = useRef<HTMLInputElement>(null);
 
   const create = useMutation({
     mutationFn: api.createTag,
@@ -79,8 +81,13 @@ function NewTag({ onCreated }: { onCreated: (id: number) => void }) {
       setErrors({});
     },
     onError: (e) => {
-      if (isApiError(e, 409) || isApiError(e, 422, "invalid_slug")) setErrors({ slug: e.message });
-      else setErrors({ form: errorMessage(e) });
+      const field = errorField(e);
+      if (field === "slug" || field === "name") {
+        setErrors({ [field]: e.message });
+        (field === "slug" ? slugRef : nameRef).current?.focus();
+      } else {
+        setErrors({ form: errorMessage(e) });
+      }
     },
   });
 
@@ -105,6 +112,7 @@ function NewTag({ onCreated }: { onCreated: (id: number) => void }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <TextField
           label="タグの名前"
+          ref={nameRef}
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={onEnter}
@@ -112,6 +120,7 @@ function NewTag({ onCreated }: { onCreated: (id: number) => void }) {
         />
         <TextField
           label="タグのURL（英数字）"
+          ref={slugRef}
           hint="例：event"
           value={slug}
           onChange={(e) => {

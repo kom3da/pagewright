@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "@tiptap/react";
 import { clsx } from "clsx";
-import { type FormEvent, useState } from "react";
-import { api, errorMessage } from "../api/client";
+import { type FormEvent, useRef, useState } from "react";
+import { api, errorField, errorMessage } from "../api/client";
 import { mediaQuery } from "../api/queries";
 import type { Media } from "../api/types";
 import { Button } from "../components/ui/Button";
@@ -51,7 +51,19 @@ function UploadForm({ onUploaded }: { onUploaded: (m: Media, alt: string) => voi
       void queryClient.invalidateQueries({ queryKey: mediaQuery.queryKey });
       onUploaded(media, v.alt);
     },
+    onError: (e) => {
+      const field = errorField(e);
+      if (field === "file") {
+        setErrors({ file: errorMessage(e) });
+        fileRef.current?.focus();
+      } else if (field === "altText") {
+        setErrors({ alt: errorMessage(e) });
+        altRef.current?.focus();
+      }
+    },
   });
+  const fileRef = useRef<HTMLInputElement>(null);
+  const altRef = useRef<HTMLTextAreaElement>(null);
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -81,6 +93,7 @@ function UploadForm({ onUploaded }: { onUploaded: (m: Media, alt: string) => voi
           {(ids) => (
             <input
               {...ids}
+              ref={fileRef}
               type="file"
               accept={ACCEPT.join(",")}
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
@@ -92,6 +105,7 @@ function UploadForm({ onUploaded }: { onUploaded: (m: Media, alt: string) => voi
           {(ids) => (
             <textarea
               {...ids}
+              ref={altRef}
               rows={2}
               value={alt}
               onChange={(e) => setAlt(e.target.value)}
@@ -99,7 +113,9 @@ function UploadForm({ onUploaded }: { onUploaded: (m: Media, alt: string) => voi
             />
           )}
         </Field>
-        {upload.isError && <ErrorMessage>{errorMessage(upload.error)}</ErrorMessage>}
+        {upload.isError && !errorField(upload.error) && (
+          <ErrorMessage>{errorMessage(upload.error)}</ErrorMessage>
+        )}
         <Button type="submit" variant="primary" disabled={upload.isPending}>
           {upload.isPending ? "アップロードしています…" : "アップロードして入れる"}
         </Button>

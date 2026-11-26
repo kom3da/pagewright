@@ -42,8 +42,11 @@ export const failWith = (
   status: number,
   code: string,
   message: string,
+  field?: string,
 ) =>
-  server.use(http[method](path, () => HttpResponse.json({ error: { code, message } }, { status })));
+  server.use(
+    http[method](path, () => HttpResponse.json({ error: { code, message, field } }, { status })),
+  );
 
 /** Runs axe on the document. Color contrast cannot be computed in jsdom. */
 export async function expectNoAxeViolations(container: Element = document.body) {

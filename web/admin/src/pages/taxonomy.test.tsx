@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { db } from "../mocks/handlers";
-import { expectNoAxeViolations, renderApp } from "../test/utils";
+import { expectNoAxeViolations, failWith, renderApp } from "../test/utils";
 
 describe("categories", () => {
   it("lists categories as a tree", async () => {
@@ -43,6 +43,26 @@ describe("categories", () => {
         /すでに使われています/,
       ),
     );
+  });
+
+  it("shows a name error from the server on the name field", async () => {
+    failWith(
+      "post",
+      "/api/categories",
+      422,
+      "invalid_name",
+      "名前を100文字以内で入力してください",
+      "name",
+    );
+    const { user } = renderApp("/categories");
+    await screen.findByRole("table");
+    const form = screen.getByRole("region", { name: "カテゴリを追加" });
+    await user.type(within(form).getByLabelText(/カテゴリの名前/), "長い名前");
+    await user.type(within(form).getByLabelText(/カテゴリのURL/), "long");
+    await user.click(within(form).getByRole("button", { name: "追加する" }));
+    const name = within(form).getByLabelText(/カテゴリの名前/);
+    await waitFor(() => expect(name).toHaveAccessibleDescription(/100文字以内/));
+    expect(name).toHaveFocus();
   });
 
   it("edits a category without offering itself or its children as parent", async () => {
