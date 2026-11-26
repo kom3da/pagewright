@@ -798,7 +798,8 @@ type siteOut struct {
 		ContentID *int64
 		URL       *string
 	}
-	Logo *mediaOut
+	Logo          *mediaOut
+	PublicBaseURL string
 }
 
 func TestSiteSettings(t *testing.T) {
@@ -809,7 +810,7 @@ func TestSiteSettings(t *testing.T) {
 
 	var s siteOut
 	alice.mustDo(http.MethodGet, "/api/site", nil, &s, http.StatusOK)
-	if s.Name != "サイトA" || len(s.Menu) != 0 {
+	if s.Name != "サイトA" || len(s.Menu) != 0 || s.PublicBaseURL != "https://site-a.example" {
 		t.Fatalf("site = %+v", s)
 	}
 

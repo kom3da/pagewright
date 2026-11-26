@@ -52,6 +52,9 @@ type siteSettingsJSON struct {
 	Logo *mediaJSON `json:"logo"`
 	// Themes lists the installed themes and the settings each declares.
 	Themes []themeJSON `json:"themes"`
+	// PublicBaseURL is where the public site is served (no trailing
+	// slash), for links from the admin.
+	PublicBaseURL string `json:"publicBaseUrl"`
 }
 
 type themeJSON struct {
@@ -109,6 +112,7 @@ func (s *Server) getSite(w http.ResponseWriter, r *http.Request, _ *session) err
 	if err != nil {
 		return err
 	}
+	out.PublicBaseURL = s.PublicBaseURL
 	writeJSON(w, http.StatusOK, out)
 	return nil
 }
@@ -208,6 +212,7 @@ func (s *Server) putSite(w http.ResponseWriter, r *http.Request, sess *session) 
 	if err != nil {
 		return err
 	}
+	out.PublicBaseURL = s.PublicBaseURL
 	writeJSON(w, http.StatusOK, out)
 	return nil
 }
