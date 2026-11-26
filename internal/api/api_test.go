@@ -124,7 +124,10 @@ func newEnv(t *testing.T) *env {
 		DB: d.DB, Mail: e.mail, Media: media.Store{Root: t.TempDir()}, Jobs: e.builds,
 		BaseURL: "http://admin.test",
 	})
-	e.srv = httptest.NewServer(s.Handler())
+	mux := http.NewServeMux()
+	mux.Handle("/api/", s.Handler())
+	mux.Handle("/f/", s.FormHandler())
+	e.srv = httptest.NewServer(mux)
 	t.Cleanup(e.srv.Close)
 	return e
 }
@@ -780,5 +783,110 @@ func TestSiteSettings(t *testing.T) {
 	bob.mustDo(http.MethodGet, "/api/site", nil, &bs, http.StatusOK)
 	if bs.Name != "サイトB" || bs.Logo != nil {
 		t.Errorf("site B changed: %+v", bs)
+	}
+}
+
+func (e *env) postContact(tenant uuid.UUID, form url.Values) (int, string) {
+	e.t.Helper()
+	req, _ := http.NewRequest(http.MethodPost, e.srv.URL+"/f/"+tenant.String()+"/contact", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Referer", "https://site-a.example/contact/")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	b, _ := io.ReadAll(res.Body)
+	return res.StatusCode, string(b)
+}
+
+func contactForm() url.Values {
+	return url.Values{
+		"name": {"山田 太郎<script>"}, "kana": {"やまだ たろう"}, "email": {"taro@example.jp"},
+		"phone": {"03-1234-5678"}, "message": {"見積もりをお願いします。"}, "consent": {"yes"}, "page": {"/contact/"},
+	}
+}
+
+func TestContactForm(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	bob := e.login("bob@example.com")
+	dave := e.login("dave@example.com")
+	sentBefore := len(e.mail.sent)
+	if status, _ := e.postContact(uuid.New(), contactForm()); status != http.StatusNotFound {
+		t.Errorf("unknown site = %d, want 404", status)
+	}
+
+	status, page := e.postContact(e.tenantA, contactForm())
+	if status != http.StatusOK || !strings.Contains(page, "送信しました") || !strings.Contains(page, `href="https://site-a.example/contact/"`) {
+		t.Fatalf("post = %d:\n%s", status, page)
+	}
+	e.mail.mu.Lock()
+	sent := e.mail.sent[sentBefore:]
+	e.mail.mu.Unlock()
+	var to []string
+	for _, m := range sent {
+		to = append(to, m.To)
+	}
+	if diff := cmp.Diff([]string{"alice@example.com", "taro@example.jp"}, to); diff != "" {
+		t.Errorf("mail recipients (-want +got):\n%s", diff)
+	}
+
+	var subs []struct {
+		ID   int64
+		Name string
+	}
+	alice.mustDo(http.MethodGet, "/api/forms/submissions", nil, &subs, http.StatusOK)
+	if len(subs) != 1 || subs[0].Name != "山田 太郎<script>" {
+		t.Fatalf("A's submissions = %+v", subs)
+	}
+
+	rejected := map[string]url.Values{}
+	for _, c := range []struct{ name, key, value string }{
+		{"no consent", "consent", ""}, {"bad email", "email", "taro"}, {"empty message", "message", " "},
+	} {
+		f := contactForm()
+		f.Set(c.key, c.value)
+		rejected[c.name] = f
+	}
+	for name, f := range rejected {
+		if status, _ := e.postContact(e.tenantA, f); status != http.StatusUnprocessableEntity {
+			t.Errorf("%s = %d, want 422", name, status)
+		}
+	}
+	bot := contactForm()
+	bot.Set("website", "http://spam.example")
+	if status, _ := e.postContact(e.tenantA, bot); status != http.StatusOK {
+		t.Errorf("honeypot = %d, want 200 (silently dropped)", status)
+	}
+	alice.mustDo(http.MethodGet, "/api/forms/submissions", nil, &subs, http.StatusOK)
+	if len(subs) != 1 {
+		t.Errorf("rejected or bot posts were stored: %d submissions", len(subs))
+	}
+
+	// Personal data: only admins of the same site.
+	var bSubs []json.RawMessage
+	bob.mustDo(http.MethodGet, "/api/forms/submissions", nil, &bSubs, http.StatusOK)
+	if len(bSubs) != 0 {
+		t.Errorf("site B sees %d of A's submissions", len(bSubs))
+	}
+	if got, _ := bob.errorCode(http.MethodDelete, fmt.Sprintf("/api/forms/submissions/%d", subs[0].ID), nil); got != http.StatusNotFound {
+		t.Errorf("B deleting A's submission = %d, want 404", got)
+	}
+	if got, _ := dave.errorCode(http.MethodGet, "/api/forms/submissions", nil); got != http.StatusForbidden {
+		t.Errorf("editor reading submissions = %d, want 403", got)
+	}
+	alice.mustDo(http.MethodDelete, fmt.Sprintf("/api/forms/submissions/%d", subs[0].ID), nil, nil, http.StatusNoContent)
+}
+
+func TestContactFormRateLimit(t *testing.T) {
+	e := newEnv(t)
+	for i := range 10 {
+		if status, _ := e.postContact(e.tenantA, contactForm()); status != http.StatusOK {
+			t.Fatalf("post %d = %d", i+1, status)
+		}
+	}
+	if status, _ := e.postContact(e.tenantA, contactForm()); status != http.StatusTooManyRequests {
+		t.Errorf("11th post = %d, want 429", status)
 	}
 }

@@ -100,7 +100,7 @@ var kinds = map[kind]map[string]bool{
 	blockKind: {
 		"paragraph": true, "heading": true, "bulletList": true, "orderedList": true,
 		"blockquote": true, "horizontalRule": true, "image": true, "table": true,
-		"embed": true, "rawHtml": true,
+		"embed": true, "rawHtml": true, "contactForm": true,
 	},
 	inlineKind:   {"text": true, "hardBreak": true},
 	listItemKind: {"listItem": true},

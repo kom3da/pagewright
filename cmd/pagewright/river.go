@@ -22,7 +22,7 @@ import (
 func newRiver(d *db.DB, cfg config.Config) (*river.Client[pgx.Tx], error) {
 	workers := jobs.NewWorkers(d, build.Options{
 		OutDir: cfg.SiteDir(), MediaRoot: cfg.MediaDir(), BaseURL: cfg.PublicBaseURL, Logger: slog.Default(),
-		Pagefind: cfg.Pagefind,
+		Pagefind: cfg.Pagefind, FormBaseURL: cfg.BaseURL,
 	})
 	if cfg.Pagefind == "" {
 		slog.Info("Pagefind が見つからないため、公開サイトの検索は作りません（mise install で入ります）")

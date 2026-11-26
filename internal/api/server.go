@@ -52,6 +52,7 @@ type Server struct {
 	Options
 	loginByEmail *limiter
 	loginByIP    *limiter
+	formByIP     *limiter
 }
 
 const (
@@ -70,6 +71,7 @@ func New(o Options) *Server {
 		Options:      o,
 		loginByEmail: newLimiter(5, 15*time.Minute),
 		loginByIP:    newLimiter(30, 15*time.Minute),
+		formByIP:     newLimiter(10, 10*time.Minute),
 	}
 }
 
@@ -111,6 +113,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/site/build", s.site(s.buildSite))
 	mux.Handle("GET /api/site", s.site(s.getSite))
 	mux.Handle("PUT /api/site", s.site(s.putSite))
+	mux.Handle("GET /api/forms/submissions", s.site(s.listSubmissions))
+	mux.Handle("DELETE /api/forms/submissions/{id}", s.site(s.deleteSubmission))
 
 	mux.Handle("/api/", s.public(func(http.ResponseWriter, *http.Request, *session) error {
 		return errNotFound

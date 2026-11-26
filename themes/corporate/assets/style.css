@@ -472,3 +472,72 @@ ruby rt {
   max-height: 3rem;
   width: auto;
 }
+
+/* Contact form */
+.contact-form {
+  margin-block: 2rem;
+}
+.form-field {
+  margin-block-end: 1.25rem;
+}
+.form-field label {
+  display: block;
+  font-weight: 700;
+  margin-block-end: 0.25rem;
+}
+.form-field input[type="text"],
+.form-field input[type="email"],
+.form-field input[type="tel"],
+.form-field textarea {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--color-muted);
+  border-radius: 4px;
+  font: inherit;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+.form-field--check {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+.form-field--check label {
+  display: inline;
+}
+.form-field--check input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-block-start: 0.3rem;
+}
+.required {
+  display: inline-block;
+  margin-inline-start: 0.5em;
+  padding: 0 0.4em;
+  border-radius: 3px;
+  background: #b42318;
+  color: #ffffff;
+  font-size: 0.8em;
+  font-weight: 700;
+}
+.hp {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.button {
+  display: inline-block;
+  padding: 0.7rem 1.5rem;
+  border: 0;
+  border-radius: 4px;
+  background: var(--color-accent);
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.button:hover {
+  background: var(--color-accent-dark);
+}

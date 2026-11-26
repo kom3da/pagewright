@@ -167,6 +167,9 @@ func (g *generator) index() {
 		}
 		return *m.Width, *m.Height, true
 	}}
+	if g.opts.FormBaseURL != "" {
+		renderOpts.ContactFormAction = g.opts.FormBaseURL + "/f/" + g.tenantID.String() + "/contact"
+	}
 
 	g.itemByID, g.itemByPath = map[int64]*item{}, map[string]*item{}
 	for _, row := range s.contents {
@@ -196,7 +199,9 @@ func (g *generator) index() {
 		if row.Type == "page" && it.parents == nil {
 			_, it.parents, _ = g.rulePath(row.ID)
 		}
-		body, err := render.Body(row.Body, renderOpts)
+		opts := renderOpts
+		opts.PagePath = it.path
+		body, err := render.Body(row.Body, opts)
 		if err != nil {
 			g.warn("%s: %v; not published", what, err)
 			continue

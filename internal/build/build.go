@@ -43,6 +43,9 @@ type Options struct {
 	BaseURL string
 	// Logger receives warnings. Default slog.Default().
 	Logger *slog.Logger
+	// FormBaseURL is the origin of the Pagewright server that receives
+	// contact form posts (/f/<tenant>/contact). Empty leaves forms out.
+	FormBaseURL string
 	// Pagefind is the path of the Pagefind binary (the extended build, for
 	// Japanese). Empty disables site search.
 	Pagefind string

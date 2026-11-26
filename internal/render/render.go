@@ -25,6 +25,12 @@ type Options struct {
 	// MediaSize returns the pixel size of a media item so <img> gets width
 	// and height (avoids layout shift). Optional.
 	MediaSize func(mediaID int64) (width, height int64, ok bool)
+	// ContactFormAction is where the contactForm block posts. Empty drops
+	// the block with a warning.
+	ContactFormAction string
+	// PagePath is the public path of the page being rendered; the contact
+	// form sends it so the reply page can link back.
+	PagePath string
 }
 
 // Result is a rendered body.
@@ -147,6 +153,8 @@ func (r *renderer) block(n node, depth int) {
 		r.table(n, depth)
 	case "embed":
 		r.embed(n)
+	case "contactForm":
+		r.contactForm()
 	case "rawHtml":
 		html, _ := n.Attrs["html"].(string)
 		clean := ugc.Sanitize(html)

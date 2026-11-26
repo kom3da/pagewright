@@ -165,3 +165,19 @@ type SiteSettings = {
 | `GET /api/site` | | 200 `SiteSettings` |
 | `PUT /api/site` | `SiteSettings`（`logo` を除く。全体を置き換える） | 200 `SiteSettings`。管理者だけ（編集者は 403）。不正な値は 422、`field` に項目名（`primaryColor` など、メニューは `menu`）。再ビルドを予約する |
 | `POST /api/site/build` | なし | 202。全体ビルドを予約する（手動で再ビルドしたいとき） |
+
+## お問い合わせ
+
+本文に `contactForm` ブロック（schema/body-v1.md）を置くと、公開サイトにお問い合わせフォームが出る。送信は公開サイトから Go 本体の `POST /f/{サイトID}/contact`（JavaScript なしの HTML フォーム。結果の画面も本体が返す）。送り先はサイト設定の `contactEmail`、なければサイトの管理者全員。送った人には自動返信メールが届く。
+
+```ts
+type Submission = {
+  id: number; name: string; kana: string; email: string; phone: string;
+  message: string; pagePath: string; createdAt: string;
+};
+```
+
+| メソッドとパス | 入力 | 出力 |
+| --- | --- | --- |
+| `GET /api/forms/submissions` | | 200 `Submission[]`（新しい順、500 件まで）。管理者だけ（編集者は 403） |
+| `DELETE /api/forms/submissions/{id}` | | 204。管理者だけ |

@@ -21,6 +21,7 @@
 | `tableHeader` / `tableCell` | `colspan`、`rowspan` | ブロック 1 個以上 | |
 | `embed` | `provider`: `youtube` / `googlemap`、`url` | なし | 出力時に iframe を組み立てる。任意の iframe は入れない |
 | `rawHtml` | `html` | なし | 移行の受け皿。管理者だけが作成・編集でき、出力時にサニタイズする |
+| `contactForm` | なし | なし | お問い合わせフォーム（固定の項目）を差し込む。送信先は Pagewright 本体 |
 | `hardBreak` | なし | なし | |
 | `text` | `text` | なし | `marks` を持てる |
 

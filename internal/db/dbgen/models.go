@@ -62,6 +62,18 @@ type ContentTag struct {
 	TagID     int64
 }
 
+type FormSubmission struct {
+	TenantID  uuid.UUID
+	ID        int64
+	Name      string
+	Kana      string
+	Email     string
+	Phone     string
+	Message   string
+	PagePath  string
+	CreatedAt time.Time
+}
+
 type LoginToken struct {
 	TokenHash []byte
 	UserID    uuid.UUID
