@@ -3,6 +3,7 @@ package build
 import (
 	"cmp"
 	"fmt"
+	"html/template"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -43,20 +44,21 @@ type generator struct {
 	out      *output
 	warn     func(format string, args ...any)
 
-	site       *Site
-	items      []*item // published, newest first
-	itemByID   map[int64]*item
-	itemByPath map[string]*item
-	legacy     map[string]map[string]string // WordPress query param -> id -> path
-	treeByID   map[int64]dbgen.ListContentTreeRow
-	catPath    map[int64]string
-	tagPath    map[int64]string
-	postsOfCat map[int64][]*item
-	postsOfTag map[int64][]*item
-	sitemap    []sitemapURL
-	redirects  []redirect
-	loc        *time.Location // site time zone for dates
-	logoKey    string         // storage key of the logo, copied with the media
+	site        *Site
+	items       []*item // published, newest first
+	itemByID    map[int64]*item
+	itemByPath  map[string]*item
+	legacy      map[string]map[string]string // WordPress query param -> id -> path
+	treeByID    map[int64]dbgen.ListContentTreeRow
+	catPath     map[int64]string
+	tagPath     map[int64]string
+	postsOfCat  map[int64][]*item
+	postsOfTag  map[int64][]*item
+	sitemap     []sitemapURL
+	redirects   []redirect
+	loc         *time.Location // site time zone for dates
+	logoKey     string         // storage key of the logo, copied with the media
+	frontPageID int64          // page shown on the home page, from the settings
 }
 
 type sitemapURL struct {
@@ -167,7 +169,6 @@ func (g *generator) index() {
 		}
 		return *m.Width, *m.Height, true
 	}}
-	renderOpts.ContactFormAction = g.contactAction()
 
 	g.itemByID, g.itemByPath = map[int64]*item{}, map[string]*item{}
 	for _, row := range s.contents {
@@ -199,6 +200,7 @@ func (g *generator) index() {
 		}
 		opts := renderOpts
 		opts.PagePath = it.path
+		opts.ContactForm = g.contactForm(it.path)
 		body, err := render.Body(row.Body, opts)
 		if err != nil {
 			g.warn("%s: %v; not published", what, err)
@@ -291,28 +293,85 @@ func (g *generator) buildSite() {
 		g.site.SearchURL = searchPath
 	}
 	g.applySettings()
+	// The contact page is the first published page with the contact form.
+	for _, it := range g.topPages() {
+		if it.body.HasContactForm {
+			g.site.ContactURL = it.path
+			break
+		}
+	}
+	if g.site.ContactURL == "" {
+		for _, it := range g.items {
+			if it.body.HasContactForm {
+				g.site.ContactURL = it.path
+				break
+			}
+		}
+	}
 	if len(g.snap.menu) > 0 {
 		g.site.Menu = g.configuredMenu()
-		return
+	} else {
+		for _, it := range g.topPages() {
+			if it.path != g.site.ContactURL {
+				g.site.Menu = append(g.site.Menu, Link{Title: g.title(it), URL: it.path})
+			}
+		}
+		g.site.Menu = append(g.site.Menu, Link{Title: g.theme.manifest.Labels.Posts, URL: postsBase})
+		if g.site.ContactURL != "" {
+			g.site.Menu = append(g.site.Menu, Link{Title: g.title(g.itemByPath[g.site.ContactURL]), URL: g.site.ContactURL})
+		}
 	}
+	for _, it := range g.topPages() {
+		g.site.Pages = append(g.site.Pages, g.summaryOf(it))
+	}
+}
+
+// summaryOf describes a published item for themes.
+func (g *generator) summaryOf(it *item) Summary {
+	lead := firstParagraph(it.body.Text)
+	return Summary{
+		Title: g.title(it), URL: it.path, Lead: lead, Excerpt: excerpt(it.body.Text, 60),
+		Image: it.body.FirstImage,
+		More:  utf8.RuneCountInString(strings.TrimSpace(it.body.Text)) > utf8.RuneCountInString(lead)+20,
+	}
+}
+
+// topPages are the published pages without a parent, except the home
+// page, in number order.
+func (g *generator) topPages() []*item {
 	var pages []*item
 	for _, it := range g.items {
-		if it.row.Type == "page" && it.row.ParentID == nil && it.path != "/" {
+		if it.row.Type == "page" && it.row.ParentID == nil && it.path != "/" && it.row.ID != g.frontPageID {
 			pages = append(pages, it)
 		}
 	}
 	slices.SortFunc(pages, func(a, b *item) int { return cmp.Compare(a.row.Number, b.row.Number) })
-	for _, it := range pages {
-		g.site.Menu = append(g.site.Menu, Link{Title: title(it), URL: it.path})
-	}
-	g.site.Menu = append(g.site.Menu, Link{Title: "お知らせ", URL: postsBase})
+	return pages
 }
 
-func title(it *item) string {
+// frontPage is the page shown on the home page: one published at "/"
+// (e.g. imported from WordPress), else the one chosen in the settings.
+func (g *generator) frontPage() *item {
+	if it := g.itemByPath["/"]; it != nil && it.row.Type == "page" {
+		return it
+	}
+	if it := g.itemByID[g.frontPageID]; it != nil && it.row.Type == "page" {
+		return it
+	}
+	return nil
+}
+
+func (g *generator) title(it *item) string {
 	if t := strings.TrimSpace(it.row.Title); t != "" {
 		return t
 	}
-	return "（無題）"
+	return g.theme.manifest.Labels.Untitled
+}
+
+// firstParagraph is the first block of text, shortened for a lead.
+func firstParagraph(text string) string {
+	first, _, _ := strings.Cut(strings.TrimSpace(text), "\n")
+	return excerpt(first, 140)
 }
 
 // excerpt shortens text for meta descriptions.
@@ -331,6 +390,11 @@ func (g *generator) page(kind, p string) *Page {
 
 // writePage renders pg and lists it in the sitemap (first pages only).
 func (g *generator) writePage(tmpl, who string, pg *Page, lastmod time.Time) error {
+	return g.writePageWith(tmpl, who, pg, lastmod, nil)
+}
+
+// writePageWith is writePage with a final edit of the rendered bytes.
+func (g *generator) writePageWith(tmpl, who string, pg *Page, lastmod time.Time, edit func([]byte) []byte) error {
 	rel, ok := fileForPath(pg.Path)
 	if !ok {
 		g.warn("%s: unsafe path %q; skipped", who, pg.Path)
@@ -339,6 +403,9 @@ func (g *generator) writePage(tmpl, who string, pg *Page, lastmod time.Time) err
 	b, err := g.theme.render(tmpl, pg)
 	if err != nil {
 		return err
+	}
+	if edit != nil {
+		b = edit(b)
 	}
 	if err := g.out.write(rel, who, b); err != nil {
 		g.warn("%v; skipped", err)
@@ -369,6 +436,19 @@ func (g *generator) posts() []*item {
 	return out
 }
 
+// contactForm renders the theme's contact form for the page at path, or
+// is nil when forms are off or the theme has no form.
+func (g *generator) contactForm(path string) func() (template.HTML, error) {
+	action := g.contactAction()
+	if action == "" || g.theme.parts == nil || g.theme.parts.Lookup("contact-form") == nil {
+		return nil
+	}
+	return func() (template.HTML, error) {
+		html, _, err := g.theme.part("contact-form", ContactForm{Action: action, Page: path})
+		return html, err
+	}
+}
+
 // contactAction is where contact forms post, or empty when forms are off.
 func (g *generator) contactAction() string {
 	if g.opts.FormBaseURL == "" {
@@ -380,7 +460,7 @@ func (g *generator) contactAction() string {
 func (g *generator) postItems(list []*item) []PostItem {
 	out := make([]PostItem, 0, len(list))
 	for _, it := range list {
-		out = append(out, PostItem{Title: title(it), URL: it.path, PublishedAt: it.row.PublishedAt.In(g.loc), Categories: it.cats})
+		out = append(out, PostItem{Title: g.title(it), URL: it.path, PublishedAt: it.row.PublishedAt.In(g.loc), Categories: it.cats})
 	}
 	return out
 }
@@ -388,7 +468,7 @@ func (g *generator) postItems(list []*item) []PostItem {
 func (g *generator) content(it *item) *Content {
 	return &Content{
 		Type:        it.row.Type,
-		Title:       title(it),
+		Title:       g.title(it),
 		Body:        it.body.HTML,
 		PublishedAt: it.row.PublishedAt.In(g.loc),
 		Categories:  it.cats,
@@ -399,33 +479,40 @@ func (g *generator) content(it *item) *Content {
 func (g *generator) writeHome() error {
 	pg := g.page("home", "/")
 	var lastmod time.Time
-	if it := g.itemByPath["/"]; it != nil && it.row.Type == "page" {
+	if it := g.frontPage(); it != nil {
+		front := g.summaryOf(it)
+		pg.Front = &front
 		pg.Content = g.content(it)
 		pg.Description = excerpt(it.body.Text, 120)
 		lastmod = it.row.RevisionCreatedAt
 	}
 	posts := g.posts()
 	pg.Posts = g.postItems(posts[:min(homePosts, len(posts))])
+	if len(g.legacy) > 0 {
+		return g.writePageWith("home", "home page", pg, lastmod, func(b []byte) []byte {
+			return inject(b, "", "", legacyScript)
+		})
+	}
 	return g.writePage("home", "home page", pg, lastmod)
 }
 
 func (g *generator) writeContents() error {
-	home := Link{Title: "ホーム", URL: "/"}
+	home := Link{Title: g.theme.manifest.Labels.Home, URL: "/"}
 	for _, it := range g.items {
 		if it.path == "/" && it.row.Type == "page" {
 			continue // rendered by writeHome
 		}
 		pg := g.page(it.row.Type, it.path)
-		pg.Title = title(it)
+		pg.Title = g.title(it)
 		pg.Content = g.content(it)
 		pg.Description = excerpt(it.body.Text, 120)
 		crumbs := []Link{home}
 		if it.row.Type == "post" {
-			crumbs = append(crumbs, Link{Title: "お知らせ", URL: postsBase})
+			crumbs = append(crumbs, Link{Title: g.theme.manifest.Labels.Posts, URL: postsBase})
 		}
 		for _, pid := range it.parents {
 			if p, ok := g.itemByID[pid]; ok {
-				crumbs = append(crumbs, Link{Title: title(p), URL: p.path})
+				crumbs = append(crumbs, Link{Title: g.title(p), URL: p.path})
 			}
 		}
 		pg.Breadcrumbs = append(crumbs, Link{Title: pg.Title})
@@ -445,7 +532,7 @@ func (g *generator) writeList(kind, base, heading, who string, crumbs []Link, li
 		pg.Heading = heading
 		pg.Title = heading
 		if n > 1 {
-			pg.Title = fmt.Sprintf("%s（%dページ目）", heading, n)
+			pg.Title = fmt.Sprintf(g.theme.manifest.Labels.PageHeading, heading, n)
 		}
 		pg.Breadcrumbs = append(slices.Clone(crumbs), Link{Title: heading})
 		pg.Posts = g.postItems(list[(n-1)*PostsPerPage : min(n*PostsPerPage, len(list))])
@@ -468,17 +555,19 @@ func (g *generator) writeList(kind, base, heading, who string, crumbs []Link, li
 }
 
 func (g *generator) writePostList() error {
-	return g.writeList("posts", postsBase, "お知らせ", "post list", []Link{{Title: "ホーム", URL: "/"}}, g.posts())
+	l := g.theme.manifest.Labels
+	return g.writeList("posts", postsBase, l.Posts, "post list", []Link{{Title: l.Home, URL: "/"}}, g.posts())
 }
 
 func (g *generator) writeArchives() error {
-	crumbs := []Link{{Title: "ホーム", URL: "/"}, {Title: "お知らせ", URL: postsBase}}
+	l := g.theme.manifest.Labels
+	crumbs := []Link{{Title: l.Home, URL: "/"}, {Title: l.Posts, URL: postsBase}}
 	for _, c := range g.snap.categories {
 		p, ok := g.catPath[c.ID]
 		if !ok {
 			continue
 		}
-		if err := g.writeList("category", p, "カテゴリ："+c.Name, "category "+c.Slug, crumbs, g.postsOfCat[c.ID]); err != nil {
+		if err := g.writeList("category", p, fmt.Sprintf(l.CategoryHeading, c.Name), "category "+c.Slug, crumbs, g.postsOfCat[c.ID]); err != nil {
 			return err
 		}
 	}
@@ -487,7 +576,7 @@ func (g *generator) writeArchives() error {
 		if !ok {
 			continue
 		}
-		if err := g.writeList("tag", p, "タグ："+t.Name, "tag "+t.Slug, crumbs, g.postsOfTag[t.ID]); err != nil {
+		if err := g.writeList("tag", p, fmt.Sprintf(l.TagHeading, t.Name), "tag "+t.Slug, crumbs, g.postsOfTag[t.ID]); err != nil {
 			return err
 		}
 	}
@@ -500,13 +589,13 @@ func (g *generator) writeSearch() error {
 		return nil
 	}
 	pg := g.page("search", searchPath)
-	pg.Title = "サイト内検索"
+	pg.Title = g.theme.manifest.Labels.Search
 	return g.writePage("search", systemOwner, pg, time.Time{})
 }
 
 func (g *generator) write404() error {
 	pg := g.page("404", "/404.html")
-	pg.Title = "ページが見つかりません"
+	pg.Title = g.theme.manifest.Labels.NotFound
 	pg.NoIndex = true
 	b, err := g.theme.render("404", pg)
 	if err != nil {

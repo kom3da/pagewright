@@ -163,7 +163,7 @@ func (g *generator) writeFeed() error {
 	ch := channel{
 		Title:       g.site.Name,
 		Link:        absURL(base, "/"),
-		Description: g.site.Name + "のお知らせ",
+		Description: fmt.Sprintf(g.theme.manifest.Labels.FeedDescription, g.site.Name),
 		Language:    "ja",
 		AtomLink:    atomLink{Href: absURL(base, g.site.FeedURL), Rel: "self", Type: "application/rss+xml"},
 	}
@@ -171,7 +171,7 @@ func (g *generator) writeFeed() error {
 	for _, it := range posts[:min(feedPosts, len(posts))] {
 		link := absURL(base, it.path)
 		ri := rssItem{
-			Title:       title(it),
+			Title:       g.title(it),
 			Link:        link,
 			GUID:        guid{Value: link, IsPermaLink: "true"},
 			PubDate:     it.row.PublishedAt.UTC().Format(time.RFC1123Z),

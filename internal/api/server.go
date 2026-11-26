@@ -311,6 +311,7 @@ var errorFields = map[string]string{
 	"invalid_menu":       "menu",
 	"invalid_logo":       "logoMediaId",
 	"invalid_days":       "days",
+	"invalid_front_page": "frontPageId",
 	"alt_required":       "altText",
 	"file_required":      "file",
 	"unsupported_type":   "file",

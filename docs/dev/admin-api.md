@@ -165,13 +165,18 @@ type SiteSettings = {
   font?: "gothic" | "mincho";  // 標準 gothic
   timeZone?: string;           // IANA 名。標準 "Asia/Tokyo"
   contactEmail?: string;       // お問い合わせの送り先。空ならサイトの管理者全員
+  address?: string;            // 住所（200文字まで）。フッターに出る
+  phone?: string;              // 電話番号（数字・ハイフン、30文字まで）。フッターとご相談の帯に出る
+  businessHours?: string;      // 受付時間（100文字まで）。同上
+  frontPageId?: number;        // トップに載せる固定ページ（どう見せるかはテーマ次第。標準テーマでは大見出しになる）
+  theme?: string;              // テーマの名前（省略時は標準の "corporate"）。入っていないテーマは 422
   menu: MenuItem[];            // 空なら、親のない固定ページとお知らせを自動で並べる
 };
 ```
 
 - `primaryColor` から `contactEmail` までは、省略・空文字・未設定のどれも「標準のまま」。GET では標準のときは項目が出ない
 - メニュー：20 件まで。`label` は 50 文字まで（`contentId` のときは省略でき、そのページのタイトルになる）。`url` は `/` か `http://`・`https://` で始め、`label` が必須。違反と、存在しないページの指定は 422 `invalid_menu`（`field: "menu"`）
-- 色・書体・タイムゾーン・送り先の違反は 422 `invalid_setting`、`field` はその項目名。サイト名は `invalid_name`、ロゴの画像が見つからなければ `invalid_logo`
+- 色・書体・タイムゾーン・送り先・住所・電話番号・受付時間・テーマの違反は 422 `invalid_setting`、`field` はその項目名。トップのページが固定ページでなければ 422 `invalid_front_page`。サイト名は `invalid_name`、ロゴの画像が見つからなければ `invalid_logo`
 - ロゴに使っている画像は `DELETE /api/media/{id}` で 409 `media_in_use`
 
 | メソッドとパス | 入力 | 出力 |

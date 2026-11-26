@@ -1,0 +1,17 @@
+{
+  "name": "corporate",
+  "title": "コーポレート",
+  "description": "中小企業の会社サイト向け。トップに大見出しとお知らせ、固定ページの案内、ご相談の帯を並べます。",
+  "labels": {
+    "home": "ホーム",
+    "posts": "お知らせ",
+    "untitled": "（無題）",
+    "categoryHeading": "カテゴリ：%s",
+    "tagHeading": "タグ：%s",
+    "pageHeading": "%s（%dページ目）",
+    "search": "サイト内検索",
+    "notFound": "ページが見つかりません",
+    "feedDescription": "%sのお知らせ"
+  },
+  "dateFormat": "2006年1月2日"
+}

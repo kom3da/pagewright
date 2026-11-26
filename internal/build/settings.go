@@ -21,6 +21,8 @@ func (g *generator) applySettings() {
 		g.warn("site settings ignored: %v", err)
 		return
 	}
+	g.site.Address, g.site.Phone, g.site.Hours = s.Address, s.Phone, s.BusinessHours
+	g.frontPageID = s.FrontPageID
 	if c := s.PrimaryColor; c != "" {
 		vars = append(vars, "--color-accent: "+c, "--color-accent-dark: "+site.Darken(c, 0.75), "--color-focus: "+c)
 	}
@@ -54,7 +56,7 @@ func (g *generator) configuredMenu() []Link {
 			if !ok {
 				continue
 			}
-			l := Link{Title: title(it), URL: it.path}
+			l := Link{Title: g.title(it), URL: it.path}
 			if m.Label != nil {
 				l.Title = *m.Label
 			}

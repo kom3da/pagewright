@@ -162,12 +162,13 @@ func (s *Server) previewPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) previewAsset(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.lookupPreview(r); !ok {
+	link, ok := s.lookupPreview(r)
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
 	name := r.PathValue("name")
-	b, ok := build.ThemeAsset(name)
+	b, ok := build.ThemeAsset(r.Context(), s.DB, link.TenantID, name)
 	if !ok {
 		http.NotFound(w, r)
 		return

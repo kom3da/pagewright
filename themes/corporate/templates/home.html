@@ -1,32 +1,72 @@
 {{define "main" -}}
-{{- if .Site.LegacyRedirects}}
-<script>
-(function () {
-  var q = new URLSearchParams(location.search);
-  var key = ["p", "page_id"].find(function (k) { return /^\d+$/.test(q.get(k) || ""); });
-  if (!key) return;
-  fetch("/_legacy.json").then(function (r) { return r.ok ? r.json() : null; }).then(function (m) {
-    var to = m && m[key] && m[key][q.get(key)];
-    if (to) location.replace(to);
-  });
-})();
-</script>
-{{- end}}
-<div class="hero">
+{{- /* The front page becomes the hero: its title, first paragraph and
+       first image; the rest of its body follows the news. */ -}}
+<section class="hero{{if and .Front .Front.Image}} hero--with-image{{end}}">
+  <div class="container hero__inner">
+    <div class="hero__text">
+      <h1 class="hero__title">{{with .Front}}{{.Title}}{{else}}{{.Site.Name}}{{end}}</h1>
+      {{- with .Front}}{{with .Lead}}
+      <p class="hero__lead">{{.}}</p>
+      {{- end}}{{end}}
+      <div class="hero__actions">
+        {{- with .Site.ContactURL}}
+        <a class="button" href="{{.}}">お問い合わせ</a>
+        {{- end}}
+        <a class="button button--secondary" href="{{.Site.PostsURL}}">お知らせを見る</a>
+      </div>
+    </div>
+    {{- with .Front}}{{with .Image}}
+    <div class="hero__media"><img src="{{.Src}}" alt="{{.Alt}}"></div>
+    {{- end}}{{end}}
+  </div>
+</section>
+
+<section class="section" aria-labelledby="home-news-heading">
+  <div class="container section--split">
+    <div class="section__head">
+      <p class="eyebrow" aria-hidden="true">NEWS</p>
+      <h2 id="home-news-heading">お知らせ</h2>
+      <a class="more-link" href="{{.Site.PostsURL}}">一覧を見る<span aria-hidden="true"> →</span></a>
+    </div>
+    <div class="section__body">
+      {{template "post-list" .Posts}}
+    </div>
+  </div>
+</section>
+
+{{- if and .Front .Front.More .Content}}
+<section class="section section--tinted">
   <div class="container">
-    <h1 class="hero__title">{{with .Content}}{{.Title}}{{else}}{{.Site.Name}}{{end}}</h1>
+    <div class="entry-body entry-body--wide">
+{{.Content.Body}}
+    </div>
   </div>
-</div>
-<div class="container">
-  {{- with .Content}}
-  <div class="entry-body">
-{{.Body}}
+</section>
+{{- end}}
+
+{{- $guide := false}}
+{{- range .Site.Pages}}{{if ne .URL $.Site.ContactURL}}{{$guide = true}}{{end}}{{end}}
+{{- if $guide}}
+<section class="section{{if not (and .Front .Front.More)}} section--tinted{{end}}" aria-labelledby="home-pages-heading">
+  <div class="container">
+    <div class="section__head">
+      <p class="eyebrow" aria-hidden="true">GUIDE</p>
+      <h2 id="home-pages-heading">ご案内</h2>
+    </div>
+    <ul class="cards">
+      {{- range .Site.Pages}}{{if ne .URL $.Site.ContactURL}}
+      <li>
+        <a class="card" href="{{.URL}}">
+          {{- with .Image}}<img class="card__image" src="{{.Src}}" alt="">{{end}}
+          <span class="card__title">{{.Title}}</span>
+          {{- with .Excerpt}}<span class="card__summary">{{.}}</span>{{end}}
+        </a>
+      </li>
+      {{- end}}{{end}}
+    </ul>
   </div>
-  {{- end}}
-  <section class="home-news" aria-labelledby="home-news-heading">
-    <h2 id="home-news-heading">お知らせ</h2>
-    {{template "post-list" .Posts}}
-    <p class="more-link"><a href="{{.Site.PostsURL}}">お知らせ一覧を見る</a></p>
-  </section>
-</div>
+</section>
+{{- end}}
+
+{{template "contact-band" .}}
 {{- end}}

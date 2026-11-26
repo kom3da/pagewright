@@ -35,8 +35,21 @@ func (g *generator) collectLegacy() {
 			g.legacy[param][strconv.FormatInt(it.row.Number, 10)] = it.path
 		}
 	}
-	g.site.LegacyRedirects = len(g.legacy) > 0
 }
+
+// legacyScript forwards /?p=123 visits on hosts without the nginx rules.
+// The core adds it to the home page, whatever the theme.
+const legacyScript = `<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var key = ["p", "page_id"].find(function (k) { return /^\d+$/.test(q.get(k) || ""); });
+  if (!key) return;
+  fetch("/_legacy.json").then(function (r) { return r.ok ? r.json() : null; }).then(function (m) {
+    var to = m && m[key] && m[key][q.get(key)];
+    if (to) location.replace(to);
+  });
+})();
+</script>`
 
 // writeLegacy writes legacyFile and returns nginx rules for the same map.
 func (g *generator) writeLegacy() (string, error) {

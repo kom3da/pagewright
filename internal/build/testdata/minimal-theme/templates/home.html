@@ -1,0 +1,4 @@
+{{define "main" -}}
+<h1>{{with .Front}}{{.Title}}{{else}}{{.Site.Name}}{{end}}</h1>
+<ul>{{range .Posts}}<li><a href="{{.URL}}">{{.Title}}</a> {{date .PublishedAt}}</li>{{end}}</ul>
+{{- end}}

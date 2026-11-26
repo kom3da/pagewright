@@ -21,9 +21,6 @@
 <meta property="og:description" content="{{.}}">
 {{- end}}
 {{- end}}
-{{- with .BaseHref}}
-<base href="{{.}}">
-{{- end}}
 <link rel="stylesheet" href="{{.Site.StylesheetURL}}">
 {{- with .Site.StyleVars}}
 <style>:root { {{.}} }</style>
@@ -31,26 +28,18 @@
 <link rel="alternate" type="application/rss+xml" title="{{.Site.Name}} お知らせ" href="{{.Site.FeedURL}}">
 </head>
 <body>
-{{- with .Preview}}
-<div class="preview-notice" role="note">{{.}}</div>
-{{- end}}
 <a class="skip-link" href="{{.SelfURL}}#main">本文へ移動</a>
 <header class="site-header">
   <div class="container site-header__inner">
     <p class="site-name"><a href="/"{{if eq .Path "/"}} aria-current="page"{{end}}>
-      {{- if .Site.LogoURL}}<img class="site-logo" src="{{.Site.LogoURL}}" alt="{{.Site.Name}}">{{else}}{{.Site.Name}}{{end -}}
+      {{- if .Site.LogoURL}}<img class="site-logo" src="{{.Site.LogoURL}}" alt="{{.Site.Name}}">{{else}}<span class="site-mark" aria-hidden="true">{{initial .Site.Name}}</span><span class="site-name__text">{{.Site.Name}}</span>{{end -}}
     </a></p>
     {{- if or .Site.Menu .Site.SearchURL}}
-    <nav class="global-nav" aria-label="メインメニュー">
-      <ul>
-        {{- range .Site.Menu}}
-        <li><a href="{{.URL}}"{{with current $.Path .URL}} aria-current="{{.}}"{{end}}>{{.Title}}</a></li>
-        {{- end}}
-        {{- with .Site.SearchURL}}
-        <li><a href="{{.}}"{{with current $.Path .}} aria-current="{{.}}"{{end}}>検索</a></li>
-        {{- end}}
-      </ul>
-    </nav>
+    <details class="nav-toggle">
+      <summary class="nav-toggle__button"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="visually-hidden">メニュー</span></summary>
+      {{template "menu" .}}
+    </details>
+    <div class="nav-wide">{{template "menu" .}}</div>
     {{- end}}
   </div>
 </header>
@@ -67,17 +56,30 @@
 {{template "main" .}}
 </main>
 <footer class="site-footer">
-  <div class="container">
-    {{- with .Site.Menu}}
+  <div class="container site-footer__inner">
+    <div class="site-footer__about">
+      <p class="site-footer__name">{{.Site.Name}}</p>
+      {{- if or .Site.Address .Site.Phone .Site.Hours}}
+      <p class="site-footer__contact">
+        {{- with .Site.Address}}{{.}}<br>{{end -}}
+        {{- with .Site.Phone}}TEL <a href="tel:{{.}}">{{.}}</a><br>{{end -}}
+        {{- with .Site.Hours}}{{.}}{{end -}}
+      </p>
+      {{- end}}
+    </div>
     <nav aria-label="フッターメニュー">
       <ul class="footer-nav">
         <li><a href="/">ホーム</a></li>
-        {{- range .}}
+        {{- range .Site.Menu}}
         <li><a href="{{.URL}}">{{.Title}}</a></li>
+        {{- end}}
+        {{- with .Site.SearchURL}}
+        <li><a href="{{.}}">サイト内検索</a></li>
         {{- end}}
       </ul>
     </nav>
-    {{- end}}
+  </div>
+  <div class="container">
     <p class="copyright"><small>&copy; {{.Site.Name}}</small></p>
   </div>
 </footer>
@@ -85,22 +87,51 @@
 </html>
 {{end}}
 
+{{define "menu" -}}
+<nav class="global-nav" aria-label="メインメニュー">
+  <ul>
+    {{- range .Site.Menu}}
+    <li><a href="{{.URL}}"{{if and $.Site.ContactURL (eq .URL $.Site.ContactURL)}} class="nav-button"{{end}}{{with current $.Path .URL}} aria-current="{{.}}"{{end}}>{{.Title}}</a></li>
+    {{- end}}
+    {{- with .Site.SearchURL}}
+    <li><a href="{{.}}" class="nav-search"{{with current $.Path .}} aria-current="{{.}}"{{end}}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>検索</span></a></li>
+    {{- end}}
+  </ul>
+</nav>
+{{- end}}
+
 {{define "post-list" -}}
 {{if . -}}
 <ul class="post-list">
   {{- range .}}
   <li class="post-list__item">
-    <div class="post-list__meta">
+    <a class="post-list__link" href="{{.URL}}">
       <time datetime="{{isoDate .PublishedAt}}">{{date .PublishedAt}}</time>
-      {{- range .Categories}}
-      <span class="badge">{{.Title}}</span>
-      {{- end}}
-    </div>
-    <a class="post-list__title" href="{{.URL}}">{{.Title}}</a>
+      <span class="post-list__badges">{{range .Categories}}<span class="badge">{{.Title}}</span>{{end}}</span>
+      <span class="post-list__title">{{.Title}}</span>
+    </a>
   </li>
   {{- end}}
 </ul>
 {{- else -}}
-<p>お知らせはまだありません。</p>
+<p class="empty">お知らせはまだありません。</p>
+{{- end}}
+{{- end}}
+
+{{define "contact-band" -}}
+{{- with .Site.ContactURL}}
+<section class="cta" aria-labelledby="cta-heading">
+  <div class="container">
+    <div class="cta__inner">
+      <div class="cta__text">
+        <h2 id="cta-heading">お気軽にご相談ください</h2>
+        {{- if or $.Site.Hours $.Site.Phone}}
+        <p>{{with $.Site.Hours}}{{.}}{{end}}{{if and $.Site.Hours $.Site.Phone}}　{{end}}{{with $.Site.Phone}}TEL <a href="tel:{{.}}">{{.}}</a>{{end}}</p>
+        {{- end}}
+      </div>
+      <a class="button button--inverse" href="{{.}}">お問い合わせ</a>
+    </div>
+  </div>
+</section>
 {{- end}}
 {{- end}}

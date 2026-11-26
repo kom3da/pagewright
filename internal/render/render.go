@@ -25,9 +25,9 @@ type Options struct {
 	// MediaSize returns the pixel size of a media item so <img> gets width
 	// and height (avoids layout shift). Optional.
 	MediaSize func(mediaID int64) (width, height int64, ok bool)
-	// ContactFormAction is where the contactForm block posts. Empty drops
-	// the block with a warning.
-	ContactFormAction string
+	// ContactForm renders the contactForm block (the theme decides its
+	// markup). Nil drops the block with a warning.
+	ContactForm func() (template.HTML, error)
 	// PagePath is the public path of the page being rendered; the contact
 	// form sends it so the reply page can link back.
 	PagePath string
@@ -49,6 +49,15 @@ type Result struct {
 	MediaKeys []string
 	// Warnings describe what was dropped.
 	Warnings []string
+	// FirstImage is the first image of the body, for cards and heroes.
+	FirstImage *Image
+	// HasContactForm reports a contactForm block.
+	HasContactForm bool
+}
+
+// Image is an image as rendered (src already rewritten).
+type Image struct {
+	Src, Alt string
 }
 
 // MaxDepth bounds node nesting; deeper nodes are dropped.
@@ -79,11 +88,13 @@ func Body(raw []byte, opts Options) (Result, error) {
 	r := &renderer{opts: opts}
 	r.blocks(doc.Content, 1)
 	return Result{
-		HTML:      template.HTML(r.b.String()), //nolint:gosec // built from escaped parts only
-		Text:      strings.TrimSpace(r.text.String()),
-		MediaIDs:  r.mediaIDs,
-		MediaKeys: r.mediaKeys,
-		Warnings:  r.warnings,
+		HTML:           template.HTML(r.b.String()), //nolint:gosec // built from escaped parts only
+		Text:           strings.TrimSpace(r.text.String()),
+		MediaIDs:       r.mediaIDs,
+		MediaKeys:      r.mediaKeys,
+		FirstImage:     r.firstImage,
+		HasContactForm: r.hasForm,
+		Warnings:       r.warnings,
 	}, nil
 }
 
@@ -94,6 +105,9 @@ type renderer struct {
 	mediaIDs  []int64
 	mediaKeys []string
 	warnings  []string
+	// firstImage and hasForm feed Result.
+	firstImage *Image
+	hasForm    bool
 }
 
 func (r *renderer) warn(format string, args ...any) {
@@ -246,6 +260,9 @@ func (r *renderer) image(n node) {
 			key = u
 		}
 		r.mediaKeys = append(r.mediaKeys, key)
+	}
+	if r.firstImage == nil {
+		r.firstImage = &Image{Src: src, Alt: alt}
 	}
 	r.w(`<figure class="image"><img src="`, esc(src), `" alt="`, esc(alt), `"`)
 	if title, _ := n.Attrs["title"].(string); title != "" {

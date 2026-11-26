@@ -1,0 +1,4 @@
+{{define "main" -}}
+<h1>{{.Heading}}</h1>
+<ul>{{range .Posts}}<li><a href="{{.URL}}">{{.Title}}</a></li>{{end}}</ul>
+{{- end}}

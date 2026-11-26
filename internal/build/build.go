@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -43,6 +44,9 @@ type Options struct {
 	BaseURL string
 	// Logger receives warnings. Default slog.Default().
 	Logger *slog.Logger
+	// ThemeFS, when set, is used instead of the site's chosen theme (for
+	// tests and theme development).
+	ThemeFS fs.FS
 	// FormBaseURL is the origin of the Pagewright server that receives
 	// contact form posts (/f/<tenant>/contact). Empty leaves forms out.
 	FormBaseURL string
@@ -84,11 +88,11 @@ func Build(ctx context.Context, d *db.DB, tenantID uuid.UUID, opts Options) (Res
 	unlock := sync.OnceFunc(lockTenant(tenantID))
 	defer unlock()
 
-	th, err := defaultTheme()
+	snap, err := load(db.WithTenant(ctx, tenantID), d)
 	if err != nil {
 		return Result{}, fmt.Errorf("build: %w", err)
 	}
-	snap, err := load(db.WithTenant(ctx, tenantID), d)
+	th, err := pickTheme(opts.ThemeFS, snap.tenant.Settings)
 	if err != nil {
 		return Result{}, fmt.Errorf("build: %w", err)
 	}

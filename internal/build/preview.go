@@ -3,6 +3,7 @@ package build
 import (
 	"context"
 	"fmt"
+	"html/template"
 	"strings"
 	"time"
 
@@ -30,11 +31,11 @@ type PreviewOptions struct {
 // would show it once published, for a preview link.
 func RenderPreview(ctx context.Context, d *db.DB, tenantID uuid.UUID, contentID int64, opts PreviewOptions) ([]byte, error) {
 	ctx = db.WithTenant(ctx, tenantID)
-	th, err := defaultTheme()
+	snap, err := load(ctx, d)
 	if err != nil {
 		return nil, err
 	}
-	snap, err := load(ctx, d)
+	th, err := pickTheme(nil, snap.tenant.Settings)
 	if err != nil {
 		return nil, err
 	}
@@ -79,9 +80,9 @@ func RenderPreview(ctx context.Context, d *db.DB, tenantID uuid.UUID, contentID 
 		path = "/"
 	}
 	body, err := render.Body(rev.Body, render.Options{
-		ContactFormAction: g.contactAction(),
-		PagePath:          path,
-		MediaPrefix:       opts.SelfURL + "media/",
+		ContactForm: g.contactForm(path),
+		PagePath:    path,
+		MediaPrefix: opts.SelfURL + "media/",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("render preview: %w", err)
@@ -95,25 +96,41 @@ func RenderPreview(ctx context.Context, d *db.DB, tenantID uuid.UUID, contentID 
 		path: path, body: body, parents: parents,
 	}
 	pg := g.page(c.Type, path)
-	pg.Title = title(it)
+	pg.Title = g.title(it)
 	pg.Content = g.content(it)
 	pg.NoIndex = true
-	pg.Preview = opts.Notice
-	pg.BaseHref = base + "/"
 	pg.SelfURL = opts.SelfURL
-	crumbs := []Link{{Title: "ホーム", URL: "/"}}
+	crumbs := []Link{{Title: th.manifest.Labels.Home, URL: "/"}}
 	for _, pid := range parents {
 		if p, ok := g.itemByID[pid]; ok {
-			crumbs = append(crumbs, Link{Title: title(p), URL: p.path})
+			crumbs = append(crumbs, Link{Title: g.title(p), URL: p.path})
 		}
 	}
 	pg.Breadcrumbs = append(crumbs, Link{Title: pg.Title})
-	return th.render("single", pg)
+	b, err := th.render("single", pg)
+	if err != nil {
+		return nil, err
+	}
+	// The core marks previews, whatever the theme: links resolve on the
+	// public site, and a notice says what this is.
+	notice := `<div role="note" style="padding:0.6rem 1rem;background:#fff4ce;color:#1c2430;border-bottom:2px solid #9a6700;font:700 15px/1.6 system-ui,sans-serif;text-align:center">` +
+		template.HTMLEscapeString(opts.Notice) + `</div>`
+	return inject(b, `<base href="`+template.HTMLEscapeString(base+"/")+`">`, notice, ""), nil
 }
 
-// ThemeAsset returns a file of the default theme's assets/ directory.
-func ThemeAsset(name string) ([]byte, bool) {
-	th, err := defaultTheme()
+// ThemeAsset returns a file of the assets/ directory of the theme the
+// tenant's site uses.
+func ThemeAsset(ctx context.Context, d *db.DB, tenantID uuid.UUID, name string) ([]byte, bool) {
+	var settings []byte
+	err := d.InTenant(db.WithTenant(ctx, tenantID), func(q *dbgen.Queries) error {
+		row, err := q.GetSite(ctx)
+		settings = row.Settings
+		return err
+	})
+	if err != nil {
+		return nil, false
+	}
+	th, err := pickTheme(nil, settings)
 	if err != nil {
 		return nil, false
 	}

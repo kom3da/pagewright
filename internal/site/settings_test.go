@@ -28,6 +28,9 @@ func TestValidate(t *testing.T) {
 		{"font", Settings{Font: "comic"}, "font"},
 		{"zone", Settings{TimeZone: "Mars/Olympus"}, "timeZone"},
 		{"email", Settings{ContactEmail: "Info <info@example.jp>"}, "contactEmail"},
+		{"contact details", Settings{Address: "東京都千代田区1-1", Phone: "03-1234-5678", BusinessHours: "平日 9:00〜18:00"}, ""},
+		{"phone letters", Settings{Phone: "call me"}, "phone"},
+		{"address newline", Settings{Address: "東京都\n千代田区"}, "address"},
 	}
 	for _, tt := range tests {
 		err := tt.s.Validate()

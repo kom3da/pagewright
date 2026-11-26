@@ -136,6 +136,14 @@ func (s *Server) putSite(w http.ResponseWriter, r *http.Request, sess *session) 
 	ctx := r.Context()
 	var out siteSettingsJSON
 	err = s.DB.InTenantTx(ctx, func(tx pgx.Tx, q *dbgen.Queries) error {
+		if id := in.FrontPageID; id != 0 {
+			c, err := q.GetContent(ctx, id)
+			if errors.Is(err, pgx.ErrNoRows) || (err == nil && c.Type != "page") {
+				return invalid("invalid_front_page", "トップページには固定ページを選んでください")
+			} else if err != nil {
+				return err
+			}
+		}
 		if in.LogoMediaID != nil {
 			if _, err := q.GetMedia(ctx, *in.LogoMediaID); errors.Is(err, pgx.ErrNoRows) {
 				return invalid("invalid_logo", "ロゴの画像が見つかりません")

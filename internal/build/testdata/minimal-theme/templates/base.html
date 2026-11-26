@@ -1,0 +1,15 @@
+{{define "base" -}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{if .Title}}{{.Title}} - {{end}}{{.Site.Name}}</title>
+<link rel="stylesheet" href="{{.Site.StylesheetURL}}">
+</head>
+<body>
+<nav>{{range .Site.Menu}}<a href="{{.URL}}">{{.Title}}</a> {{end}}</nav>
+{{- with .Breadcrumbs}}<ol>{{range .}}<li>{{.Title}}</li>{{end}}</ol>{{end}}
+<main>{{template "main" .}}</main>
+</body>
+</html>
+{{- end}}

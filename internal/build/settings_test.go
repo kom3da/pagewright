@@ -46,3 +46,46 @@ func TestSiteSettingsInBuild(t *testing.T) {
 		t.Errorf("menu order: 採用情報 at %d, 私たちについて at %d; want both, in that order", jobs, us)
 	}
 }
+
+func TestCorporateHome(t *testing.T) {
+	env := dbtest.New(t)
+	s := newSeeder(t, env, "デモ株式会社", "owner@example.com")
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	front := s.content("page", ptr("top"), nil)
+	s.publish(front.ID, s.revision(front.ID, "地域の暮らしを支える", paragraph("住まいの設備工事と保守を通じて、毎日を支えています。")).ID, at)
+	service := s.content("page", ptr("service"), nil)
+	s.publish(service.ID, s.revision(service.ID, "事業紹介", paragraph("給湯器・水まわりの交換に対応します。")).ID, at)
+	contact := s.content("page", ptr("contact"), nil)
+	s.publish(contact.ID, s.revision(contact.ID, "お問い合わせ", `{"type":"doc","content":[{"type":"contactForm"}]}`).ID, at)
+	s.admin(`UPDATE tenants SET settings = jsonb_build_object('frontPageId', $2::bigint, 'phone', '03-1234-5678', 'address', '東京都千代田区1-1', 'businessHours', '平日 9:00〜18:00') WHERE id = $1`, s.tenant(), front.ID)
+
+	opts := build.Options{OutDir: t.TempDir(), FormBaseURL: "https://admin.example"}
+	if _, err := build.Build(context.Background(), env.DB, s.tenant(), opts); err != nil {
+		t.Fatal(err)
+	}
+	files := siteFiles(t, filepath.Join(opts.OutDir, s.tenant().String()))
+	home := files["/index.html"]
+	for _, want := range []string{
+		`<h1 class="hero__title">地域の暮らしを支える</h1>`,
+		"住まいの設備工事と保守を通じて",
+		`class="card" href="/service/"`,
+		`href="/contact/" class="nav-button"`,
+		"東京都千代田区1-1", `href="tel:03-1234-5678"`, "お気軽にご相談ください",
+		`<span class="site-mark" aria-hidden="true">デ</span>`,
+	} {
+		if !strings.Contains(home, want) {
+			t.Errorf("home page lacks %q", want)
+		}
+	}
+	for _, unwanted := range []string{`class="card" href="/top/"`, `class="card" href="/contact/"`} {
+		if strings.Contains(home, unwanted) {
+			t.Errorf("home page has %q", unwanted)
+		}
+	}
+	if !strings.Contains(files["/contact/index.html"], `<form class="contact-form"`) {
+		t.Error("the contact page has no form")
+	}
+	if strings.Contains(files["/contact/index.html"], "お気軽にご相談ください") {
+		t.Error("the contact page repeats the contact band")
+	}
+}
