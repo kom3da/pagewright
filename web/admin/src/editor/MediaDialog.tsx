@@ -41,10 +41,18 @@ export function MediaDialog({ editor, open, onClose }: Props) {
   );
 }
 
-function UploadForm({ onUploaded }: { onUploaded: (m: Media, alt: string) => void }) {
+export function UploadForm({
+  onUploaded,
+  defaultAlt = "",
+  submitLabel = "アップロードして入れる",
+}: {
+  onUploaded: (m: Media, alt: string) => void;
+  defaultAlt?: string;
+  submitLabel?: string;
+}) {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
-  const [alt, setAlt] = useState("");
+  const [alt, setAlt] = useState(defaultAlt);
   const [errors, setErrors] = useState<{ file?: string; alt?: string }>({});
   const upload = useMutation({
     mutationFn: (v: { file: File; alt: string }) => api.uploadMedia(v.file, v.alt),
@@ -118,7 +126,7 @@ function UploadForm({ onUploaded }: { onUploaded: (m: Media, alt: string) => voi
           <ErrorMessage>{errorMessage(upload.error)}</ErrorMessage>
         )}
         <Button type="submit" variant="primary" disabled={upload.isPending}>
-          {upload.isPending ? "アップロードしています…" : "アップロードして入れる"}
+          {upload.isPending ? "アップロードしています…" : submitLabel}
         </Button>
       </form>
     </section>
@@ -135,12 +143,20 @@ function bodyUsesMedia(editor: Editor, mediaId: number) {
   return found;
 }
 
-function MediaPicker({
+export function MediaPicker({
   onPick,
   inBody,
+  withAlt = true,
+  pickLabel = "この画像を入れる",
+  inUseMessage = "この画像は編集中の本文で使われているため削除できません。先に本文から外してください。",
 }: {
   onPick: (m: Media, alt: string) => void;
+  /** Whether the image is in use by what is being edited, so it must not be deleted. */
   inBody: (mediaId: number) => boolean;
+  /** Ask for the alt text when picking (not needed for the logo, whose alt is the site name). */
+  withAlt?: boolean;
+  pickLabel?: string;
+  inUseMessage?: string;
 }) {
   const queryClient = useQueryClient();
   const notify = useNotify();
@@ -176,9 +192,7 @@ function MediaPicker({
   const askDelete = () => {
     if (!selected) return;
     if (inBody(selected.id)) {
-      setDeleteError(
-        "この画像は編集中の本文で使われているため削除できません。先に本文から外してください。",
-      );
+      setDeleteError(inUseMessage);
       return;
     }
     setDeleteError(null);
@@ -189,7 +203,7 @@ function MediaPicker({
     e.preventDefault();
     e.stopPropagation();
     if (!selected) return;
-    if (!alt.trim()) {
+    if (withAlt && !alt.trim()) {
       setAltError("画像の説明（代替テキスト）を入力してください。");
       return;
     }
@@ -234,21 +248,23 @@ function MediaPicker({
       )}
       {selected && (
         <form noValidate onSubmit={onSubmit} className="space-y-4 rounded-md bg-slate-100 p-4">
-          <Field label="画像の説明（代替テキスト）" hint={altHint} error={altError} required>
-            {(ids) => (
-              <textarea
-                {...ids}
-                rows={2}
-                value={alt}
-                onChange={(e) => setAlt(e.target.value)}
-                className={inputClass}
-              />
-            )}
-          </Field>
+          {withAlt && (
+            <Field label="画像の説明（代替テキスト）" hint={altHint} error={altError} required>
+              {(ids) => (
+                <textarea
+                  {...ids}
+                  rows={2}
+                  value={alt}
+                  onChange={(e) => setAlt(e.target.value)}
+                  className={inputClass}
+                />
+              )}
+            </Field>
+          )}
           {deleteError && <ErrorMessage>{deleteError}</ErrorMessage>}
           <div className="flex flex-wrap gap-3">
             <Button type="submit" variant="primary">
-              この画像を入れる
+              {pickLabel}
             </Button>
             <Button variant="ghost" className="ml-auto text-red-700" onClick={askDelete}>
               この画像を削除

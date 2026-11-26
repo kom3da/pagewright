@@ -19,6 +19,8 @@ import { ContentListPage } from "./pages/ContentListPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { SelectSitePage } from "./pages/SelectSitePage";
+import { SiteSettingsPage } from "./pages/SiteSettingsPage";
+import { SubmissionsPage } from "./pages/SubmissionsPage";
 import { TagsPage } from "./pages/TagsPage";
 import { VerifyPage } from "./pages/VerifyPage";
 
@@ -149,6 +151,18 @@ const tagsRoute = createRoute({
   component: TagsPage,
 });
 
+const settingsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "settings",
+  component: SiteSettingsPage,
+});
+
+const inquiriesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "inquiries",
+  component: SubmissionsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   verifyRoute,
@@ -161,6 +175,8 @@ const routeTree = rootRoute.addChildren([
     pageEditRoute,
     categoriesRoute,
     tagsRoute,
+    settingsRoute,
+    inquiriesRoute,
   ]),
 ]);
 
