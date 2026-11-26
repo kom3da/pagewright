@@ -14,6 +14,28 @@
   <div class="entry-body">
 {{.Content.Body}}
   </div>
+  {{- /* Pages with sub-pages list them; sub-pages list their siblings
+         under the parent's name. */ -}}
+  {{- if .Content.Children}}
+  <nav class="subpages" aria-labelledby="subpages-heading">
+    <h2 id="subpages-heading" class="subpages__heading">{{.Content.Title}}のページ</h2>
+    <ul class="subpages__list">
+      {{- range .Content.Children}}
+      <li><a href="{{.URL}}">{{.Title}}</a></li>
+      {{- end}}
+    </ul>
+  </nav>
+  {{- else if .Content.Siblings}}
+  <nav class="subpages" aria-labelledby="subpages-heading">
+    <h2 id="subpages-heading" class="subpages__heading">{{.Content.Parent.Title}}のページ</h2>
+    <ul class="subpages__list">
+      <li><a href="{{.Content.Parent.URL}}">{{.Content.Parent.Title}}</a></li>
+      {{- range .Content.Siblings}}
+      <li><a href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}>{{.Title}}</a></li>
+      {{- end}}
+    </ul>
+  </nav>
+  {{- end}}
   {{- if or .Content.Tags (eq .Content.Type "post")}}
   <footer class="entry-footer">
     {{- with .Content.Tags}}
@@ -24,8 +46,18 @@
       {{- end}}
     </ul>
     {{- end}}
+    {{- if or .Content.Older .Content.Newer}}
+    <nav class="post-nav" aria-label="前後の記事">
+      {{- with .Content.Older}}
+      <a class="post-nav__link" href="{{.URL}}" rel="prev"><span class="post-nav__dir"><span aria-hidden="true">← </span>前の記事</span><span class="post-nav__title">{{.Title}}</span></a>
+      {{- end}}
+      {{- with .Content.Newer}}
+      <a class="post-nav__link post-nav__link--next" href="{{.URL}}" rel="next"><span class="post-nav__dir">次の記事<span aria-hidden="true"> →</span></span><span class="post-nav__title">{{.Title}}</span></a>
+      {{- end}}
+    </nav>
+    {{- end}}
     {{- if eq .Content.Type "post"}}
-    <p><a class="more-link" href="{{.Site.PostsURL}}"><span aria-hidden="true">← </span>お知らせ一覧へ戻る</a></p>
+    <p><a class="more-link" href="{{.Site.PostsURL}}">お知らせ一覧へ戻る</a></p>
     {{- end}}
   </footer>
   {{- end}}
