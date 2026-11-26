@@ -705,6 +705,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
                   <Code>{urlPreview(type, slug || String(content.number), parentId, pages)}</Code>
                 </>
               }
+              classNames={{ description: classes.slugDescription }}
               error={form.formState.errors.slug?.message}
               {...form.register("slug")}
               autoCapitalize="none"

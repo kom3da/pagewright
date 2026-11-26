@@ -11,7 +11,7 @@
 }
 @media (min-width: 75em) {
   .layout {
-    grid-template-columns: minmax(0, 1fr) 22rem;
+    grid-template-columns: minmax(0, 1fr) 20rem;
     align-items: start;
   }
 }
@@ -51,6 +51,11 @@
 .barBottom .saveState {
   flex-basis: 100%;
   text-align: center;
+}
+
+/* Several lines of help (rules, example, resulting URL) need Japanese line spacing. */
+.slugDescription {
+  line-height: var(--mantine-line-height-sm);
 }
 
 .schedule {

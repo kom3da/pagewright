@@ -6,7 +6,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   padding: 4px;
   border-bottom: 1px solid var(--mantine-color-gray-3);
   border-start-start-radius: var(--mantine-radius-sm);

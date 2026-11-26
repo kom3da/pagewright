@@ -65,7 +65,7 @@ function ToolButton({ label, icon: Icon, text, pressed, disabled, onClick }: But
 }
 
 function Separator() {
-  return <Divider orientation="vertical" aria-hidden="true" mx={4} my={6} />;
+  return <Divider orientation="vertical" aria-hidden="true" mx={2} my={6} />;
 }
 
 /** Arrow-key navigation between toolbar buttons with a single Tab stop. */
