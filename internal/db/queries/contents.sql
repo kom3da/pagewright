@@ -91,3 +91,23 @@ INSERT INTO content_tags (content_id, tag_id) VALUES ($1, $2);
 -- name: DeleteRevision :execrows
 -- Fails with a foreign key error while the revision is published or scheduled.
 DELETE FROM content_revisions WHERE id = $1;
+
+-- name: ScheduleRevision :execrows
+-- Sets (or with NULLs, clears) the revision that goes live at scheduled_at.
+UPDATE contents
+SET scheduled_revision_id = @revision_id, scheduled_at = @scheduled_at, updated_at = now()
+WHERE id = @content_id;
+
+-- name: PublishScheduled :one
+-- Publishes the scheduled revision when it is still the given one and is
+-- due. No row when it was rescheduled, cancelled or already published.
+UPDATE contents
+SET published_revision_id = scheduled_revision_id,
+    published_at = coalesce(published_at, scheduled_at),
+    scheduled_revision_id = NULL, scheduled_at = NULL, updated_at = now()
+WHERE id = @content_id AND scheduled_revision_id = @revision_id AND scheduled_at <= now()
+RETURNING id;
+
+-- name: ListScheduled :many
+SELECT id, scheduled_revision_id, scheduled_at FROM contents
+WHERE scheduled_revision_id IS NOT NULL ORDER BY scheduled_at;

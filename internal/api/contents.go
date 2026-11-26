@@ -27,6 +27,8 @@ type contentSummary struct {
 	HasUnpublishedChanges bool       `json:"hasUnpublishedChanges"`
 	URL                   *string    `json:"url"`
 	PublishedAt           *time.Time `json:"publishedAt"`
+	ScheduledAt           *time.Time `json:"scheduledAt"`
+	ParentID              *int64     `json:"parentId"`
 	UpdatedAt             time.Time  `json:"updatedAt"`
 }
 
@@ -41,11 +43,11 @@ type revisionJSON struct {
 
 type contentDetail struct {
 	contentSummary
-	ParentID            *int64       `json:"parentId"`
 	CategoryIDs         []int64      `json:"categoryIds"`
 	TagIDs              []int64      `json:"tagIds"`
 	Revision            revisionJSON `json:"revision"`
 	PublishedRevisionID *int64       `json:"publishedRevisionId"`
+	ScheduledRevisionID *int64       `json:"scheduledRevisionId"`
 }
 
 func status(c dbgen.Content) string {
@@ -62,7 +64,8 @@ func summary(c dbgen.Content, title string, latestRevisionID int64, url *string)
 	return contentSummary{
 		ID: c.ID, Number: c.Number, Type: c.Type, Title: title, Slug: c.Slug, Status: status(c),
 		HasUnpublishedChanges: c.PublishedRevisionID != nil && *c.PublishedRevisionID != latestRevisionID,
-		URL:                   url, PublishedAt: c.PublishedAt, UpdatedAt: c.UpdatedAt,
+		URL:                   url, PublishedAt: c.PublishedAt, ScheduledAt: c.ScheduledAt, ParentID: c.ParentID,
+		UpdatedAt: c.UpdatedAt,
 	}
 }
 
@@ -85,7 +88,8 @@ func (s *Server) listContents(w http.ResponseWriter, r *http.Request, _ *session
 			c := dbgen.Content{
 				TenantID: row.TenantID, ID: row.ID, Number: row.Number, Type: row.Type, Slug: row.Slug,
 				ParentID: row.ParentID, PublishedRevisionID: row.PublishedRevisionID,
-				ScheduledRevisionID: row.ScheduledRevisionID, PublishedAt: row.PublishedAt, UpdatedAt: row.UpdatedAt,
+				ScheduledRevisionID: row.ScheduledRevisionID, ScheduledAt: row.ScheduledAt,
+				PublishedAt: row.PublishedAt, UpdatedAt: row.UpdatedAt,
 			}
 			out = append(out, summary(c, row.Title, row.LatestRevisionID, row.Url))
 		}
@@ -125,7 +129,6 @@ func loadDetail(ctx context.Context, q *dbgen.Queries, id int64) (contentDetail,
 	}
 	return contentDetail{
 		contentSummary: summary(c, rev.Title, rev.ID, url),
-		ParentID:       c.ParentID,
 		CategoryIDs:    nonNil(cats),
 		TagIDs:         nonNil(tags),
 		Revision: revisionJSON{
@@ -133,6 +136,7 @@ func loadDetail(ctx context.Context, q *dbgen.Queries, id int64) (contentDetail,
 			Fields: rev.Fields, CreatedAt: rev.CreatedAt,
 		},
 		PublishedRevisionID: c.PublishedRevisionID,
+		ScheduledRevisionID: c.ScheduledRevisionID,
 	}, nil
 }
 
@@ -504,4 +508,75 @@ func dedupe(ids []int64) []int64 {
 	out := slices.Clone(ids)
 	slices.Sort(out)
 	return slices.Compact(out)
+}
+
+// minScheduleLead keeps schedules from landing in the past by the time the
+// request commits.
+const minScheduleLead = time.Minute
+
+func (s *Server) schedule(w http.ResponseWriter, r *http.Request, sess *session) error {
+	id, err := pathID(r)
+	if err != nil {
+		return err
+	}
+	var in struct {
+		PublishAt time.Time `json:"publishAt"`
+	}
+	if err := decode(w, r, &in); err != nil {
+		return err
+	}
+	if in.PublishAt.Before(time.Now().Add(minScheduleLead)) {
+		return invalid("invalid_publish_at", "公開する日時は、今から1分以上あとにしてください")
+	}
+	at := in.PublishAt.UTC().Truncate(time.Second)
+	ctx := r.Context()
+	var d contentDetail
+	err = s.DB.InTenantTx(ctx, func(tx pgx.Tx, q *dbgen.Queries) error {
+		if _, err := q.GetContent(ctx, id); err != nil {
+			return err
+		}
+		latest, err := q.GetLatestRevision(ctx, id)
+		if err != nil {
+			return err
+		}
+		if _, err := q.ScheduleRevision(ctx, dbgen.ScheduleRevisionParams{ContentID: id, RevisionID: &latest.ID, ScheduledAt: &at}); err != nil {
+			return err
+		}
+		if s.Jobs != nil {
+			if err := s.Jobs.EnqueuePublish(ctx, tx, sess.tenantID, id, latest.ID, at); err != nil {
+				return fmt.Errorf("enqueue publish: %w", err)
+			}
+		}
+		d, err = loadDetail(ctx, q, id)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, d)
+	return nil
+}
+
+func (s *Server) unschedule(w http.ResponseWriter, r *http.Request, _ *session) error {
+	id, err := pathID(r)
+	if err != nil {
+		return err
+	}
+	ctx := r.Context()
+	var d contentDetail
+	err = s.DB.InTenant(ctx, func(q *dbgen.Queries) error {
+		if _, err := q.GetContent(ctx, id); err != nil {
+			return err
+		}
+		if _, err := q.ScheduleRevision(ctx, dbgen.ScheduleRevisionParams{ContentID: id}); err != nil {
+			return err
+		}
+		d, err = loadDetail(ctx, q, id)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, d)
+	return nil
 }

@@ -6,13 +6,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/kom3da/pagewright/internal/db"
+	"github.com/kom3da/pagewright/internal/jobs"
 	"github.com/kom3da/pagewright/internal/migrate/wxrimport"
 )
 
@@ -88,5 +92,27 @@ func importWXR(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	if werr := rep.WriteText(stdout); werr != nil && err == nil {
 		err = werr
 	}
-	return err
+	if err != nil || *dryRun {
+		return err
+	}
+	return scheduleImported(ctx, d, tenantID)
+}
+
+// scheduleImported adds publish jobs for scheduled posts that came in with
+// the import, and a build so the imported site appears. It only inserts
+// jobs; the running server works them.
+func scheduleImported(ctx context.Context, d *db.DB, tenantID uuid.UUID) error {
+	client, err := river.NewClient(riverpgxv5.New(d.Pool()), &river.Config{Schema: riverSchema})
+	if err != nil {
+		return fmt.Errorf("river client: %w", err)
+	}
+	n, err := jobs.ScheduleExisting(ctx, d, client, tenantID)
+	if err != nil {
+		return fmt.Errorf("schedule imported posts: %w", err)
+	}
+	if _, err := client.Insert(ctx, jobs.BuildSiteArgs{TenantID: tenantID}, nil); err != nil {
+		return fmt.Errorf("schedule build: %w", err)
+	}
+	slog.Info("予約公開とサイトのビルドを登録しました", "scheduled", n)
+	return nil
 }

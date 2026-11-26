@@ -52,9 +52,11 @@ type ContentSummary = {
   title: string;             // 最新の版のタイトル
   slug: string | null;       // 「ページのURL（英数字）」
   status: ContentStatus;
-  hasUnpublishedChanges: boolean; // 公開中の版より新しい版がある
+  hasUnpublishedChanges: boolean; // 公開中の版より新しい版がある（一度も公開していなければ false）
   url: string | null;        // 公開中の URL（routes の canonical）
   publishedAt: string | null;
+  scheduledAt: string | null; // 予約公開の日時。公開中の記事の更新を予約しているときも入る
+  parentId: number | null;    // 固定ページの親
   updatedAt: string;
 };
 
@@ -68,11 +70,11 @@ type Revision = {
 };
 
 type ContentDetail = ContentSummary & {
-  parentId: number | null;
   categoryIds: number[];
   tagIds: number[];
   revision: Revision;        // 最新の版（編集中の内容）
   publishedRevisionId: number | null;
+  scheduledRevisionId: number | null;
 };
 ```
 
@@ -85,6 +87,8 @@ type ContentDetail = ContentSummary & {
 | `PATCH /api/contents/{id}` | `{"slug"?: string \| null, "parentId"?: number \| null, "categoryIds"?: number[], "tagIds"?: number[]}` | 200 `ContentDetail`。公開中に URL が変わったら、古い URL はリダイレクトとして残す |
 | `POST /api/contents/{id}/publish` | なし | 200 `ContentDetail`。最新の版を公開し、サイトの再ビルドを予約する |
 | `POST /api/contents/{id}/unpublish` | なし | 200 `ContentDetail`。再ビルドを予約する |
+| `POST /api/contents/{id}/schedule` | `{"publishAt": "RFC 3339"}`（今から 1 分以上あと） | 200 `ContentDetail`。最新の版をその日時に公開する。もう一度呼ぶと予約を置き換える。過去の日時は 422 `invalid_publish_at` |
+| `DELETE /api/contents/{id}/schedule` | | 200 `ContentDetail`。予約を取り消す |
 | `DELETE /api/contents/{id}` | | 204。再ビルドを予約する |
 
 `slug` の検査：英小文字・数字・ハイフンのみ、数字だけは不可、1〜100 文字。日本語が入っていたら 422 `invalid_slug`（「ページのURLは英小文字・数字・ハイフンで入力してください」）。

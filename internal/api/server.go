@@ -26,10 +26,13 @@ import (
 	"github.com/kom3da/pagewright/internal/routing"
 )
 
-// BuildQueue schedules a full build of a tenant's site. The job is added
-// in tx so it commits together with the change that needs it.
-type BuildQueue interface {
+// Jobs schedules background work. Jobs are added in tx so they commit
+// together with the change that needs them.
+type Jobs interface {
+	// EnqueueBuild schedules a full build of a tenant's site.
 	EnqueueBuild(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) error
+	// EnqueuePublish publishes a scheduled revision at at.
+	EnqueuePublish(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, contentID, revisionID int64, at time.Time) error
 }
 
 // Options configures a Server.
@@ -37,8 +40,8 @@ type Options struct {
 	DB            *db.DB
 	Mail          mail.Sender
 	Media         media.Store
-	Builds        BuildQueue // nil: changes do not trigger builds
-	BaseURL       string     // admin origin, for login links
+	Jobs          Jobs   // nil: no builds or scheduled publishing
+	BaseURL       string // admin origin, for login links
 	SecureCookies bool
 	Logger        *slog.Logger
 }
@@ -79,6 +82,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PATCH /api/contents/{id}", s.site(s.patchContent))
 	mux.Handle("POST /api/contents/{id}/publish", s.site(s.publish))
 	mux.Handle("POST /api/contents/{id}/unpublish", s.site(s.unpublish))
+	mux.Handle("POST /api/contents/{id}/schedule", s.site(s.schedule))
+	mux.Handle("DELETE /api/contents/{id}/schedule", s.site(s.unschedule))
 	mux.Handle("DELETE /api/contents/{id}", s.site(s.deleteContent))
 
 	mux.Handle("GET /api/categories", s.site(s.listCategories))
@@ -291,10 +296,10 @@ func hashToken(t string) []byte {
 
 // enqueueBuild schedules a site build in tx, when a queue is configured.
 func (s *Server) enqueueBuild(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) error {
-	if s.Builds == nil {
+	if s.Jobs == nil {
 		return nil
 	}
-	if err := s.Builds.EnqueueBuild(ctx, tx, tenantID); err != nil {
+	if err := s.Jobs.EnqueueBuild(ctx, tx, tenantID); err != nil {
 		return fmt.Errorf("enqueue build: %w", err)
 	}
 	return nil

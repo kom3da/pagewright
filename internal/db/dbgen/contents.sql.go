@@ -436,6 +436,37 @@ func (q *Queries) ListContents(ctx context.Context, type_ string) ([]ListContent
 	return items, nil
 }
 
+const listScheduled = `-- name: ListScheduled :many
+SELECT id, scheduled_revision_id, scheduled_at FROM contents
+WHERE scheduled_revision_id IS NOT NULL ORDER BY scheduled_at
+`
+
+type ListScheduledRow struct {
+	ID                  int64
+	ScheduledRevisionID *int64
+	ScheduledAt         *time.Time
+}
+
+func (q *Queries) ListScheduled(ctx context.Context) ([]ListScheduledRow, error) {
+	rows, err := q.db.Query(ctx, listScheduled)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListScheduledRow
+	for rows.Next() {
+		var i ListScheduledRow
+		if err := rows.Scan(&i.ID, &i.ScheduledRevisionID, &i.ScheduledAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const publishRevision = `-- name: PublishRevision :execrows
 UPDATE contents
 SET published_revision_id = $1,
@@ -452,6 +483,50 @@ type PublishRevisionParams struct {
 // Makes a revision of the content live. Keeps the first publication date.
 func (q *Queries) PublishRevision(ctx context.Context, arg PublishRevisionParams) (int64, error) {
 	result, err := q.db.Exec(ctx, publishRevision, arg.RevisionID, arg.ContentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const publishScheduled = `-- name: PublishScheduled :one
+UPDATE contents
+SET published_revision_id = scheduled_revision_id,
+    published_at = coalesce(published_at, scheduled_at),
+    scheduled_revision_id = NULL, scheduled_at = NULL, updated_at = now()
+WHERE id = $1 AND scheduled_revision_id = $2 AND scheduled_at <= now()
+RETURNING id
+`
+
+type PublishScheduledParams struct {
+	ContentID  int64
+	RevisionID *int64
+}
+
+// Publishes the scheduled revision when it is still the given one and is
+// due. No row when it was rescheduled, cancelled or already published.
+func (q *Queries) PublishScheduled(ctx context.Context, arg PublishScheduledParams) (int64, error) {
+	row := q.db.QueryRow(ctx, publishScheduled, arg.ContentID, arg.RevisionID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const scheduleRevision = `-- name: ScheduleRevision :execrows
+UPDATE contents
+SET scheduled_revision_id = $1, scheduled_at = $2, updated_at = now()
+WHERE id = $3
+`
+
+type ScheduleRevisionParams struct {
+	RevisionID  *int64
+	ScheduledAt *time.Time
+	ContentID   int64
+}
+
+// Sets (or with NULLs, clears) the revision that goes live at scheduled_at.
+func (q *Queries) ScheduleRevision(ctx context.Context, arg ScheduleRevisionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, scheduleRevision, arg.RevisionID, arg.ScheduledAt, arg.ContentID)
 	if err != nil {
 		return 0, err
 	}

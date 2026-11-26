@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
@@ -50,8 +51,9 @@ func (f *fakeMail) last() (mail.Message, bool) {
 }
 
 type fakeBuilds struct {
-	mu      sync.Mutex
-	tenants []uuid.UUID
+	mu        sync.Mutex
+	tenants   []uuid.UUID
+	publishes []scheduledPublish
 }
 
 func (f *fakeBuilds) EnqueueBuild(_ context.Context, _ pgx.Tx, id uuid.UUID) error {
@@ -59,6 +61,18 @@ func (f *fakeBuilds) EnqueueBuild(_ context.Context, _ pgx.Tx, id uuid.UUID) err
 	defer f.mu.Unlock()
 	f.tenants = append(f.tenants, id)
 	return nil
+}
+
+func (f *fakeBuilds) EnqueuePublish(_ context.Context, _ pgx.Tx, _ uuid.UUID, contentID, revisionID int64, at time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.publishes = append(f.publishes, scheduledPublish{contentID, revisionID, at})
+	return nil
+}
+
+type scheduledPublish struct {
+	contentID, revisionID int64
+	at                    time.Time
 }
 
 func (f *fakeBuilds) count(id uuid.UUID) int {
@@ -107,7 +121,7 @@ func newEnv(t *testing.T) *env {
 		}
 	}
 	s := api.New(api.Options{
-		DB: d.DB, Mail: e.mail, Media: media.Store{Root: t.TempDir()}, Builds: e.builds,
+		DB: d.DB, Mail: e.mail, Media: media.Store{Root: t.TempDir()}, Jobs: e.builds,
 		BaseURL: "http://admin.test",
 	})
 	e.srv = httptest.NewServer(s.Handler())
@@ -214,6 +228,7 @@ type detail struct {
 	Status                string
 	HasUnpublishedChanges bool
 	URL                   *string
+	ScheduledAt           *time.Time
 	ParentID              *int64
 	CategoryIDs           []int64
 	TagIDs                []int64
@@ -513,6 +528,8 @@ func TestTenantIsolation(t *testing.T) {
 		{http.MethodPatch, fmt.Sprintf("/api/contents/%d", bPost.ID), map[string]any{"slug": "hijack"}},
 		{http.MethodPost, fmt.Sprintf("/api/contents/%d/publish", bPost.ID), nil},
 		{http.MethodPost, fmt.Sprintf("/api/contents/%d/unpublish", bPost.ID), nil},
+		{http.MethodPost, fmt.Sprintf("/api/contents/%d/schedule", bPost.ID), map[string]any{"publishAt": time.Now().Add(time.Hour)}},
+		{http.MethodDelete, fmt.Sprintf("/api/contents/%d/schedule", bPost.ID), nil},
 		{http.MethodDelete, fmt.Sprintf("/api/contents/%d", bPost.ID), nil},
 		{http.MethodPatch, fmt.Sprintf("/api/categories/%d", bCat.ID), map[string]any{"name": "x"}},
 		{http.MethodDelete, fmt.Sprintf("/api/categories/%d", bCat.ID), nil},
@@ -550,5 +567,33 @@ func TestTenantIsolation(t *testing.T) {
 	bob.mustDo(http.MethodGet, "/api/categories", nil, &bCats, http.StatusOK)
 	if len(bCats) != 1 {
 		t.Errorf("B has %d categories, want 1", len(bCats))
+	}
+}
+
+func TestSchedule(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	d := alice.newContent("post", "予約の記事", false)
+	path := fmt.Sprintf("/api/contents/%d/schedule", d.ID)
+
+	if got, code := alice.errorCode(http.MethodPost, path, map[string]any{"publishAt": time.Now().Add(-time.Hour)}); got != http.StatusUnprocessableEntity || code != "invalid_publish_at" {
+		t.Errorf("schedule in the past = %d %s, want 422 invalid_publish_at", got, code)
+	}
+
+	at := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Second)
+	alice.mustDo(http.MethodPost, path, map[string]any{"publishAt": at}, &d, http.StatusOK)
+	if d.Status != "scheduled" || d.ScheduledAt == nil || !d.ScheduledAt.Equal(at) {
+		t.Errorf("after schedule = %+v, want scheduled at %v", d, at)
+	}
+	e.builds.mu.Lock()
+	got := e.builds.publishes
+	e.builds.mu.Unlock()
+	if len(got) != 1 || got[0].contentID != d.ID || got[0].revisionID != d.Revision.ID || !got[0].at.Equal(at) {
+		t.Errorf("publish jobs = %+v, want one for content %d revision %d at %v", got, d.ID, d.Revision.ID, at)
+	}
+
+	alice.mustDo(http.MethodDelete, path, nil, &d, http.StatusOK)
+	if d.Status != "draft" || d.ScheduledAt != nil {
+		t.Errorf("after unschedule = %+v, want draft", d)
 	}
 }

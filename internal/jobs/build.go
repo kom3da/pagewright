@@ -38,6 +38,7 @@ const BuildTimeout = 10 * time.Minute
 func NewWorkers(d *db.DB, opts build.Options) *river.Workers {
 	w := river.NewWorkers()
 	river.AddWorker(w, NewBuildSiteWorker(d, opts))
+	river.AddWorker(w, NewPublishScheduledWorker(d))
 	return w
 }
 

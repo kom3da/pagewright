@@ -35,7 +35,7 @@ func runServe(ctx context.Context, cfg config.Config) error {
 
 	apiServer := api.New(api.Options{
 		DB:            d,
-		Builds:        riverBuilds{client: riverClient},
+		Jobs:          riverJobs{client: riverClient},
 		Mail:          mail.SMTP{Addr: cfg.SMTPAddr, From: cfg.MailFrom},
 		Media:         media.Store{Root: cfg.MediaDir()},
 		BaseURL:       cfg.BaseURL,

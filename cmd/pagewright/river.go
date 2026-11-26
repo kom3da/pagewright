@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -34,12 +35,19 @@ func newRiver(d *db.DB, cfg config.Config) (*river.Client[pgx.Tx], error) {
 	return c, nil
 }
 
-// riverBuilds implements api.BuildQueue with River.
-type riverBuilds struct {
+// riverJobs implements api.Jobs with River.
+type riverJobs struct {
 	client *river.Client[pgx.Tx]
 }
 
-func (b riverBuilds) EnqueueBuild(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) error {
-	_, err := b.client.InsertTx(ctx, tx, jobs.BuildSiteArgs{TenantID: tenantID}, nil)
+func (j riverJobs) EnqueueBuild(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) error {
+	_, err := j.client.InsertTx(ctx, tx, jobs.BuildSiteArgs{TenantID: tenantID}, nil)
+	return err
+}
+
+func (j riverJobs) EnqueuePublish(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, contentID, revisionID int64, at time.Time) error {
+	_, err := j.client.InsertTx(ctx, tx, jobs.PublishScheduledArgs{
+		TenantID: tenantID, ContentID: contentID, RevisionID: revisionID, At: at,
+	}, nil)
 	return err
 }

@@ -23,21 +23,21 @@ import (
 	"github.com/kom3da/pagewright/internal/db/dbtest"
 )
 
-// newRiver migrates River's tables into the test database and returns a
-// client (not started) for workers. River runs as the admin user here;
-// how the app role reaches River's tables is the server's concern.
+// newRiver migrates River's tables into the river schema of the test
+// database (as the owner, like pagewright migrate) and returns a client
+// (not started) that runs as the app role, like pagewright serve.
 func newRiver(t *testing.T, env *dbtest.Env, workers *river.Workers) *river.Client[pgx.Tx] {
 	t.Helper()
 	ctx := context.Background()
-	driver := riverpgxv5.New(env.Admin)
-	migrator, err := rivermigrate.New(driver, nil)
+	migrator, err := rivermigrate.New(riverpgxv5.New(env.Admin), &rivermigrate.Config{Schema: "river"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := migrator.Migrate(ctx, rivermigrate.DirectionUp, nil); err != nil {
 		t.Fatalf("migrate river: %v", err)
 	}
-	client, err := river.NewClient(driver, &river.Config{
+	client, err := river.NewClient(riverpgxv5.New(env.DB.Pool()), &river.Config{
+		Schema:   "river",
 		Queues:   map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 1}},
 		Workers:  workers,
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
