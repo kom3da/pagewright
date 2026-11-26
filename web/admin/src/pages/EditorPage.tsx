@@ -219,13 +219,10 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   const publish = () =>
     run("publish", async () => {
       if (!requireTitle("公開するにはタイトルを入力してください。")) return;
+      // The server cancels a pending schedule when publishing now.
+      const hadSchedule = content.scheduledAt !== null;
       if (!(await persist())) return;
-      let detail = await api.publish(id);
-      // The latest revision is live now, so a pending schedule could only republish the
-      // same or an older revision.
-      const hadSchedule = detail.scheduledAt !== null;
-      if (hadSchedule) detail = await api.unschedule(id);
-      update(detail);
+      update(await api.publish(id));
       notify(
         `公開しました。${hadSchedule ? "予約は取り消しました。" : ""}公開サイトに反映されるまで少しお待ちください。`,
       );
@@ -509,7 +506,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         title="公開をやめますか？"
         description={
           content.scheduledAt
-            ? `この${label}は公開サイトから見えなくなります。予約は残るため、${formatJapanDateTime(content.scheduledAt)}にふたたび公開されます。`
+            ? `この${label}は公開サイトから見えなくなります。${formatJapanDateTime(content.scheduledAt)}の更新の予約も取り消されます。内容は下書きとして残ります。`
             : `この${label}は公開サイトから見えなくなります。内容は下書きとして残ります。`
         }
         confirmLabel="公開をやめる"

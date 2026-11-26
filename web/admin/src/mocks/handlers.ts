@@ -484,8 +484,13 @@ export const handlers = [
     if (denied) return denied;
     const c = findContent(params.id);
     if (!c) return error(404, "not_found", "見つかりません。");
-    // Like the server, publishing now leaves an existing schedule in place.
-    Object.assign(c, { publishedRevisionId: c.revision.id, publishedAt: c.publishedAt ?? now() });
+    // Like the server, publishing now cancels a pending schedule.
+    Object.assign(c, {
+      publishedRevisionId: c.revision.id,
+      publishedAt: c.publishedAt ?? now(),
+      scheduledAt: null,
+      scheduledRevisionId: null,
+    });
     refresh(c);
     db.builds++;
     return HttpResponse.json(c);
@@ -496,7 +501,8 @@ export const handlers = [
     if (denied) return denied;
     const c = findContent(params.id);
     if (!c) return error(404, "not_found", "見つかりません。");
-    c.publishedRevisionId = null;
+    // Unpublishing also cancels a pending schedule.
+    Object.assign(c, { publishedRevisionId: null, scheduledAt: null, scheduledRevisionId: null });
     refresh(c);
     db.builds++;
     return HttpResponse.json(c);

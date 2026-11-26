@@ -151,14 +151,19 @@ type SiteSettings = {
   name: string;
   logoMediaId: number | null;
   logo: Media | null;          // 出力だけ
-  primaryColor?: string;       // "#RRGGBB"。白とのコントラスト比 4.5:1 以上
-  footerColor?: string;        // "#RRGGBB"。同上（白い文字が乗る）
-  font?: "gothic" | "mincho";
-  timeZone?: string;           // 既定 "Asia/Tokyo"
-  contactEmail?: string;       // お問い合わせの送り先
+  primaryColor?: string;       // "#RRGGBB"。白とのコントラスト比 4.5:1 以上。標準 #0a4f8f
+  footerColor?: string;        // "#RRGGBB"。同上（白い文字が乗る）。標準 #1d2733
+  font?: "gothic" | "mincho";  // 標準 gothic
+  timeZone?: string;           // IANA 名。標準 "Asia/Tokyo"
+  contactEmail?: string;       // お問い合わせの送り先。空ならサイトの管理者全員
   menu: MenuItem[];            // 空なら、親のない固定ページとお知らせを自動で並べる
 };
 ```
+
+- `primaryColor` から `contactEmail` までは、省略・空文字・未設定のどれも「標準のまま」。GET では標準のときは項目が出ない
+- メニュー：20 件まで。`label` は 50 文字まで（`contentId` のときは省略でき、そのページのタイトルになる）。`url` は `/` か `http://`・`https://` で始め、`label` が必須。違反と、存在しないページの指定は 422 `invalid_menu`（`field: "menu"`）
+- 色・書体・タイムゾーン・送り先の違反は 422 `invalid_setting`、`field` はその項目名。サイト名は `invalid_name`、ロゴの画像が見つからなければ `invalid_logo`
+- ロゴに使っている画像は `DELETE /api/media/{id}` で 409 `media_in_use`
 
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
@@ -179,5 +184,5 @@ type Submission = {
 
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
-| `GET /api/forms/submissions?before={id}` | `before` は省略可 | 200 `Submission[]`（新しい順に 100 件まで）。続きは、受け取った最後の `id` を `before` に入れて取る。管理者だけ（編集者は 403） |
+| `GET /api/forms/submissions?before={id}` | `before` は省略可 | 200 `Submission[]`（`id` の降順＝受け付けた順の新しい順に 100 件まで）。続きは、受け取った最後の `id` を `before` に入れて取る。管理者だけ（編集者は 403） |
 | `DELETE /api/forms/submissions/{id}` | | 204。管理者だけ |

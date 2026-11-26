@@ -65,7 +65,9 @@ func (s Settings) Validate() error {
 			return &FieldError{c.field, c.name + "は #1a73e8 のような6桁の色コードで指定してください"}
 		}
 		if r := Contrast(c.value, "#ffffff"); r < MinContrast {
-			return &FieldError{c.field, fmt.Sprintf("%sが明るすぎて、白い文字や背景との差が足りません（コントラスト比 %.1f:1、4.5:1 以上が必要です）。もっと濃い色を選んでください", c.name, r)}
+			// Round down so 4.46 never reads as an acceptable 4.5.
+			shown := math.Floor(r*10) / 10
+			return &FieldError{c.field, fmt.Sprintf("%sが明るすぎて、白い文字や背景との差が足りません（コントラスト比 %.1f:1、4.5:1 以上が必要です）。もっと濃い色を選んでください", c.name, shown)}
 		}
 	}
 	if s.Font != "" && s.Font != "gothic" && s.Font != "mincho" {

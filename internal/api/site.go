@@ -148,6 +148,13 @@ func (s *Server) putSite(w http.ResponseWriter, r *http.Request, sess *session) 
 			return err
 		}
 		for i, it := range in.Menu {
+			if it.ContentID != nil {
+				if _, err := q.GetContent(ctx, *it.ContentID); errors.Is(err, pgx.ErrNoRows) {
+					return invalid("invalid_menu", fmt.Sprintf("メニューの%d番目のページが見つかりません", i+1))
+				} else if err != nil {
+					return err
+				}
+			}
 			if err := q.AddMenuItem(ctx, dbgen.AddMenuItemParams{Position: int64(i), Label: it.Label, ContentID: it.ContentID, Url: it.URL}); err != nil {
 				return err
 			}
