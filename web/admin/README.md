@@ -1,7 +1,8 @@
 # 管理画面（web/admin）
 
 React＋Vite＋TypeScript。ルーティングは TanStack Router、データ取得は TanStack Query、
-スタイルは Tailwind CSS（ダイアログなどの部品は Radix）、フォームは React Hook Form＋Zod、本文エディタは Tiptap。
+部品と見た目は Mantine、フォームは React Hook Form＋Zod、本文エディタは Tiptap。
+画面の作り方・見た目・言葉の決まりは [`DESIGN.md`](DESIGN.md)。
 API の約束は [`docs/dev/admin-api.md`](../../docs/dev/admin-api.md)、本文 JSON は [`schema/body-v1.md`](../../schema/body-v1.md)。
 
 ## 開発
@@ -28,5 +29,6 @@ mise exec -- pnpm e2e        # Playwright＋axe。モック版をビルドして
 
 - API の呼び出しは `src/api/client.ts` に集める。型は `src/api/types.ts`（約束と同じ形に保つ）
 - 画面の言葉は、非エンジニアにわかる日本語にする（「スラッグ」ではなく「ページのURL（英数字）」）
-- 入力欄にはラベルを付け、エラーは `Field` で欄にひもづける。確認には `window.confirm` ではなく `ConfirmDialog` を使う
+- 部品は Mantine と `src/components/ui/` の共通部品を使う（Tailwind や自作のボタンは使わない）。詳しくは `DESIGN.md`
+- 入力欄にはラベルを付け、エラーは欄の `error` にひもづける。確認には `window.confirm` ではなく `confirm()`（`src/components/ui/confirm.tsx`）を使う
 - 本文に新しいノードやマークを足すときは、`src/editor/extensions.ts` と `src/editor/normalize.ts` の両方を直す

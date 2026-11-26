@@ -1,0 +1,236 @@
+# 管理画面のデザインの決まり（web/admin）
+
+管理画面の見た目と作り方の決まりです。画面を作る・直すときは、まずこの文書とコード（`src/theme.ts`、`src/components/ui/`）を見てください。ここに書いていないことで迷ったら、既存の画面に合わせ、この文書に追記します。
+
+方針は **「すっきりした業務ツール」**。Linear や Notion のように、ほぼ無彩色のグレーにアクセント色を1つだけ使い、落ち着いていて、情報は詰まっていても親しみやすい画面にします。使う人は中小企業の非エンジニアです。言葉はふつうの日本語にし、押す場所は大きくし、意味のわからない記号や略語は使いません。
+
+## 1. 技術と置き場所
+
+| 何 | どこ |
+| --- | --- |
+| 部品 | [Mantine](https://mantine.dev/) 9（`@mantine/core`・`hooks`・`notifications`・`modals`・`dates`）。アイコンは lucide-react |
+| テーマ（色・文字・余白・部品の初期値） | `src/theme.ts` |
+| 全体の CSS（フォーカス、「必須」の表示、`.pw-input` など） | `src/styles/global.css` |
+| 共通部品 | `src/components/ui/`（一覧は `index.ts`） |
+| 画面ごとの CSS | 画面の隣の `*.module.css`（CSS Modules） |
+| 本文エディタの中身の見た目 | `src/editor/prose.css` |
+| アプリの枠（サイドバー） | `src/components/AppLayout.tsx` |
+
+決まり：
+
+- **Tailwind・Radix・自作のボタンや入力欄は使わない。** まず Mantine の部品と、その props（`gap`、`p`、`c="dimmed"` など）で書く。props で書けない見た目だけ CSS Modules に書く
+- **色・余白・角丸は必ずテーマの値**（`var(--mantine-color-gray-3)`、`var(--mantine-spacing-md)`、`c="red.7"` など）。`#xxxxxx` や `px` の直書きはしない（例外：境界線の 1px、アイコンの大きさ）
+- `style={{ … }}` は動的な値（階層の字下げ、色見本の背景色）にだけ使う
+- ブレークポイントは Mantine の既定値。CSS では `48em`（= `sm`）のように em で書く（Biome が `$変数` を読めないため）。JS では `DESKTOP_QUERY`（`src/theme.ts`）と `useMediaQuery` を使う
+- Mantine の CSS は `main.tsx` で読み込み済み。PostCSS は `postcss-preset-mantine`（`rem()`、`light-dark()` が使える）
+- 画面の色は今はライトのみ（`forceColorScheme="light"`）。ダークモードは対応していない
+
+## 2. 見た目の基本（トークン）
+
+### 色
+
+アクセント色は1つ（`brand`、落ち着いた藍色）。それ以外はグレーで組み立て、状態を表すときだけ緑・橙・赤を使います。
+
+| 名前 | 値 | 白地とのコントラスト | 使う場所 |
+| --- | --- | --- | --- |
+| `brand.6`（primary） | `#4353c4` | 6.4:1 | 主ボタンの背景、リンク、選択中のメニュー、フォーカスの枠 |
+| `brand.1` / `brand.9` | `#dde1f6` / `#283383` | 文字 8.5:1（brand.1 の上） | 選択中のサイドバー項目、「未公開の変更あり」 |
+| `gray.0` | `#f8f8f9` | — | サイドバーの背景、表の見出し行、補足の囲み |
+| `gray.2`〜`gray.4` | `#e6e6e9`〜`#a1a1aa` | — | 境界線（2: 区切り、3: 枠、4: 入力欄の枠）。**文字には使わない** |
+| `gray.6`（dimmed） | `#52525b` | 7.7:1 | 補足の文字（`c="dimmed"`） |
+| `black` | `#18181b` | 17.7:1 | 本文 |
+| `green.6` | `#1f7a45` | 5.4:1 | 「公開中」、成功の通知 |
+| `orange.6` | `#a34d00` | 5.8:1 | 「予約」、注意（`Notice kind="warning"`） |
+| `red.6` | `#c42b21` | 5.7:1 | 削除などの危険な操作、エラー |
+
+- テーマで定義した色（brand・gray・red・green・orange）は、どれも `shade 6` が白地で 4.5:1 以上になるように作り直してある（標準の Mantine の赤や緑は薄すぎるため）。淡い背景（`light` バリアント、shade 1）の上の文字は shade 9 で、どれも 8:1 以上
+- これ以外の Mantine の色（blue、yellow など）は使わない。新しい色を足さない。足すときは `theme.ts` にパレットを作り、白地と淡い背景の両方でコントラストを確認して、この表に書く
+
+### 文字
+
+- 書体：`"Hiragino Sans", "Hiragino Kaku Gothic ProN", "BIZ UDPGothic", "Noto Sans JP", "Yu Gothic UI", Meiryo, system-ui`
+- 大きさ：`xs` 12px（ほぼ使わない）・`sm` 14px（補足、表の見出し、入力欄の説明）・**`md` 15px（本文・入力欄・ボタン）**・`lg` 17px・`xl` 20px
+- 行の高さ：本文 1.7（日本語は欧文より広く取る）。見出し 1.4〜1.5
+- 見出し：h1 24px・h2 18px・h3 16px、どれも太字。1画面に h1 は1つ（`PageHeader` が出す）。セクションは h2（`Section`）、ダイアログの中の小見出しは h3
+- 太字はラベル・見出し・強調だけ。12px の文字は太字にするか、使わない
+
+### 余白と密度
+
+- 余白は 4px 刻み：`xs` 8px・`sm` 12px・`md` 16px・`lg` 24px・`xl` 32px
+- 縦の並び：画面の中の大きなまとまり（Section どうし）は `xl`、フォームの欄どうしは `md`、ラベルと説明のような密な組は `xs`
+- 押す場所の高さ：**ボタン・入力欄は 40px（`size="md"`、初期値）**。表の行やカードの中の操作ボタンは 36px（`size="sm"`）。それより小さくしない（ツールバーのアイコンボタンも 36px 角）
+- 角丸：入力欄・ボタン・バッジは `sm`（6px）、カード・ダイアログ・通知は `md`（8px）
+- 影はほぼ使わない。カードは枠線（`withBorder`）で区切る。影はメニュー・ダイアログ・通知など浮いているものだけ
+
+## 3. レイアウト
+
+```
+┌──────────────┬───────────────────────────────────────┐
+│ 管理中のサイト ▾ │ 記事の一覧 › （パンくず）                 │
+│              │ 見出し（h1）                [主ボタン] │
+│ ホーム          │ 説明文                                  │
+│ ─            │ ───────────────────────────────────── │
+│ 記事            │                                       │
+│ 固定ページ       │   画面の中身（最大 72rem）               │
+│ カテゴリ         │                                       │
+│ タグ            │                                       │
+│ ─            │                                       │
+│ お問い合わせ*    │                                       │
+│ サイトの設定*    │                                       │
+│              │                                       │
+│ [サイトを更新]   │                                       │
+│ 公開サイトを見る ↗ │                                       │
+│ 山田太郎（メニュー）│                                       │
+└──────────────┴───────────────────────────────────────┘
+   * 管理者だけ
+```
+
+- **サイドバー**（`AppLayout`、幅 256px、`nav aria-label="メインメニュー"`）：上にサイトの名前（複数サイトなら押すと切り替えメニュー）、中にメニュー、下に「サイトを更新」（直前に始めた時刻を表示）・「公開サイトを見る」・アカウント（ログアウト）。メニュー項目を足すときは `navGroups` に足す。現在の画面は背景色と `aria-current="page"` で示す
+- **スマホ（768px 未満）**：サイドバーは左から出る引き出しになり、上に細いバー（メニューのボタンとサイト名）が出る。閉じた引き出しは `inert` で Tab の対象から外す。画面を移ると自動で閉じる
+- **画面の中身**：`AppShell.Main`（`id="main"`、「本文へ移動」の行き先）。左右の余白はスマホ 16px・PC 40px、最大幅 72rem
+- **どの画面も `PageHeader` から始める**（後述）。その下に `Stack gap="xl"` で `Section` を並べる
+- フォームの入力欄は画面いっぱいに広げない。1つの欄は最大 40rem 程度（`maw`）、2つ並べるなら `SimpleGrid cols={{ base: 1, sm: 2 }}`
+- ログイン前の画面は `AuthLayout`（中央の白いカード）
+
+## 4. 部品のカタログ
+
+`src/components/ui/` の部品と、Mantine をそのまま使う部品です。
+
+| 部品 | いつ使うか |
+| --- | --- |
+| `PageHeader` | 各画面のいちばん上。`title`（h1、タブのタイトルにもなる）・`description`（この画面で何をするか1〜2文）・`actions`（主ボタンなど）・`breadcrumbs`（親の画面）・`meta`（状態バッジ、最終更新）。h1 は画面移動の後にフォーカスを受ける（枠は出ない） |
+| `Section` | 画面を「基本」「見た目」のように分けるまとまり（`section` ＋ h2）。初期値は白いカード（`variant="card"`）。表や一覧のように自分で枠を持つものは `variant="plain"` |
+| `ResponsiveList` | **ものの一覧はすべてこれ**（DataList パターン、後述）。PC では表、スマホではカード |
+| `StatusBadge` / `ContentStatusBadges` | 記事・ページの状態。下書き（灰）・予約（橙）・公開中（緑）・未公開の変更あり（藍）・更新を予約（橙）。**必ず文字で出す**（色とアイコンは補助）。新しい状態は `StatusBadge.tsx` の表に足す |
+| `EmptyState`（Mantine） | 一覧が空のとき。`icon`・`title`（「まだ記事がありません」）・`description`（次に何をすればよいか） |
+| `Loading` | 読み込み中（`role="status"`） |
+| `ErrorMessage` | 画面全体・フォーム全体の失敗（`role="alert"`）。特定の欄の問題はその欄の `error` に出す |
+| `Notice` | ずっと出しておく注意書き（個人情報の扱い、保存前の注意など）。`kind="info"`（灰）/ `"warning"`（橙） |
+| `notify(message, kind)` | 操作の結果の短いお知らせ（「下書きを保存しました。」）。成功は `role="status"`、エラーは `role="alert"`。自動では消えない（時間制限なしで読めるように）。最大3件 |
+| `confirm({...})` | 取り返しのつかない操作の前の確認。`await` すると true/false。`alertdialog` になり、最初のフォーカスは「キャンセル」。ダイアログの中から呼んでもよい（入れ子を自動で扱う） |
+| `Dialog` | フォームや選択のためのダイアログ（Mantine の Modal に、説明文・幅広・閉じた後のフォーカス先・入れ子の Escape を足したもの）。はい/いいえの質問には使わず `confirm` |
+| `Form` | `<form noValidate>` を縦に並べる（`gap`）。ブラウザの検証は使わず、日本語のメッセージを欄に出す |
+| `Field` | Mantine の入力部品でない欄（ファイル選択、独自の部品）にラベル・説明・エラーを付ける。Mantine の `TextInput` などは自分の `label`・`description`・`error`・`required` を使う |
+| `AnchorLink` | アプリ内の文字のリンク（`to`・`params` が型付き）。ボタンの見た目にしたいときは Mantine の `Button` に `component={Link}` |
+| `ExternalLink` | 新しいタブで開くリンク（公開サイトなど）。アイコンと「（新しいタブで開きます）」を自動で付ける |
+| `.pw-input` / `.pw-label`（CSS） | Mantine の入力欄の見た目の素の `<input>`。1つの説明・エラーを2つの欄で共有するとき（日付＋時刻、色見本＋色コード）だけ。Mantine の入力欄は `aria-describedby` を上書きできないため |
+
+Mantine をそのまま使うもの：`Button`、`TextInput`、`Textarea`（自動で高さが伸びる）、`NativeSelect`（選択肢が少ないとき。`optgroup` も使える）、`Checkbox`、`Radio.Group`、`Fieldset`、`Menu`、`Tabs`、`Badge`、`Card`、`Paper`、`SimpleGrid`、`Stack`、`Group`、`Code`、`DataList`（詳細表示の項目名と値）、`Toolbar`（矢印キーで移動するツールバー）、`@mantine/dates` の日付入力（`DatesProvider` で日本語・日曜始まりに設定済み）。
+
+### フォームの決まり
+
+- 入力欄には必ず見えるラベル。プレースホルダーをラベルの代わりにしない
+- **必須の欄は `required` を付ける。** ラベルの後ろに赤い「必須」が出て、読み上げでも必須と伝わる（`global.css`）。任意の欄にはなにも付けない
+- 書き方の説明・例は `description`（ラベルのすぐ下、14px）。例：「英小文字・数字・ハイフン（-）。例：news」
+- エラーは `error` に文章で。「何がいけないか」と「どう直すか」を書く。例：「メールアドレスの形式が正しくありません。例：taro@example.jp」。送信したら最初のエラーの欄にフォーカスを移す（react-hook-form なら `setError(…, { shouldFocus: true })`）
+- サーバーのエラーで `field` があるものは、その欄に出す（`errorField(e)`）。ないものは `ErrorMessage` でフォームの下に出す
+- 送信ボタンは押している間 `loading`（文字は変えない）。二重送信しない
+- 保存していない変更があるときは「保存していない変更があります」と表示し、画面を離れる前に `confirm` で確認する（`useBlocker`。記事の編集と設定の画面を参照）
+
+## 5. ボタンの決まり
+
+1. **主ボタン（`variant="filled"`、藍色）は1つの画面（ダイアログ）に1つだけ。** その画面でいちばんよくやること：「公開する」「設定を保存する」「新規作成」「追加する」
+2. それ以外は **初期値のボタン**（白地に枠、`variant` を書かない）：「下書き保存」「キャンセル」「編集」
+3. 目立たせたくない操作は `variant="subtle"`（枠なし）。並べ替えの「上へ」「下へ」など
+4. **削除・取り消し・外すなど、なくなる操作は赤**（`color="red"`）。一覧や画面の端では `variant="subtle" color="red"`、確認ダイアログの中の実行ボタンは `variant="filled" color="red"`。**必ず `confirm` で確認する**（元に戻せる「外す」だけの操作は確認なしでよい）
+5. ボタンの文字は「動詞」：「削除する」「保存する」「リンクを作る」。「OK」「はい」「送信」だけにしない
+6. 並び順：右寄せのとき「キャンセル」が左、実行が右。危険な操作は離して置く（`ml="auto"` で反対の端へ）
+7. 一覧の行の操作は `size="sm"`。同じ名前のボタンが並ぶときは `aria-label` で対象を言う（「「イベント」を編集」）
+8. アイコンだけのボタン（`ActionIcon`）は `aria-label` と `Tooltip` を必ず付ける。ただしよく使う操作は文字付きのボタンにする
+
+## 6. 言葉の決まり（非エンジニア向け）
+
+- 画面の言葉は、ふだんの仕事の言葉で書く。カタカナ語・略語・内部の名前を出さない
+
+  | 使わない | 使う |
+  | --- | --- |
+  | スラッグ | ページのURL（英数字） |
+  | ビルド、デプロイ | サイトを更新、公開サイトに反映 |
+  | テナント | サイト |
+  | ステータス | 状態 |
+  | 削除しますか？［OK］ | タグを削除しますか？［削除する］ |
+  | エラー: 422 invalid_slug | このURLはすでに使われています。別のURLにしてください。 |
+  | alt | 画像の説明（代替テキスト） |
+
+- 文は「です・ます」。結果の通知は「〜しました。」で終える。次に何が起きるかがあれば続ける（「公開しました。公開サイトに反映されるまで少しお待ちください。」）
+- 見出しは名詞（「タグの一覧」）、ボタンは動詞（「タグを追加」ではなく「追加する」、ただし画面を開くボタンは「タグを追加」でもよい）
+- 空の一覧には、次にやることを書く（「「新規作成」から最初の記事を書きましょう。」）
+- 日時は日本時間で「2026年12月1日 9:00」（`formatJapanDateTime`）、表の中では「2026/12/01 9:00」（`formatDateTime`）
+- 全角の括弧「（）」「「」」を使う。数字・英字は半角
+
+## 7. アクセシビリティ（JIS X 8341-3 / WCAG 2.1 AA）
+
+画面を作ったら、次を確認します。E2E（Playwright＋axe）と Vitest（axe、ただし色のコントラストは見られない）でも検査します。
+
+- [ ] 1画面に h1 が1つ（`PageHeader`）、見出しの階層が飛ばない（h1 → h2 → h3）
+- [ ] ランドマーク：`main`（`#main`）、`nav`（メインメニュー、パンくず）。まとまりは `Section`（`section` ＋見出し）
+- [ ] すべての入力欄に見えるラベル。説明とエラーは `aria-describedby` で欄にひもづく（Mantine と `Field` が自動で行う）
+- [ ] 色だけで意味を伝えない（状態は文字で、エラーは文章で）
+- [ ] 文字のコントラスト 4.5:1 以上（第2章の色だけを使えば満たす）。`gray.4` 以下の色を文字に使わない
+- [ ] キーボードだけで全部操作できる。フォーカスの枠が見える（`:focus-visible`、マウスでは出ない）。見出しなどプログラムで動かすフォーカスには枠を出さない（`tabIndex={-1}`）
+- [ ] 操作でボタンが消えたら、フォーカスを近くの見出しや次の項目に移す（例：プレビュー用のリンクの取り消し）
+- [ ] ダイアログはフォーカスを閉じ込め、Escape で閉じ、開いたボタンにフォーカスを戻す（`Dialog`・`confirm` が行う）
+- [ ] 状態の変化は読み上げる：結果は `notify`、画面の中の変化は `role="status"` や `aria-live="polite"`（例：「保存していない変更があります」）
+- [ ] 押す場所は 36px 以上（第2章）
+- [ ] 時間制限なし（通知は自動で消さない）。動きを減らす設定のときはアニメーションしない（`respectReducedMotion`）
+- [ ] 新しいタブで開くリンクはそう伝える（`ExternalLink`）
+- [ ] 画像には `alt`。飾りのアイコンは `aria-hidden="true"`
+- [ ] 日本語入力（IME）の変換中の Enter で送信・決定しない（`e.nativeEvent.isComposing` を見る）
+- [ ] 320px 幅（拡大 400%）でも横にスクロールせずに読める
+
+## 8. 一覧の作り方（DataList パターン）
+
+ものの一覧は `ResponsiveList` で作ります。列の定義は1回だけ書き、PC（768px 以上）では表、スマホではカードの縦並びになります。
+
+```tsx
+<ResponsiveList
+  items={tags}
+  getKey={(t) => t.id}
+  caption="タグの一覧（名前の順）"          // 読み上げ用の名前
+  columns={[
+    // 1列目はその行の「名前」。スマホではカードの見出しになる。詳細画面へのリンクはここ
+    { key: "name", header: "名前", render: (t) => <AnchorLink to=…>{t.name}</AnchorLink> },
+    { key: "slug", header: "URL（英数字）", render: (t) => <Code>{t.slug}</Code> },
+    { key: "updatedAt", header: "最終更新", nowrap: true, render: (t) => formatDateTime(t.updatedAt) },
+  ]}
+  actions={(t) => (                          // PC では右端の列、スマホではカードの下
+    <>
+      <Button size="sm" onClick={…} aria-label={`「${t.name}」を編集`}>編集</Button>
+      <Button size="sm" variant="subtle" color="red" onClick={…} aria-label={`「${t.name}」を削除`}>削除</Button>
+    </>
+  )}
+/>
+```
+
+- 列は4つくらいまで。多いときは大事なものだけにし、残りは詳細画面へ
+- スマホのカードでは2列目以降が「項目名：値」で並ぶ。`header` は短く（6文字くらいまで）
+- 一覧の上の「読み込み中」「エラー」「空」は呼ぶ側で出す（`Loading`・`ErrorMessage`・`EmptyState`）
+- 件数が多い一覧は「もっと見る」で続きを読み込む（お問い合わせの画面）。絞り込みや検索を足すときは一覧の上、`PageHeader` の下に置く
+- 階層（固定ページ、カテゴリ）は1列目を字下げして表す
+- テストでは jsdom の幅（1024px）で表になる。カードを試すときは描画の前に `window.innerWidth = 390`（`src/test/setup.ts`）
+
+## 9. テストの決まり
+
+- Vitest は `MantineProvider env="test"`（アニメーションとポータルなし）で動く。`App` を使う `renderApp()` ならそのまま使える。部品だけを試すときは `src/components/ui/ui.test.tsx` の `wrap()` を参考に
+- jsdom に足りない `matchMedia`・`ResizeObserver`・`document.fonts` は `src/test/setup.ts` で補っている。通知とダイアログはテストごとに消している
+- 必須の欄のラベルの文字には「 *」（画面では「必須」と表示、読み上げでは無視）が含まれるので、`getByLabelText(/サイトの名前/)` のように正規表現で探す
+- 確認ダイアログは `getByRole("alertdialog", { name: "…しますか？" })`、通知は `findByText("…しました。")`、エラーは `findByRole("alert")`
+- E2E は `reducedMotion: "reduce"` で動く（アニメーションの途中を axe が見ないように）
+
+## 10. 移行の状況（2026年11月）
+
+Tailwind と Radix は取り除き、すべての画面の部品（ボタン、入力欄、ダイアログ、確認、バッジ、通知）は Mantine と上の共通部品に置き換え済みです。見た目はそろいましたが、**画面の構成はまだ以前のまま**です。次の作業で組み直します。
+
+- **記事・固定ページの編集**（`pages/EditorPage.tsx`、`editor/*`、`components/ScheduleDialog.tsx`・`PreviewLinksDialog.tsx`・`TagPicker.tsx`・`CategoryCheckboxes.tsx`）
+  - 操作ボタンが画面下の固定バーに横一列（スマホでは3段になり本文を隠す）。「詳細設定」が素の `<details>`（`EditorPage.module.css`）
+  - 案：PC は本文＋右の設定パネル（状態・公開・予約・URL・カテゴリ・タグ）、上のバーに「下書き保存」と主ボタン「公開する」。スマホは設定を引き出しに
+  - ツールバーは独自の CSS（`editor/Toolbar.module.css`）と独自の矢印キー移動。Mantine の `Toolbar` に替えてもよい（キーボード操作の E2E を守る）
+  - 予約の日付・時刻は `.pw-input`（素の input）。`@mantine/dates` に替えるなら、E2E の `getByLabel("日付").fill("2099-12-01")` を直す
+- **ホームと一覧**（`pages/HomePage.tsx`、`ContentListPage.tsx`、`CategoriesPage.tsx`、`TagsPage.tsx`、`SubmissionsPage.tsx`）
+  - ホームはサイドバーと同じリンクのカードを並べているだけ。下書き・予約・最近の更新・お問い合わせの件数など「次にやること」が見える画面にする
+  - 記事・固定ページの一覧に検索・状態での絞り込みがない
+  - カテゴリとタグは「追加」のフォームが一覧の上に常に出ている。`PageHeader` の主ボタン「追加」＋ `Dialog` にするかは判断して決める
+  - 「画像」（メディアライブラリ）の画面はまだない。作るならサイドバーの `navGroups` に足し、`editor/MediaDialog.tsx` の `UploadForm`・`MediaPicker` を使う
+- **サイトの設定**（`pages/SiteSettingsPage.tsx`、`components/ColorField.tsx`・`MenuEditor.tsx`）
+  - 1枚の長いフォームに `Section` が5つ並び、保存ボタンは最後だけ。セクションへの移動（目次やタブ）や、保存ボタンを常に見えるようにすることを検討する
+  - `ColorField` は `.pw-input` の素の input と `<input type="color">`。Mantine の `ColorInput` に替えるなら、コントラスト比の説明が両方の欄にひもづくことを確かめる
