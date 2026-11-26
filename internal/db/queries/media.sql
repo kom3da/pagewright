@@ -9,4 +9,7 @@ RETURNING *;
 SELECT * FROM media WHERE id = $1;
 
 -- name: ListMedia :many
-SELECT * FROM media ORDER BY id;
+SELECT * FROM media ORDER BY id DESC;
+
+-- name: UpdateMediaAlt :one
+UPDATE media SET alt_text = @alt_text WHERE id = @id RETURNING *;

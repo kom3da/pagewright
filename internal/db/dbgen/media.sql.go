@@ -82,7 +82,7 @@ func (q *Queries) GetMedia(ctx context.Context, id int64) (Medium, error) {
 }
 
 const listMedia = `-- name: ListMedia :many
-SELECT tenant_id, id, storage_key, filename, content_type, size_bytes, width, height, alt_text, uploaded_by, created_at FROM media ORDER BY id
+SELECT tenant_id, id, storage_key, filename, content_type, size_bytes, width, height, alt_text, uploaded_by, created_at FROM media ORDER BY id DESC
 `
 
 func (q *Queries) ListMedia(ctx context.Context) ([]Medium, error) {
@@ -115,4 +115,32 @@ func (q *Queries) ListMedia(ctx context.Context) ([]Medium, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateMediaAlt = `-- name: UpdateMediaAlt :one
+UPDATE media SET alt_text = $1 WHERE id = $2 RETURNING tenant_id, id, storage_key, filename, content_type, size_bytes, width, height, alt_text, uploaded_by, created_at
+`
+
+type UpdateMediaAltParams struct {
+	AltText string
+	ID      int64
+}
+
+func (q *Queries) UpdateMediaAlt(ctx context.Context, arg UpdateMediaAltParams) (Medium, error) {
+	row := q.db.QueryRow(ctx, updateMediaAlt, arg.AltText, arg.ID)
+	var i Medium
+	err := row.Scan(
+		&i.TenantID,
+		&i.ID,
+		&i.StorageKey,
+		&i.Filename,
+		&i.ContentType,
+		&i.SizeBytes,
+		&i.Width,
+		&i.Height,
+		&i.AltText,
+		&i.UploadedBy,
+		&i.CreatedAt,
+	)
+	return i, err
 }

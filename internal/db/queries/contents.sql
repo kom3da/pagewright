@@ -12,15 +12,56 @@ SELECT * FROM contents WHERE id = $1;
 SELECT * FROM contents WHERE number = $1;
 
 -- name: ListContents :many
--- Contents of a type with the title of their latest revision.
-SELECT c.*, coalesce(r.title, '')::text AS title
+-- Contents of a type, newest number first, with the title and id of their
+-- latest revision and their canonical URL.
+SELECT c.*, coalesce(lr.title, '')::text AS title, coalesce(lr.id, 0)::bigint AS latest_revision_id,
+  r.path AS url
 FROM contents c
 LEFT JOIN LATERAL (
-  SELECT title FROM content_revisions
+  SELECT id, title FROM content_revisions
   WHERE content_id = c.id ORDER BY id DESC LIMIT 1
-) r ON true
+) lr ON true
+LEFT JOIN routes r ON r.content_id = c.id AND r.kind = 'canonical'
 WHERE c.type = $1
 ORDER BY c.number DESC;
+
+-- name: GetContentURL :one
+SELECT r.path FROM routes r WHERE r.content_id = $1 AND r.kind = 'canonical';
+
+-- name: TouchContent :exec
+UPDATE contents SET updated_at = now() WHERE id = $1;
+
+-- name: UpdateContentSlug :exec
+UPDATE contents SET slug = @slug, updated_at = now() WHERE id = @id;
+
+-- name: UpdateContentParent :exec
+UPDATE contents SET parent_id = @parent_id, updated_at = now() WHERE id = @id;
+
+-- name: ContentAncestry :many
+-- The content and its ancestors, root first.
+WITH RECURSIVE chain AS (
+  SELECT c.id, c.parent_id, c.slug, c.number, 0 AS depth FROM contents c WHERE c.id = $1
+  UNION ALL
+  SELECT p.id, p.parent_id, p.slug, p.number, chain.depth + 1
+  FROM contents p JOIN chain ON p.id = chain.parent_id
+  WHERE chain.depth < 32
+)
+SELECT chain.id, chain.slug, chain.number FROM chain ORDER BY chain.depth DESC;
+
+-- name: ListChildContentIDs :many
+SELECT id FROM contents WHERE parent_id = $1 ORDER BY id;
+
+-- name: ListContentCategoryIDs :many
+SELECT category_id FROM content_categories WHERE content_id = $1 ORDER BY category_id;
+
+-- name: ListContentTagIDs :many
+SELECT tag_id FROM content_tags WHERE content_id = $1 ORDER BY tag_id;
+
+-- name: ClearContentCategories :exec
+DELETE FROM content_categories WHERE content_id = $1;
+
+-- name: ClearContentTags :exec
+DELETE FROM content_tags WHERE content_id = $1;
 
 -- name: DeleteContent :execrows
 DELETE FROM contents WHERE id = $1;

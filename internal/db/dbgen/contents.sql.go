@@ -40,6 +40,62 @@ func (q *Queries) AddContentTag(ctx context.Context, arg AddContentTagParams) er
 	return err
 }
 
+const clearContentCategories = `-- name: ClearContentCategories :exec
+DELETE FROM content_categories WHERE content_id = $1
+`
+
+func (q *Queries) ClearContentCategories(ctx context.Context, contentID int64) error {
+	_, err := q.db.Exec(ctx, clearContentCategories, contentID)
+	return err
+}
+
+const clearContentTags = `-- name: ClearContentTags :exec
+DELETE FROM content_tags WHERE content_id = $1
+`
+
+func (q *Queries) ClearContentTags(ctx context.Context, contentID int64) error {
+	_, err := q.db.Exec(ctx, clearContentTags, contentID)
+	return err
+}
+
+const contentAncestry = `-- name: ContentAncestry :many
+WITH RECURSIVE chain AS (
+  SELECT c.id, c.parent_id, c.slug, c.number, 0 AS depth FROM contents c WHERE c.id = $1
+  UNION ALL
+  SELECT p.id, p.parent_id, p.slug, p.number, chain.depth + 1
+  FROM contents p JOIN chain ON p.id = chain.parent_id
+  WHERE chain.depth < 32
+)
+SELECT chain.id, chain.slug, chain.number FROM chain ORDER BY chain.depth DESC
+`
+
+type ContentAncestryRow struct {
+	ID     int64
+	Slug   *string
+	Number int64
+}
+
+// The content and its ancestors, root first.
+func (q *Queries) ContentAncestry(ctx context.Context, id int64) ([]ContentAncestryRow, error) {
+	rows, err := q.db.Query(ctx, contentAncestry, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ContentAncestryRow
+	for rows.Next() {
+		var i ContentAncestryRow
+		if err := rows.Scan(&i.ID, &i.Slug, &i.Number); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createContent = `-- name: CreateContent :one
 INSERT INTO contents (type, slug, parent_id, author_id)
 VALUES ($1, $2, $3, $4)
@@ -201,6 +257,17 @@ func (q *Queries) GetContentByNumber(ctx context.Context, number int64) (Content
 	return i, err
 }
 
+const getContentURL = `-- name: GetContentURL :one
+SELECT r.path FROM routes r WHERE r.content_id = $1 AND r.kind = 'canonical'
+`
+
+func (q *Queries) GetContentURL(ctx context.Context, contentID *int64) (string, error) {
+	row := q.db.QueryRow(ctx, getContentURL, contentID)
+	var path string
+	err := row.Scan(&path)
+	return path, err
+}
+
 const getLatestRevision = `-- name: GetLatestRevision :one
 SELECT tenant_id, id, content_id, title, body, body_schema_version, fields, created_by, created_at FROM content_revisions WHERE content_id = $1 ORDER BY id DESC LIMIT 1
 `
@@ -222,13 +289,87 @@ func (q *Queries) GetLatestRevision(ctx context.Context, contentID int64) (Conte
 	return i, err
 }
 
+const listChildContentIDs = `-- name: ListChildContentIDs :many
+SELECT id FROM contents WHERE parent_id = $1 ORDER BY id
+`
+
+func (q *Queries) ListChildContentIDs(ctx context.Context, parentID *int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listChildContentIDs, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listContentCategoryIDs = `-- name: ListContentCategoryIDs :many
+SELECT category_id FROM content_categories WHERE content_id = $1 ORDER BY category_id
+`
+
+func (q *Queries) ListContentCategoryIDs(ctx context.Context, contentID int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listContentCategoryIDs, contentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var category_id int64
+		if err := rows.Scan(&category_id); err != nil {
+			return nil, err
+		}
+		items = append(items, category_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listContentTagIDs = `-- name: ListContentTagIDs :many
+SELECT tag_id FROM content_tags WHERE content_id = $1 ORDER BY tag_id
+`
+
+func (q *Queries) ListContentTagIDs(ctx context.Context, contentID int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listContentTagIDs, contentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var tag_id int64
+		if err := rows.Scan(&tag_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tag_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listContents = `-- name: ListContents :many
-SELECT c.tenant_id, c.id, c.number, c.type, c.slug, c.parent_id, c.author_id, c.published_revision_id, c.scheduled_revision_id, c.scheduled_at, c.published_at, c.source_format, c.source_body, c.created_at, c.updated_at, coalesce(r.title, '')::text AS title
+SELECT c.tenant_id, c.id, c.number, c.type, c.slug, c.parent_id, c.author_id, c.published_revision_id, c.scheduled_revision_id, c.scheduled_at, c.published_at, c.source_format, c.source_body, c.created_at, c.updated_at, coalesce(lr.title, '')::text AS title, coalesce(lr.id, 0)::bigint AS latest_revision_id,
+  r.path AS url
 FROM contents c
 LEFT JOIN LATERAL (
-  SELECT title FROM content_revisions
+  SELECT id, title FROM content_revisions
   WHERE content_id = c.id ORDER BY id DESC LIMIT 1
-) r ON true
+) lr ON true
+LEFT JOIN routes r ON r.content_id = c.id AND r.kind = 'canonical'
 WHERE c.type = $1
 ORDER BY c.number DESC
 `
@@ -250,9 +391,12 @@ type ListContentsRow struct {
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
 	Title               string
+	LatestRevisionID    int64
+	Url                 *string
 }
 
-// Contents of a type with the title of their latest revision.
+// Contents of a type, newest number first, with the title and id of their
+// latest revision and their canonical URL.
 func (q *Queries) ListContents(ctx context.Context, type_ string) ([]ListContentsRow, error) {
 	rows, err := q.db.Query(ctx, listContents, type_)
 	if err != nil {
@@ -279,6 +423,8 @@ func (q *Queries) ListContents(ctx context.Context, type_ string) ([]ListContent
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Title,
+			&i.LatestRevisionID,
+			&i.Url,
 		); err != nil {
 			return nil, err
 		}
@@ -310,4 +456,41 @@ func (q *Queries) PublishRevision(ctx context.Context, arg PublishRevisionParams
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const touchContent = `-- name: TouchContent :exec
+UPDATE contents SET updated_at = now() WHERE id = $1
+`
+
+func (q *Queries) TouchContent(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, touchContent, id)
+	return err
+}
+
+const updateContentParent = `-- name: UpdateContentParent :exec
+UPDATE contents SET parent_id = $1, updated_at = now() WHERE id = $2
+`
+
+type UpdateContentParentParams struct {
+	ParentID *int64
+	ID       int64
+}
+
+func (q *Queries) UpdateContentParent(ctx context.Context, arg UpdateContentParentParams) error {
+	_, err := q.db.Exec(ctx, updateContentParent, arg.ParentID, arg.ID)
+	return err
+}
+
+const updateContentSlug = `-- name: UpdateContentSlug :exec
+UPDATE contents SET slug = $1, updated_at = now() WHERE id = $2
+`
+
+type UpdateContentSlugParams struct {
+	Slug *string
+	ID   int64
+}
+
+func (q *Queries) UpdateContentSlug(ctx context.Context, arg UpdateContentSlugParams) error {
+	_, err := q.db.Exec(ctx, updateContentSlug, arg.Slug, arg.ID)
+	return err
 }

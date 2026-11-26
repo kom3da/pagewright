@@ -45,6 +45,84 @@ func (q *Queries) CreateRoute(ctx context.Context, arg CreateRouteParams) (Route
 	return i, err
 }
 
+const deleteRoute = `-- name: DeleteRoute :exec
+DELETE FROM routes WHERE id = $1
+`
+
+func (q *Queries) DeleteRoute(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, deleteRoute, id)
+	return err
+}
+
+const demoteRouteToRedirect = `-- name: DemoteRouteToRedirect :exec
+UPDATE routes SET kind = 'redirect' WHERE id = $1
+`
+
+func (q *Queries) DemoteRouteToRedirect(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, demoteRouteToRedirect, id)
+	return err
+}
+
+const getCanonicalRouteForCategory = `-- name: GetCanonicalRouteForCategory :one
+SELECT tenant_id, id, path, kind, content_id, category_id, tag_id, created_at FROM routes WHERE category_id = $1 AND kind = 'canonical'
+`
+
+func (q *Queries) GetCanonicalRouteForCategory(ctx context.Context, categoryID *int64) (Route, error) {
+	row := q.db.QueryRow(ctx, getCanonicalRouteForCategory, categoryID)
+	var i Route
+	err := row.Scan(
+		&i.TenantID,
+		&i.ID,
+		&i.Path,
+		&i.Kind,
+		&i.ContentID,
+		&i.CategoryID,
+		&i.TagID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getCanonicalRouteForContent = `-- name: GetCanonicalRouteForContent :one
+SELECT tenant_id, id, path, kind, content_id, category_id, tag_id, created_at FROM routes WHERE content_id = $1 AND kind = 'canonical'
+`
+
+func (q *Queries) GetCanonicalRouteForContent(ctx context.Context, contentID *int64) (Route, error) {
+	row := q.db.QueryRow(ctx, getCanonicalRouteForContent, contentID)
+	var i Route
+	err := row.Scan(
+		&i.TenantID,
+		&i.ID,
+		&i.Path,
+		&i.Kind,
+		&i.ContentID,
+		&i.CategoryID,
+		&i.TagID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getCanonicalRouteForTag = `-- name: GetCanonicalRouteForTag :one
+SELECT tenant_id, id, path, kind, content_id, category_id, tag_id, created_at FROM routes WHERE tag_id = $1 AND kind = 'canonical'
+`
+
+func (q *Queries) GetCanonicalRouteForTag(ctx context.Context, tagID *int64) (Route, error) {
+	row := q.db.QueryRow(ctx, getCanonicalRouteForTag, tagID)
+	var i Route
+	err := row.Scan(
+		&i.TenantID,
+		&i.ID,
+		&i.Path,
+		&i.Kind,
+		&i.ContentID,
+		&i.CategoryID,
+		&i.TagID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getRouteByPath = `-- name: GetRouteByPath :one
 SELECT tenant_id, id, path, kind, content_id, category_id, tag_id, created_at FROM routes WHERE path = $1
 `

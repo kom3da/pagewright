@@ -7,3 +7,4 @@ web/admin/dist/
 *.local
 .DS_Store
 coverage/
+/data/

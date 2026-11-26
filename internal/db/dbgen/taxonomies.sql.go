@@ -9,6 +9,38 @@ import (
 	"context"
 )
 
+const categoryAncestorIDs = `-- name: CategoryAncestorIDs :many
+WITH RECURSIVE chain AS (
+  SELECT c.id, c.parent_id, 0 AS depth FROM categories c WHERE c.id = $1
+  UNION ALL
+  SELECT p.id, p.parent_id, chain.depth + 1
+  FROM categories p JOIN chain ON p.id = chain.parent_id
+  WHERE chain.depth < 32
+)
+SELECT chain.id FROM chain
+`
+
+// Ids of the category and its ancestors (for cycle checks).
+func (q *Queries) CategoryAncestorIDs(ctx context.Context, id int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, categoryAncestorIDs, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createCategory = `-- name: CreateCategory :one
 INSERT INTO categories (parent_id, name, slug, position)
 VALUES ($1, $2, $3, $4)
@@ -53,6 +85,66 @@ type CreateTagParams struct {
 
 func (q *Queries) CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error) {
 	row := q.db.QueryRow(ctx, createTag, arg.Name, arg.Slug)
+	var i Tag
+	err := row.Scan(
+		&i.TenantID,
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const deleteCategory = `-- name: DeleteCategory :execrows
+DELETE FROM categories WHERE id = $1
+`
+
+func (q *Queries) DeleteCategory(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteCategory, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteTag = `-- name: DeleteTag :execrows
+DELETE FROM tags WHERE id = $1
+`
+
+func (q *Queries) DeleteTag(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteTag, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getCategory = `-- name: GetCategory :one
+SELECT tenant_id, id, parent_id, name, slug, position, created_at FROM categories WHERE id = $1
+`
+
+func (q *Queries) GetCategory(ctx context.Context, id int64) (Category, error) {
+	row := q.db.QueryRow(ctx, getCategory, id)
+	var i Category
+	err := row.Scan(
+		&i.TenantID,
+		&i.ID,
+		&i.ParentID,
+		&i.Name,
+		&i.Slug,
+		&i.Position,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getTag = `-- name: GetTag :one
+SELECT tenant_id, id, name, slug, created_at FROM tags WHERE id = $1
+`
+
+func (q *Queries) GetTag(ctx context.Context, id int64) (Tag, error) {
+	row := q.db.QueryRow(ctx, getTag, id)
 	var i Tag
 	err := row.Scan(
 		&i.TenantID,
@@ -192,4 +284,45 @@ func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateCategory = `-- name: UpdateCategory :one
+UPDATE categories SET
+  name = coalesce($1, name),
+  slug = coalesce($2, slug),
+  parent_id = CASE WHEN $3::boolean THEN $4 ELSE parent_id END,
+  position = coalesce($5, position)
+WHERE id = $6
+RETURNING tenant_id, id, parent_id, name, slug, position, created_at
+`
+
+type UpdateCategoryParams struct {
+	Name      *string
+	Slug      *string
+	SetParent bool
+	ParentID  *int64
+	Position  *int64
+	ID        int64
+}
+
+func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error) {
+	row := q.db.QueryRow(ctx, updateCategory,
+		arg.Name,
+		arg.Slug,
+		arg.SetParent,
+		arg.ParentID,
+		arg.Position,
+		arg.ID,
+	)
+	var i Category
+	err := row.Scan(
+		&i.TenantID,
+		&i.ID,
+		&i.ParentID,
+		&i.Name,
+		&i.Slug,
+		&i.Position,
+		&i.CreatedAt,
+	)
+	return i, err
 }
