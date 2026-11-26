@@ -18,7 +18,7 @@ mise exec -- pnpm dev:mock   # Go 本体なしで、モックの API（MSW）で
 mise exec -- pnpm test       # Vitest（API は MSW でモック。axe による検査も含む）
 mise exec -- pnpm lint       # Biome（`pnpm format` で自動修正）
 mise exec -- pnpm build      # dist/ に出力。Go 本体が go:embed で /admin/ に埋め込む
-mise exec -- pnpm e2e        # Playwright＋axe。モック版をビルドして :5175 で動かす
+mise exec -- pnpm e2e        # Playwright＋axe。モック版をビルドして :5175 で動かす（PW_PORT=5197 のように変えられる）
 ```
 
 - `dev:mock` は最初からログイン済み。ログインの確認は `/admin/login/verify?token=valid-token`。データはページを読み込み直すと初期状態に戻る
