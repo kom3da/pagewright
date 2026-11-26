@@ -598,6 +598,14 @@ func TestSchedule(t *testing.T) {
 	if d.Status != "draft" || d.ScheduledAt != nil {
 		t.Errorf("after unschedule = %+v, want draft", d)
 	}
+
+	// Publishing now drops a pending schedule, so it cannot republish an
+	// older revision later.
+	alice.mustDo(http.MethodPost, path, map[string]any{"publishAt": at}, &d, http.StatusOK)
+	alice.mustDo(http.MethodPost, fmt.Sprintf("/api/contents/%d/publish", d.ID), nil, &d, http.StatusOK)
+	if d.Status != "published" || d.ScheduledAt != nil {
+		t.Errorf("after publishing now = %+v, want published without a schedule", d)
+	}
 }
 
 func TestErrorField(t *testing.T) {

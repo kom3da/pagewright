@@ -28,6 +28,8 @@ type contentSummary struct {
 	URL                   *string    `json:"url"`
 	PublishedAt           *time.Time `json:"publishedAt"`
 	ScheduledAt           *time.Time `json:"scheduledAt"`
+	ScheduledRevisionID   *int64     `json:"scheduledRevisionId"`
+	LatestRevisionID      int64      `json:"latestRevisionId"`
 	ParentID              *int64     `json:"parentId"`
 	UpdatedAt             time.Time  `json:"updatedAt"`
 }
@@ -47,7 +49,6 @@ type contentDetail struct {
 	TagIDs              []int64      `json:"tagIds"`
 	Revision            revisionJSON `json:"revision"`
 	PublishedRevisionID *int64       `json:"publishedRevisionId"`
-	ScheduledRevisionID *int64       `json:"scheduledRevisionId"`
 }
 
 func status(c dbgen.Content) string {
@@ -65,6 +66,7 @@ func summary(c dbgen.Content, title string, latestRevisionID int64, url *string)
 		ID: c.ID, Number: c.Number, Type: c.Type, Title: title, Slug: c.Slug, Status: status(c),
 		HasUnpublishedChanges: c.PublishedRevisionID != nil && *c.PublishedRevisionID != latestRevisionID,
 		URL:                   url, PublishedAt: c.PublishedAt, ScheduledAt: c.ScheduledAt, ParentID: c.ParentID,
+		ScheduledRevisionID: c.ScheduledRevisionID, LatestRevisionID: latestRevisionID,
 		UpdatedAt: c.UpdatedAt,
 	}
 }
@@ -136,7 +138,6 @@ func loadDetail(ctx context.Context, q *dbgen.Queries, id int64) (contentDetail,
 			Fields: rev.Fields, CreatedAt: rev.CreatedAt,
 		},
 		PublishedRevisionID: c.PublishedRevisionID,
-		ScheduledRevisionID: c.ScheduledRevisionID,
 	}, nil
 }
 
@@ -237,7 +238,7 @@ func (s *Server) saveDraft(w http.ResponseWriter, r *http.Request, sess *session
 			return err
 		}
 		if in.BaseRevisionID != nil && *in.BaseRevisionID != prev.ID {
-			return &apiError{http.StatusConflict, "edit_conflict", "ほかの人がこの内容を先に保存しました。いまの編集内容を控えてから、画面を読み込み直してください"}
+			return &apiError{http.StatusConflict, "edit_conflict", "ほかの人がこの内容を先に保存しました"}
 		}
 		if sess.role != "admin" {
 			prevDoc, err := body.Parse(prev.Body)
@@ -458,6 +459,11 @@ func (s *Server) setPublished(w http.ResponseWriter, r *http.Request, sess *sess
 			rev = &latest.ID
 		}
 		if _, err := q.PublishRevision(ctx, dbgen.PublishRevisionParams{ContentID: id, RevisionID: rev}); err != nil {
+			return err
+		}
+		// Publishing now or unpublishing supersedes any schedule: a pending
+		// one would otherwise republish an older revision later.
+		if _, err := q.ScheduleRevision(ctx, dbgen.ScheduleRevisionParams{ContentID: id}); err != nil {
 			return err
 		}
 		if publish {
