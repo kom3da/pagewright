@@ -65,6 +65,8 @@ export type ContentPatch = {
   parentId?: number | null;
   categoryIds?: number[];
   tagIds?: number[];
+  /** The date shown on the site (RFC 3339). Past only: a future date is 422 invalid_published_at. */
+  publishedAt?: string;
 };
 
 export type Category = {

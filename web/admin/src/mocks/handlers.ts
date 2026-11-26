@@ -254,6 +254,7 @@ const errorFields: Record<string, string> = {
   invalid_parent: "parentId",
   invalid_name: "name",
   invalid_publish_at: "publishAt",
+  invalid_published_at: "publishedAt",
   invalid_days: "days",
   alt_required: "altText",
   file_required: "file",
@@ -634,6 +635,17 @@ export const handlers = [
       if (db.contents.some((o) => o.id !== c.id && o.type === c.type && o.slug === input.slug)) {
         return error(409, "conflict", "このURLはすでに使われています。別のURLにしてください。");
       }
+    }
+    if (input.publishedAt !== undefined && input.publishedAt !== null) {
+      const at = new Date(input.publishedAt);
+      if (Number.isNaN(at.getTime()) || at.getTime() > Date.now() + 60_000) {
+        return error(
+          422,
+          "invalid_published_at",
+          "公開日は今より前の日時にしてください。先の日時に公開するときは「日時を指定して公開」を使ってください",
+        );
+      }
+      c.publishedAt = at.toISOString().replace(".000Z", "Z");
     }
     Object.assign(c, {
       ...("slug" in input && { slug: input.slug }),
