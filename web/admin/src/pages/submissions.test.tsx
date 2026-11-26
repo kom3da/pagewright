@@ -4,7 +4,7 @@ import { db } from "../mocks/handlers";
 import { expectNoAxeViolations, recordRequests, renderApp } from "../test/utils";
 
 describe("contact messages", () => {
-  it("lists messages newest first with date, name, e-mail and the first line", async () => {
+  it("lists messages newest first with name, date, the first line and e-mail", async () => {
     renderApp("/inquiries");
     const table = await screen.findByRole("table", { name: /お問い合わせの一覧（2件を表示）/ });
     const rows = within(table).getAllByRole("row").slice(1);
@@ -17,14 +17,29 @@ describe("contact messages", () => {
       ),
     ).toEqual([
       [
-        "2026/11/21 12:15",
         "佐藤花子",
-        "hanako@example.jp",
+        "2026/11/21 12:15",
         "キッチンのリフォームについて相談したいです。",
+        "hanako@example.jp",
       ],
-      ["2026/11/20 8:40", "鈴木一郎", "ichiro@example.com", "見学会の日程を教えてください。"],
+      ["鈴木一郎", "2026/11/20 8:40", "見学会の日程を教えてください。", "ichiro@example.com"],
     ]);
     expect(screen.getByText(/個人情報が含まれます/)).toBeInTheDocument();
+    await expectNoAxeViolations();
+  });
+
+  it("opens a message from its card on a phone and returns focus", async () => {
+    window.innerWidth = 390;
+    const { user } = renderApp("/inquiries");
+    const list = await screen.findByRole("list", { name: /お問い合わせの一覧/ });
+    const open = within(list).getByRole("button", {
+      name: "鈴木一郎 さんからのお問い合わせを開く",
+    });
+    await user.click(open);
+    const dialog = await screen.findByRole("dialog", { name: "お問い合わせの内容" });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await waitFor(() => expect(open).toHaveFocus());
     await expectNoAxeViolations();
   });
 

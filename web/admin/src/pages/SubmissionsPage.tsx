@@ -1,4 +1,14 @@
-import { Button, DataList, EmptyState, Group, Paper, Stack, Text, Title } from "@mantine/core";
+import {
+  Anchor,
+  Button,
+  DataList,
+  EmptyState,
+  Group,
+  Paper,
+  Stack,
+  Text,
+  Title,
+} from "@mantine/core";
 import {
   useInfiniteQuery,
   useMutation,
@@ -93,24 +103,29 @@ function Submissions() {
             caption={`お問い合わせの一覧（${data.length}件を表示）`}
             columns={[
               {
+                key: "name",
+                header: "お名前",
+                render: (s) => (
+                  <Anchor
+                    component="button"
+                    type="button"
+                    fw={700}
+                    onClick={() => setOpen(s)}
+                    aria-label={`${s.name} さんからのお問い合わせを開く`}
+                  >
+                    {s.name}
+                  </Anchor>
+                ),
+              },
+              {
                 key: "createdAt",
-                header: "受け付けた日時",
+                header: "受付日時",
                 nowrap: true,
                 render: (s) => formatDateTime(s.createdAt),
               },
-              { key: "name", header: "お名前", render: (s) => s.name },
-              { key: "email", header: "メールアドレス", render: (s) => s.email },
               { key: "message", header: "内容", render: (s) => firstLine(s.message) },
+              { key: "email", header: "メール", render: (s) => s.email },
             ]}
-            actions={(s) => (
-              <Button
-                size="sm"
-                onClick={() => setOpen(s)}
-                aria-label={`${s.name} さんからのお問い合わせを開く`}
-              >
-                開く
-              </Button>
-            )}
           />
         )}
         {query.hasNextPage && (
