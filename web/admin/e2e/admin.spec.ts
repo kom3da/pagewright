@@ -61,6 +61,45 @@ test("lists and management screens are accessible", async ({ page }) => {
   }
 });
 
+test("home links to filtered lists; the filter follows back and forward", async ({ page }) => {
+  await page.goto("");
+  await page.getByRole("link", { name: "下書きの記事 1件を見る" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "記事の一覧" })).toBeVisible();
+  await expect(page.getByLabel("状態")).toHaveValue("draft");
+  await expect(page.getByRole("status").filter({ hasText: "下書きの記事：1件" })).toBeVisible();
+
+  const search = page.getByRole("search", { name: "記事を探す" });
+  await search.getByLabel("状態").selectOption({ label: "すべて" });
+  await search.getByLabel("タイトルやURLで探す").fill("営業");
+  await search.getByLabel("タイトルやURLで探す").press("Enter");
+  await expect(page.getByText("「営業」の記事：1件")).toBeVisible();
+  await expect(page.getByRole("row")).toHaveCount(2);
+  await expectAccessible(page);
+
+  await page.goBack();
+  await expect(page.getByRole("row")).toHaveCount(4);
+  await page.goBack();
+  await expect(page.getByLabel("状態")).toHaveValue("draft");
+  await page.goForward();
+  await page.goForward();
+  await expect(search.getByLabel("タイトルやURLで探す")).toHaveValue("営業");
+});
+
+test("categories are added from a dialog", async ({ page }) => {
+  await page.goto("categories");
+  await page.getByRole("button", { name: "カテゴリを追加" }).click();
+  const dialog = page.getByRole("dialog", { name: "カテゴリを追加" });
+  await expect(dialog.getByLabel(/カテゴリの名前/)).toBeVisible();
+  await expectAccessible(page);
+  await dialog.getByLabel(/カテゴリの名前/).fill("新築");
+  await dialog.getByLabel(/カテゴリのURL/).fill("new-house");
+  await dialog.getByRole("button", { name: "追加する" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("カテゴリ「新築」を追加しました。")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "新築", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "カテゴリを追加" })).toBeFocused();
+});
+
 test("site settings: contrast check, keyboard menu editing and saving", async ({ page }) => {
   await page.goto("settings");
   await expect(page.getByRole("heading", { level: 1, name: "サイトの設定" })).toBeVisible();
