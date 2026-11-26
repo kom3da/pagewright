@@ -54,8 +54,8 @@ type Options struct {
 	// <MediaRoot>/<tenantID>/<storage key> and points body images at them.
 	DownloadMedia bool
 	MediaRoot     string
-	// HTTPClient downloads media. Nil uses a client with a 30 second
-	// timeout.
+	// HTTPClient downloads media. Nil uses a client that reaches only
+	// public addresses, with a 30 second timeout.
 	HTTPClient *http.Client
 }
 
@@ -91,7 +91,7 @@ func ImportExport(ctx context.Context, d *db.DB, tenantID uuid.UUID, exp *model.
 		segments:   map[int64]string{},
 	}
 	if im.client == nil {
-		im.client = &http.Client{Timeout: 30 * time.Second}
+		im.client = publicClient()
 	}
 	if opts.DownloadMedia && opts.MediaRoot == "" && !opts.DryRun {
 		return Report{}, errors.New("MediaRoot is required to download media")

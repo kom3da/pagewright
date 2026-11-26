@@ -158,6 +158,12 @@ func writeFile(root, name string, data []byte) error {
 		return err
 	}
 	defer func() { _ = os.Remove(tmp.Name()) }()
+	// CreateTemp makes 0600 files; the web server reads media through the
+	// group, as with uploads (media.Store).
+	if err := tmp.Chmod(0o640); err != nil {
+		_ = tmp.Close()
+		return err
+	}
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
 		return err
