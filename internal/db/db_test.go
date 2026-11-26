@@ -52,7 +52,11 @@ func newTestEnv(t *testing.T) *testEnv {
 	if err != nil {
 		t.Fatalf("connect to test PostgreSQL (start it with `mise run dev`): %v", err)
 	}
-	t.Cleanup(func() { server.Close(ctx) })
+	t.Cleanup(func() {
+		if err := server.Close(ctx); err != nil {
+			t.Errorf("close server connection: %v", err)
+		}
+	})
 
 	name := "pw_test_" + randomHex(t)
 	if _, err := server.Exec(ctx, "CREATE DATABASE "+name); err != nil {
@@ -98,7 +102,11 @@ func newTestEnv(t *testing.T) *testEnv {
 func migrate(t *testing.T, cfg *pgx.ConnConfig) {
 	t.Helper()
 	sqlDB := stdlib.OpenDB(*cfg)
-	defer sqlDB.Close()
+	defer func() {
+		if err := sqlDB.Close(); err != nil {
+			t.Errorf("close migration connection: %v", err)
+		}
+	}()
 	p, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrations.FS)
 	if err != nil {
 		t.Fatal(err)
