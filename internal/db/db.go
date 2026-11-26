@@ -74,7 +74,7 @@ func warnPowerfulLogin(ctx context.Context, pool *pgxpool.Pool) {
 	err := pool.QueryRow(ctx, `SELECT r.rolsuper,
 		EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tableowner = session_user)
 		FROM pg_roles r WHERE r.rolname = session_user`).Scan(&super, &owner)
-	if err != nil || !(super || owner) {
+	if err != nil || (!super && !owner) {
 		return
 	}
 	slog.Warn("データベースに強い権限のユーザーで接続しています。本番では " + AppRole + " で接続してください（開発環境ならこのままで構いません）")
