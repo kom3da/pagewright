@@ -56,6 +56,7 @@ test("lists and management screens are accessible", async ({ page }) => {
     ["tags", "タグ"],
     ["settings", "サイトの設定"],
     ["inquiries", "お問い合わせ"],
+    ["members", "メンバー"],
     ["account", "アカウント"],
   ] as const) {
     await page.goto(path);
@@ -121,6 +122,50 @@ test("categories are added from a dialog", async ({ page }) => {
   await expect(page.getByText("カテゴリ「新築」を追加しました。")).toBeVisible();
   await expect(page.getByRole("cell", { name: "新築", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "カテゴリを追加" })).toBeFocused();
+});
+
+test("members: inviting from a dialog and the role change are accessible", async ({ page }) => {
+  await page.goto("members");
+  await page.getByRole("button", { name: "メンバーを招待" }).click();
+  const dialog = page.getByRole("dialog", { name: "メンバーを招待" });
+  await expect(dialog.getByLabel(/メールアドレス/)).toBeVisible();
+  await expectAccessible(page);
+  await dialog.getByLabel(/メールアドレス/).fill("ichiro@example.jp");
+  // The role is chosen with the keyboard.
+  await dialog.getByRole("radio", { name: /編集者/ }).focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(dialog.getByRole("radio", { name: /管理者/ })).toBeChecked();
+  await dialog.getByRole("button", { name: "招待のメールを送る" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("ichiro@example.jp に招待のメールを送りました。")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "ichiro@example.jp", exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "「佐藤花子」をサイトから外す" }).click();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await expectAccessible(page);
+  await page.getByRole("alertdialog").getByRole("button", { name: "外す" }).click();
+  await expect(page.getByText("「佐藤花子」をこのサイトから外しました。")).toBeVisible();
+  await expectAccessible(page);
+});
+
+test("the invitation link: log out of another account, then join", async ({ page }) => {
+  // The mock is logged in as taro@example.jp; the invitation is for jiro@example.jp.
+  await page.goto("invite/accept?token=invite-token");
+  await expect(page.getByRole("heading", { level: 1, name: "サイトへの招待" })).toBeVisible();
+  await expect(page.getByText(/いまは別のメールアドレス/)).toBeVisible();
+  await expectAccessible(page);
+  await page.getByRole("button", { name: "ログアウトする" }).click();
+  await expect(page.getByLabel("あなたの名前")).toBeVisible();
+  await expectAccessible(page);
+  await page.getByLabel("あなたの名前").fill("山田次郎");
+  await page.getByLabel("あなたの名前").press("Enter");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "ようこそ、山田次郎 さん" }),
+  ).toBeVisible();
+
+  await page.goto("invite/accept?token=expired-token");
+  await expect(page.getByRole("alert")).toContainText("有効期限");
+  await expectAccessible(page);
 });
 
 test("site settings: contrast check, keyboard menu editing and saving", async ({ page }) => {

@@ -40,3 +40,15 @@ SELECT auth_revoke_session(@token_hash::bytea, @session_id::bytea)::boolean AS o
 
 -- name: AuthRevokeOtherSessions :one
 SELECT auth_revoke_other_sessions(@token_hash::bytea)::bigint AS revoked;
+
+-- name: InvitationLookup :one
+SELECT i.site_name::text AS site_name, i.email::text AS email, i.role::text AS role,
+  i.expires_at::timestamptz AS expires_at, i.has_account::boolean AS has_account
+FROM invitation_lookup(@token_hash::bytea) AS i;
+
+-- name: AuthAcceptInvitation :one
+SELECT auth_accept_invitation(@token_hash::bytea, @session_hash::bytea, @new_session_hash::bytea,
+  @display_name::text, (@ttl_seconds::bigint || ' seconds')::interval)::text AS result;
+
+-- name: AuthSetDisplayName :one
+SELECT auth_set_display_name(@token_hash::bytea, @display_name::text)::boolean AS ok;

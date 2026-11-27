@@ -1,10 +1,12 @@
-import { Badge, Button, Group, Stack } from "@mantine/core";
+import { Badge, Button, Group, Stack, TextInput } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
-import { api, errorMessage } from "../api/client";
+import { useState } from "react";
+import { api, errorField, errorMessage } from "../api/client";
 import { meQuery, sessionsQuery } from "../api/queries";
 import type { Session } from "../api/types";
 import { confirm } from "../components/ui/confirm";
+import { Form } from "../components/ui/Form";
 import { ErrorMessage, Loading } from "../components/ui/feedback";
 import { notify } from "../components/ui/notify";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -93,6 +95,7 @@ export function AccountPage() {
     <>
       <PageHeader title="アカウント" description={`${me.user.email} でログインしています。`} />
       <Stack gap="xl">
+        <NameSection />
         <Section
           id={LIST_HEADING_ID}
           title="ログイン中の端末"
@@ -169,5 +172,58 @@ export function AccountPage() {
         )}
       </Stack>
     </>
+  );
+}
+
+/** The user's own display name, shown to the other members of every site they belong to. */
+function NameSection() {
+  const { data: me } = useSuspenseQuery(meQuery);
+  const queryClient = useQueryClient();
+  const [name, setName] = useState(me.user.displayName);
+  const save = useMutation({
+    mutationFn: () => api.setDisplayName(name.trim()),
+    onSuccess: (next) => {
+      queryClient.setQueryData(meQuery.queryKey, next);
+      setName(next.user.displayName);
+      notify(
+        next.user.displayName
+          ? "名前を保存しました。"
+          : "名前を消しました。名前の代わりにメールアドレスが表示されます。",
+      );
+    },
+  });
+  const fieldError =
+    errorField(save.error) === "displayName" ? errorMessage(save.error) : undefined;
+
+  return (
+    <Section
+      title="名前"
+      description="管理画面で、ほかのメンバーに見える名前です。あなたが参加しているすべてのサイトで同じ名前になります。"
+    >
+      <Form
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate();
+        }}
+        gap="md"
+      >
+        <TextInput
+          label="あなたの名前"
+          description="例：山田 太郎。空にすると、名前の代わりにメールアドレスが表示されます。"
+          autoComplete="name"
+          maxLength={50}
+          maw="28rem"
+          value={name}
+          onChange={(e) => setName(e.currentTarget.value)}
+          error={fieldError}
+        />
+        {save.isError && !fieldError && <ErrorMessage>{errorMessage(save.error)}</ErrorMessage>}
+        <Group>
+          <Button type="submit" variant="filled" loading={save.isPending}>
+            名前を保存する
+          </Button>
+        </Group>
+      </Form>
+    </Section>
   );
 }

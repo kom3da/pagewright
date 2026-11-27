@@ -1,5 +1,5 @@
 import { Badge, Group } from "@mantine/core";
-import { CalendarClock, CircleAlert, CircleCheck, CircleDashed, PenLine } from "lucide-react";
+import { CalendarClock, CircleAlert, CircleCheck, CircleDashed, Mail, PenLine } from "lucide-react";
 import type { ContentStatus } from "../../api/types";
 
 /**
@@ -15,6 +15,9 @@ const statuses = {
   // Contact messages.
   unhandled: { label: "未対応", color: "orange", icon: CircleAlert },
   handled: { label: "対応済み", color: "green", icon: CircleCheck },
+  // Invitations.
+  invited: { label: "返事待ち", color: "gray", icon: Mail },
+  invitationExpired: { label: "期限切れ", color: "orange", icon: CircleAlert },
 } as const;
 
 export type StatusKind = keyof typeof statuses;

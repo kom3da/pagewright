@@ -20,7 +20,9 @@ import { AccountPage } from "./pages/AccountPage";
 import { CategoriesPage } from "./pages/CategoriesPage";
 import { ContentListPage, validateListSearch } from "./pages/ContentListPage";
 import { HomePage } from "./pages/HomePage";
+import { InviteAcceptPage } from "./pages/InviteAcceptPage";
 import { LoginPage } from "./pages/LoginPage";
+import { MembersPage } from "./pages/MembersPage";
 import { SelectSitePage } from "./pages/SelectSitePage";
 import { SiteSettingsPage } from "./pages/SiteSettingsPage";
 import { SubmissionsPage, validateSubmissionsSearch } from "./pages/SubmissionsPage";
@@ -92,6 +94,18 @@ const verifyRoute = createRoute({
   component: function Verify() {
     const { token } = verifyRoute.useSearch();
     return <VerifyPage token={token ?? ""} />;
+  },
+});
+
+/** The emailed invitation link. Works logged in or out: accepting it also logs in. */
+const inviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "invite/accept",
+  validateSearch: (search: Record<string, unknown>): { token?: string } =>
+    typeof search.token === "string" ? { token: search.token } : {},
+  component: function Invite() {
+    const { token } = inviteRoute.useSearch();
+    return <InviteAcceptPage token={token ?? ""} />;
   },
 });
 
@@ -176,6 +190,12 @@ const settingsRoute = createRoute({
   component: SiteSettingsPage,
 });
 
+const membersRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "members",
+  component: MembersPage,
+});
+
 const inquiriesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "inquiries",
@@ -188,6 +208,7 @@ const inquiriesRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   loginRoute,
   verifyRoute,
+  inviteRoute,
   selectSiteRoute,
   appRoute.addChildren([
     homeRoute,
@@ -199,6 +220,7 @@ const routeTree = rootRoute.addChildren([
     tagsRoute,
     settingsRoute,
     inquiriesRoute,
+    membersRoute,
     accountRoute,
   ]),
 ]);

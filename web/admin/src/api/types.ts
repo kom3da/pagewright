@@ -22,6 +22,42 @@ export type Session = {
   current: boolean;
 };
 
+/** Someone who can use the admin of the current site (GET /api/members). */
+export type Member = {
+  userId: string;
+  email: string;
+  /** "" when they have not set one. */
+  displayName: string;
+  role: Role;
+  /** When they joined the site. */
+  addedAt: string;
+  /** The logged-in user. */
+  you: boolean;
+};
+
+/** An invitation not yet accepted (GET /api/invitations). */
+export type Invitation = {
+  id: number;
+  email: string;
+  role: Role;
+  /** Who sent it last; null once they have left the site. */
+  invitedBy: string | null;
+  sentAt: string;
+  expiresAt: string;
+  expired: boolean;
+};
+
+/** What an invitation link is for (POST /api/invitations/lookup). */
+export type InvitationPreview = {
+  siteName: string;
+  email: string;
+  role: Role;
+  expiresAt: string;
+  expired: boolean;
+  /** Whether the address already has an account (then no name is asked). */
+  hasAccount: boolean;
+};
+
 export type ContentType = "post" | "page";
 export type ContentStatus = "draft" | "scheduled" | "published";
 

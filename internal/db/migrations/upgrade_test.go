@@ -203,7 +203,8 @@ func checkIsolation(t *testing.T, d *db.DB) {
 	}
 }
 
-// checkAuth looks up migrated sessions and preview links as the app does.
+// checkAuth looks up migrated sessions, preview links and invitations as
+// the app does.
 func checkAuth(t *testing.T, d *db.DB) {
 	ctx := context.Background()
 	hash := func(s string) []byte { h := sha256.Sum256([]byte(s)); return h[:] }
@@ -232,6 +233,17 @@ func checkAuth(t *testing.T, d *db.DB) {
 
 	if _, err := d.FindUserByEmail(ctx, "Carol@example.jp"); err != nil {
 		t.Errorf("find carol: %v", err)
+	}
+
+	var result string
+	err = d.Pool().QueryRow(ctx, "SELECT auth_accept_invitation($1, NULL, $2, '', interval '1 hour')",
+		hash("invite-dan"), hash("dan-session")).Scan(&result)
+	if err != nil || result != "joined" {
+		t.Fatalf("accept dan's invitation = %q, %v; want joined", result, err)
+	}
+	err = d.Pool().QueryRow(ctx, "SELECT tenant_id FROM auth_session($1)", hash("dan-session")).Scan(&tenant)
+	if err != nil || tenant != siteA {
+		t.Errorf("dan's session = site %s, %v; want site A", tenant, err)
 	}
 }
 

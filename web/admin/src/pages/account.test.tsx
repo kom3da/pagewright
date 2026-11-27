@@ -7,7 +7,7 @@ describe("account: logged-in devices", () => {
   it("is opened from the account menu and lists this device first", async () => {
     const { user, history } = renderApp("/");
     await user.click(await screen.findByRole("button", { name: /アカウントのメニュー/ }));
-    await user.click(await screen.findByRole("menuitem", { name: "ログイン中の端末" }));
+    await user.click(await screen.findByRole("menuitem", { name: "名前とログイン中の端末" }));
     expect(await screen.findByRole("heading", { level: 1, name: "アカウント" })).toBeVisible();
     expect(history.location.pathname).toBe("/admin/account");
     const table = await screen.findByRole("table", { name: "ログイン中の端末（3台）" });

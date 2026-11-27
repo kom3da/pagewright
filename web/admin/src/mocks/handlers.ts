@@ -6,10 +6,13 @@ import type {
   ContentDetail,
   ContentSummary,
   ContentType,
+  Invitation,
   Me,
   Media,
+  Member,
   MenuItem,
   PreviewLink,
+  Role,
   Session,
   SiteSettings,
   Submission,
@@ -33,6 +36,10 @@ type Db = {
   submissions: Submission[];
   /** The logged-in user's sessions; the one with `current` is this browser. */
   sessions: Session[];
+  /** Members of the current site (the mock keeps one list for every site). */
+  members: Member[];
+  /** The real server stores only a hash of the token; the mock keeps it for tests. */
+  invitations: (Invitation & { token: string })[];
   /** The real server stores only a hash of the token; the mock keeps it for tests. */
   previewLinks: (PreviewLink & { contentId: number; token: string })[];
   builds: number;
@@ -222,6 +229,54 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
         current: false,
       },
     ],
+    members: [
+      {
+        userId: "u1",
+        email: "taro@example.jp",
+        displayName: "山田太郎",
+        role: "admin",
+        addedAt: "2026-10-01T00:00:00Z",
+        you: true,
+      },
+      {
+        userId: "u2",
+        email: "hanako@example.jp",
+        displayName: "佐藤花子",
+        role: "editor",
+        addedAt: "2026-10-15T00:00:00Z",
+        you: false,
+      },
+      {
+        userId: "u3",
+        email: "staff@example.jp",
+        displayName: "",
+        role: "editor",
+        addedAt: "2026-11-02T00:00:00Z",
+        you: false,
+      },
+    ],
+    invitations: [
+      {
+        id: 2,
+        email: "jiro@example.jp",
+        role: "editor",
+        invitedBy: "山田太郎",
+        sentAt: "2026-11-20T00:00:00Z",
+        expiresAt: "2026-12-04T00:00:00Z",
+        expired: false,
+        token: "invite-token",
+      },
+      {
+        id: 1,
+        email: "old@example.jp",
+        role: "admin",
+        invitedBy: null,
+        sentAt: "2026-11-01T00:00:00Z",
+        expiresAt: "2026-11-08T00:00:00Z",
+        expired: true,
+        token: "expired-token",
+      },
+    ],
     previewLinks: [],
     builds: 0,
     buildLog: [
@@ -325,6 +380,10 @@ const errorFields: Record<string, string> = {
   invalid_logo: "logoMediaId",
   invalid_front_page: "frontPageId",
   invalid_privacy_page: "privacyPageId",
+  invalid_email: "email",
+  already_member: "email",
+  invalid_role: "role",
+  invalid_display_name: "displayName",
 };
 
 const error = (status: number, code: string, message: string) =>
@@ -580,8 +639,10 @@ export const handlers = [
   }),
 
   http.post("/api/auth/logout", ({ request }) => {
+    const denied = guard(request, { site: false });
+    if (denied) return denied;
     db.loggedIn = false;
-    return guard(request, { site: false }) ?? new HttpResponse(null, { status: 204 });
+    return new HttpResponse(null, { status: 204 });
   }),
 
   http.get("/api/me", ({ request }) => guard(request, { site: false }) ?? HttpResponse.json(db.me)),
@@ -619,6 +680,182 @@ export const handlers = [
     const revoked = db.sessions.filter((s) => !s.current).length;
     db.sessions = db.sessions.filter((s) => s.current);
     return HttpResponse.json({ revoked });
+  }),
+
+  http.patch("/api/me", async ({ request }) => {
+    const denied = guard(request, { site: false });
+    if (denied) return denied;
+    const { displayName } = (await request.json()) as { displayName: string };
+    const name = displayName.trim();
+    if ([...name].length > 50) {
+      return error(422, "invalid_display_name", "名前は50文字以内で入力してください");
+    }
+    db.me = { ...db.me, user: { ...db.me.user, displayName: name } };
+    for (const m of db.members) if (m.you) m.displayName = name;
+    return HttpResponse.json(db.me);
+  }),
+
+  http.get(
+    "/api/members",
+    ({ request }) => adminGuard(request, MEMBERS_ONLY) ?? HttpResponse.json(db.members),
+  ),
+
+  http.patch("/api/members/:id", async ({ request, params }) => {
+    const denied = adminGuard(request, MEMBERS_ONLY);
+    if (denied) return denied;
+    const m = db.members.find((x) => x.userId === params.id);
+    if (!m) return error(404, "not_found", "見つかりません。");
+    const { role } = (await request.json()) as { role: Role };
+    if (role !== "admin" && role !== "editor") {
+      return error(422, "invalid_role", "役割は「管理者」か「編集者」から選んでください");
+    }
+    if (m.role === "admin" && role !== "admin" && lastAdmin(m)) {
+      return error(
+        409,
+        "last_admin",
+        "管理者がいなくなるため、役割を変えられません。先にほかのメンバーを管理者にしてください",
+      );
+    }
+    m.role = role;
+    if (m.you) {
+      db.me = {
+        ...db.me,
+        sites: db.me.sites.map((s) => (s.id === db.me.currentSiteId ? { ...s, role } : s)),
+      };
+    }
+    return HttpResponse.json(m);
+  }),
+
+  http.delete("/api/members/:id", ({ request, params }) => {
+    const denied = adminGuard(request, MEMBERS_ONLY);
+    if (denied) return denied;
+    const m = db.members.find((x) => x.userId === params.id);
+    if (!m) return error(404, "not_found", "見つかりません。");
+    if (m.role === "admin" && lastAdmin(m)) {
+      return error(
+        409,
+        "last_admin",
+        "このサイトの管理者はこの人だけのため、外せません。先にほかのメンバーを管理者にしてください",
+      );
+    }
+    db.members = db.members.filter((x) => x !== m);
+    if (m.you) {
+      db.me = {
+        ...db.me,
+        sites: db.me.sites.filter((s) => s.id !== db.me.currentSiteId),
+        currentSiteId: null,
+      };
+    }
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get("/api/invitations", ({ request }) => {
+    const denied = adminGuard(request, MEMBERS_ONLY);
+    if (denied) return denied;
+    return HttpResponse.json(
+      [...db.invitations].sort((a, b) => b.sentAt.localeCompare(a.sentAt)).map(publicInvitation),
+    );
+  }),
+
+  http.post("/api/invitations", async ({ request }) => {
+    const denied = adminGuard(request, MEMBERS_ONLY);
+    if (denied) return denied;
+    const { email: raw, role } = (await request.json()) as { email: string; role: Role };
+    const email = raw.trim().toLowerCase();
+    if (!/^[^\s@<>]+@[^\s@<>]+$/.test(email)) {
+      return error(
+        422,
+        "invalid_email",
+        "メールアドレスの形式が正しくありません。例：taro@example.jp",
+      );
+    }
+    if (role !== "admin" && role !== "editor") {
+      return error(422, "invalid_role", "役割は「管理者」か「編集者」から選んでください");
+    }
+    if (db.members.some((m) => m.email === email)) {
+      return error(
+        409,
+        "already_member",
+        "このメールアドレスの人は、すでにこのサイトのメンバーです",
+      );
+    }
+    db.invitations = db.invitations.filter((i) => i.email !== email);
+    const inv = sentInvitation({ id: db.nextId++, email, role });
+    db.invitations.push(inv);
+    return HttpResponse.json(publicInvitation(inv), { status: 201 });
+  }),
+
+  http.post("/api/invitations/lookup", async ({ request }) => {
+    if (request.headers.get("X-Pagewright") !== "1") return error(403, "csrf", "不正です。");
+    const { token } = (await request.json()) as { token: string };
+    const inv = db.invitations.find((i) => i.token === token);
+    if (!inv) return invalidInvitation();
+    return HttpResponse.json({
+      siteName: db.site.name,
+      email: inv.email,
+      role: inv.role,
+      expiresAt: inv.expiresAt,
+      expired: inv.expired,
+      hasAccount: inv.email === db.me.user.email,
+    });
+  }),
+
+  http.post("/api/invitations/accept", async ({ request }) => {
+    if (request.headers.get("X-Pagewright") !== "1") return error(403, "csrf", "不正です。");
+    const { token, displayName } = (await request.json()) as {
+      token: string;
+      displayName: string;
+    };
+    const inv = db.invitations.find((i) => i.token === token);
+    if (!inv) return invalidInvitation();
+    if (inv.expired) {
+      return error(
+        400,
+        "invitation_expired",
+        "招待の有効期限が切れています。招待した人に、もう一度送ってもらってください",
+      );
+    }
+    if (db.loggedIn && db.me.user.email !== inv.email) {
+      return error(
+        409,
+        "wrong_account",
+        `いまは別のメールアドレス（${db.me.user.email}）でログインしています。招待されたメールアドレスで参加するには、いったんログアウトしてから、もう一度このリンクを開いてください`,
+      );
+    }
+    const siteId = siteA;
+    const newUser = db.me.user.email !== inv.email;
+    const user = newUser
+      ? { id: `u${db.nextId++}`, email: inv.email, displayName: displayName.trim() }
+      : db.me.user;
+    const sites = newUser ? [] : db.me.sites.filter((s) => s.id !== siteId);
+    db.me = {
+      user,
+      sites: [{ id: siteId, name: db.site.name, role: inv.role }, ...sites],
+      currentSiteId: siteId,
+    };
+    db.loggedIn = true;
+    db.invitations = db.invitations.filter((i) => i !== inv);
+    return HttpResponse.json(db.me);
+  }),
+
+  http.post("/api/invitations/:id/resend", ({ request, params }) => {
+    const denied = adminGuard(request, MEMBERS_ONLY);
+    if (denied) return denied;
+    const old = db.invitations.find((i) => i.id === Number(params.id));
+    if (!old) return error(404, "not_found", "見つかりません。");
+    const inv = sentInvitation(old);
+    db.invitations = db.invitations.map((i) => (i === old ? inv : i));
+    return HttpResponse.json(publicInvitation(inv));
+  }),
+
+  http.delete("/api/invitations/:id", ({ request, params }) => {
+    const denied = adminGuard(request, MEMBERS_ONLY);
+    if (denied) return denied;
+    const id = Number(params.id);
+    if (!db.invitations.some((i) => i.id === id))
+      return error(404, "not_found", "見つかりません。");
+    db.invitations = db.invitations.filter((i) => i.id !== id);
+    return new HttpResponse(null, { status: 204 });
   }),
 
   http.get("/api/contents", ({ request }) => {
@@ -1189,6 +1426,36 @@ export const handlers = [
     return HttpResponse.json(db.buildLog.slice(0, limit));
   }),
 ];
+
+const MEMBERS_ONLY = "メンバーの招待や変更ができるのは管理者だけです";
+
+/** Whether m is the only admin left (memberships_keep_admin on the server). */
+const lastAdmin = (m: Member) => !db.members.some((x) => x !== m && x.role === "admin");
+
+/** A newly sent invitation: a new token, valid for 7 days, sent by the current user. */
+const sentInvitation = ({
+  id,
+  email,
+  role,
+}: Pick<Invitation, "id" | "email" | "role">): Invitation & { token: string } => ({
+  id,
+  email,
+  role,
+  invitedBy: db.me.user.displayName || db.me.user.email,
+  sentAt: now(),
+  expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  expired: false,
+  token: `invite-${id}-${Date.now()}`,
+});
+
+const publicInvitation = ({ token, ...i }: Invitation & { token: string }): Invitation => i;
+
+const invalidInvitation = () =>
+  error(
+    400,
+    "invalid_token",
+    "この招待のリンクは使えません。すでに参加したか、招待が取り消されたか、新しい招待のメールが送られています。参加済みなら、ログインしてください",
+  );
 
 /** Someone saved a newer revision than the one the editor sent as its base. */
 const staleBase = (c: ContentDetail, base: number | undefined) =>

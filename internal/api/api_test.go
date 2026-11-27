@@ -1515,6 +1515,10 @@ func TestSubmissionHandled(t *testing.T) {
 
 	// When the member who handled it leaves, it stays handled, by nobody.
 	alice.mustDo(http.MethodPatch, path, map[string]any{"handled": true}, nil, http.StatusOK)
+	// dave takes over as admin first: a site always keeps one.
+	if _, err := e.db.Admin.Exec(ctx, "UPDATE memberships SET role = 'admin' WHERE tenant_id = $1 AND user_id = (SELECT id FROM users WHERE email = 'dave@example.com')", e.tenantA); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := e.db.Admin.Exec(ctx, "DELETE FROM memberships WHERE tenant_id = $1 AND user_id = (SELECT id FROM users WHERE email = 'alice@example.com')", e.tenantA); err != nil {
 		t.Fatal(err)
 	}

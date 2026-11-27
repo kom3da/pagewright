@@ -108,6 +108,11 @@ func seedSite(t *testing.T, admin *pgxpool.Pool, mediaDir string, tenant uuid.UU
 					VALUES (sha256(gen_random_uuid()::text::bytea), $1, now() + interval '1 hour')`, user)
 				return err
 			},
+			func() error {
+				_, err := tx.Exec(ctx, `INSERT INTO invitations (tenant_id, email, role, token_hash, expires_at, invited_by)
+					VALUES ($1, 'new@example.jp', 'editor', sha256(gen_random_uuid()::text::bytea), now() + interval '7 days', $2)`, tenant, user)
+				return err
+			},
 		}
 		for _, s := range steps {
 			if err := s(); err != nil {
@@ -263,7 +268,7 @@ func TestBackupRestore(t *testing.T) {
 	dst := connect(t, dstURL)
 
 	want := tableRows(t, src.Admin)
-	want["sessions"], want["login_tokens"] = "[]", "[]"
+	want["sessions"], want["login_tokens"], want["invitations"] = "[]", "[]", "[]"
 	if diff := cmp.Diff(want, tableRows(t, dst)); diff != "" {
 		t.Errorf("rows differ (-backed up +restored):\n%s", diff)
 	}

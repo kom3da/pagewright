@@ -12,6 +12,32 @@ import (
 	"github.com/google/uuid"
 )
 
+const authAcceptInvitation = `-- name: AuthAcceptInvitation :one
+SELECT auth_accept_invitation($1::bytea, $2::bytea, $3::bytea,
+  $4::text, ($5::bigint || ' seconds')::interval)::text AS result
+`
+
+type AuthAcceptInvitationParams struct {
+	TokenHash      []byte
+	SessionHash    []byte
+	NewSessionHash []byte
+	DisplayName    string
+	TtlSeconds     int64
+}
+
+func (q *Queries) AuthAcceptInvitation(ctx context.Context, arg AuthAcceptInvitationParams) (string, error) {
+	row := q.db.QueryRow(ctx, authAcceptInvitation,
+		arg.TokenHash,
+		arg.SessionHash,
+		arg.NewSessionHash,
+		arg.DisplayName,
+		arg.TtlSeconds,
+	)
+	var result string
+	err := row.Scan(&result)
+	return result, err
+}
+
 const authCleanup = `-- name: AuthCleanup :one
 SELECT auth_cleanup()::bigint AS removed
 `
@@ -216,6 +242,22 @@ func (q *Queries) AuthSessionSites(ctx context.Context, tokenHash []byte) ([]Aut
 	return items, nil
 }
 
+const authSetDisplayName = `-- name: AuthSetDisplayName :one
+SELECT auth_set_display_name($1::bytea, $2::text)::boolean AS ok
+`
+
+type AuthSetDisplayNameParams struct {
+	TokenHash   []byte
+	DisplayName string
+}
+
+func (q *Queries) AuthSetDisplayName(ctx context.Context, arg AuthSetDisplayNameParams) (bool, error) {
+	row := q.db.QueryRow(ctx, authSetDisplayName, arg.TokenHash, arg.DisplayName)
+	var ok bool
+	err := row.Scan(&ok)
+	return ok, err
+}
+
 const authTouchSession = `-- name: AuthTouchSession :exec
 SELECT auth_touch_session($1::bytea, $2::text)
 `
@@ -228,4 +270,31 @@ type AuthTouchSessionParams struct {
 func (q *Queries) AuthTouchSession(ctx context.Context, arg AuthTouchSessionParams) error {
 	_, err := q.db.Exec(ctx, authTouchSession, arg.TokenHash, arg.Device)
 	return err
+}
+
+const invitationLookup = `-- name: InvitationLookup :one
+SELECT i.site_name::text AS site_name, i.email::text AS email, i.role::text AS role,
+  i.expires_at::timestamptz AS expires_at, i.has_account::boolean AS has_account
+FROM invitation_lookup($1::bytea) AS i
+`
+
+type InvitationLookupRow struct {
+	SiteName   string
+	Email      string
+	Role       string
+	ExpiresAt  time.Time
+	HasAccount bool
+}
+
+func (q *Queries) InvitationLookup(ctx context.Context, tokenHash []byte) (InvitationLookupRow, error) {
+	row := q.db.QueryRow(ctx, invitationLookup, tokenHash)
+	var i InvitationLookupRow
+	err := row.Scan(
+		&i.SiteName,
+		&i.Email,
+		&i.Role,
+		&i.ExpiresAt,
+		&i.HasAccount,
+	)
+	return i, err
 }

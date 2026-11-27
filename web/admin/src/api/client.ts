@@ -10,9 +10,13 @@ import type {
   ContentSummary,
   ContentType,
   DraftInput,
+  Invitation,
+  InvitationPreview,
   Me,
   Media,
+  Member,
   PreviewLink,
+  Role,
   Session,
   SiteSettings,
   SiteSettingsInput,
@@ -58,6 +62,10 @@ const fieldsByCode: Record<string, string> = {
   invalid_logo: "logoMediaId",
   invalid_front_page: "frontPageId",
   invalid_privacy_page: "privacyPageId",
+  invalid_email: "email",
+  already_member: "email",
+  invalid_role: "role",
+  invalid_display_name: "displayName",
 };
 
 /** The input field an API error is about, or undefined when it is not about one. */
@@ -149,6 +157,24 @@ export const api = {
   revokeSession: (id: string) => del(`/me/sessions/${id}`),
   /** 「ほかの端末からログアウト」: returns how many were logged out. */
   logoutOtherSessions: () => post<{ revoked: number }>("/me/sessions/logout-others"),
+  /** Changes the user's own name (shown on every site they belong to). */
+  setDisplayName: (displayName: string) => patch<Me>("/me", { displayName }).then(rememberSite),
+
+  listMembers: () => get<Member[]>("/members"),
+  setMemberRole: (userId: string, role: Role) => patch<Member>(`/members/${userId}`, { role }),
+  removeMember: (userId: string) => del(`/members/${userId}`),
+  /** Newest first. */
+  listInvitations: () => get<Invitation[]>("/invitations"),
+  /** Inviting an address that already has an invitation replaces it. */
+  invite: (email: string, role: Role) => post<Invitation>("/invitations", { email, role }),
+  /** Mails a new link (the old one stops working) with a new expiry. */
+  resendInvitation: (id: number) => post<Invitation>(`/invitations/${id}/resend`),
+  cancelInvitation: (id: number) => del(`/invitations/${id}`),
+  /** Reads an invitation link without using it. */
+  lookupInvitation: (token: string) => post<InvitationPreview>("/invitations/lookup", { token }),
+  /** Joins the site; when logged out, the link also logs in (and makes the account). */
+  acceptInvitation: (token: string, displayName: string) =>
+    post<Me>("/invitations/accept", { token, displayName }).then(rememberSite),
 
   /** Newest number first; `page` continues below the last number received (`before`). */
   listContents: (

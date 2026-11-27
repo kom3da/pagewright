@@ -30,6 +30,7 @@ import {
   Settings,
   Tags,
   UserRound,
+  Users,
   X,
 } from "lucide-react";
 import { useEffect, useId } from "react";
@@ -42,7 +43,7 @@ import classes from "./AppLayout.module.css";
 import { notify } from "./ui/notify";
 
 type NavItem = {
-  to: "/" | "/posts" | "/pages" | "/categories" | "/tags" | "/inquiries" | "/settings";
+  to: "/" | "/posts" | "/pages" | "/categories" | "/tags" | "/inquiries" | "/members" | "/settings";
   label: string;
   icon: LucideIcon;
   exact?: boolean;
@@ -60,6 +61,7 @@ const navGroups: NavItem[][] = [
   ],
   [
     { to: "/inquiries", label: "お問い合わせ", icon: Inbox, adminOnly: true },
+    { to: "/members", label: "メンバー", icon: Users, adminOnly: true },
     { to: "/settings", label: "サイトの設定", icon: Settings, adminOnly: true },
   ],
 ];
@@ -306,7 +308,7 @@ function UserMenu() {
             to="/account"
             leftSection={<MonitorSmartphone aria-hidden="true" size={16} />}
           >
-            ログイン中の端末
+            名前とログイン中の端末
           </Menu.Item>
           <Menu.Item
             leftSection={<LogOut aria-hidden="true" size={16} />}

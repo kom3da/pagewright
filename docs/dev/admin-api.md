@@ -36,6 +36,9 @@
 | `GET /api/me/sessions` | なし | 200 `Session[]`。自分のログイン中のセッション（端末）。いまの端末が最初、あとは最後に使った順 |
 | `DELETE /api/me/sessions/{id}` | | 204。その端末をログアウトさせる。ほかの人のセッション、いまの端末（`current`、ログアウトは `POST /api/auth/logout`）、ないものは 404 |
 | `POST /api/me/sessions/logout-others` | なし | 200 `{"revoked": number}`。「ほかの端末からログアウト」。いまの端末のほかの、自分のセッションをすべて終わらせ、その数を返す |
+| `PATCH /api/me` | `{"displayName": "..."}` | 200 `Me`。自分の表示名を変える。前後の空白は除く。空にしてもよい（画面ではメールアドレスを出す）。50 文字を超える・改行などの制御文字を含むと 422 `invalid_display_name`。ユーザーはサイトをまたいで 1 人なので、所属するどのサイトでも同じ名前になる |
+| `POST /api/invitations/lookup` | `{"token": "..."}` | 200 `InvitationPreview`。招待のリンクの画面が、何への招待かを出すために使う。ログイン不要。トークンは使わない（メールの安全チェックが先にリンクを開いても無効にならない）。期限切れでも 200（`expired: true`）。ない・使用済み・取り消し済み・新しい招待で置き換わったものは 400 `invalid_token` |
+| `POST /api/invitations/accept` | `{"token": "...", "displayName": "..."}` | 200 `Me`（招待されたサイトを選んだ状態）。ログイン不要。ログインしていなければ、ログイン用リンクと同じくリンクがメールアドレスの証明になるので、そのままログインさせて Cookie を発行する（そのアドレスのユーザーがいなければ `displayName` の名前で作る。いればその名前は変えない）。招待されたアドレスでログイン中なら、いまのセッションでそのサイトを選ぶ。別のアドレスでログイン中なら 409 `wrong_account`（何も変えない。メッセージにいまのアドレスが入る）。すでにメンバーなら役割は変えずに、そのサイトを選ぶ。招待は使い切る（1 回限り）。期限切れは 400 `invitation_expired`、ないものは 400 `invalid_token`。`displayName` の検査は `PATCH /api/me` と同じ |
 
 ```ts
 type Session = {
@@ -49,6 +52,17 @@ type Session = {
 ```
 
 セッションには、端末の名前のほか User-Agent も IP アドレスも保存しない（個人情報で、一覧には要らないため）。端末の名前は、ログインした直後と、その後 1 時間に 1 回まで、使った端末の User-Agent から作り直す。
+
+```ts
+type InvitationPreview = {
+  siteName: string;
+  email: string;            // 招待されたメールアドレス
+  role: "admin" | "editor";
+  expiresAt: string;
+  expired: boolean;
+  hasAccount: boolean;      // そのアドレスのユーザーがもういる（名前を聞かなくてよい）
+};
+```
 
 ```ts
 type Me = {
@@ -237,6 +251,43 @@ type Build = {
   error: string | null; // 失敗したときだけ
 };
 ```
+
+## メンバーと招待
+
+ここの API はすべて管理者だけ（編集者は 403 `forbidden`）。ほかのサイトのメンバーや招待は見えず、ID を指定しても 404。
+
+```ts
+type Member = {
+  userId: string;        // ユーザーの UUID
+  email: string;
+  displayName: string;   // 未設定なら ""
+  role: "admin" | "editor";
+  addedAt: string;       // サイトに加わった日時
+  you: boolean;          // ログイン中の本人
+};
+
+type Invitation = {
+  id: number;
+  email: string;           // 小文字にそろえたもの
+  role: "admin" | "editor";
+  invitedBy: string | null; // 最後に送った人の名前（表示名、なければメールアドレス）。その人がメンバーでなくなったら null
+  sentAt: string;           // 最後に送った日時
+  expiresAt: string;        // 送ってから 7 日
+  expired: boolean;
+};
+```
+
+| メソッドとパス | 入力 | 出力 |
+| --- | --- | --- |
+| `GET /api/members` | | 200 `Member[]`（メールアドレスの順） |
+| `PATCH /api/members/{userId}` | `{"role": "admin" \| "editor"}` | 200 `Member`。役割がそれ以外なら 422 `invalid_role`。管理者がいなくなる変更（最後の管理者を編集者にする）は 409 `last_admin` |
+| `DELETE /api/members/{userId}` | | 204。サイトから外す。その人のセッションはこのサイトを選んでいない状態になる（次の操作で 403 `no_site`）。その人が書いた記事・版・画像は残り、作った人の記録だけが消える。最後の管理者は 409 `last_admin`（自分自身でも同じ） |
+| `GET /api/invitations` | | 200 `Invitation[]`（送った日時の新しい順）。期限切れも `expired: true` で返す（期限から 30 日で自動で消える） |
+| `POST /api/invitations` | `{"email": "...", "role": "admin" \| "editor"}` | 201 `Invitation`。招待のメール（`/admin/invite/accept?token=...`、7 日有効、1 回限り）を送る。同じアドレスの招待がすでにあれば置き換える（前のリンクは使えなくなる）。メールアドレスの形式が違えば 422 `invalid_email`、役割が違えば 422 `invalid_role`、すでにメンバーなら 409 `already_member`（`field: "email"`）。送れるのはサイトごとに 24 時間で 30 通、同じアドレスへはサイトをまたいで 24 時間で 5 通まで（再送も数える）。超えると 429 `too_many_requests` |
+| `POST /api/invitations/{id}/resend` | なし | 200 `Invitation`。新しいリンクで送り直し、期限を 7 日後にする（期限切れでもよい）。前のリンクは使えなくなる。回数の上限は上と同じ |
+| `DELETE /api/invitations/{id}` | | 204。招待を取り消す（リンクは使えなくなる） |
+
+招待のメールには、招待した人（表示名とメールアドレス）、サイトの名前、役割、リンクの有効期限（日本時間）、心当たりがなければ無視してよいことを書く。
 
 ## お問い合わせ
 

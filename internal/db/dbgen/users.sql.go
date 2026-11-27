@@ -7,6 +7,7 @@ package dbgen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -30,6 +31,33 @@ func (q *Queries) FindUserByEmail(ctx context.Context, email string) (FindUserBy
 	return i, err
 }
 
+const getMember = `-- name: GetMember :one
+SELECT u.id, u.email, u.display_name, m.role, m.created_at
+FROM memberships m JOIN users u ON u.id = m.user_id
+WHERE m.user_id = $1
+`
+
+type GetMemberRow struct {
+	ID          uuid.UUID
+	Email       string
+	DisplayName string
+	Role        string
+	CreatedAt   time.Time
+}
+
+func (q *Queries) GetMember(ctx context.Context, userID uuid.UUID) (GetMemberRow, error) {
+	row := q.db.QueryRow(ctx, getMember, userID)
+	var i GetMemberRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.Role,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getUser = `-- name: GetUser :one
 SELECT id, email, display_name, created_at FROM users WHERE id = $1
 `
@@ -46,8 +74,21 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 	return i, err
 }
 
+const isMemberEmail = `-- name: IsMemberEmail :one
+SELECT EXISTS (
+  SELECT FROM memberships m JOIN users u ON u.id = m.user_id WHERE u.email = lower($1::text)
+)
+`
+
+func (q *Queries) IsMemberEmail(ctx context.Context, email string) (bool, error) {
+	row := q.db.QueryRow(ctx, isMemberEmail, email)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listMembers = `-- name: ListMembers :many
-SELECT u.id, u.email, u.display_name, m.role
+SELECT u.id, u.email, u.display_name, m.role, m.created_at
 FROM memberships m JOIN users u ON u.id = m.user_id
 ORDER BY u.email
 `
@@ -57,6 +98,7 @@ type ListMembersRow struct {
 	Email       string
 	DisplayName string
 	Role        string
+	CreatedAt   time.Time
 }
 
 func (q *Queries) ListMembers(ctx context.Context) ([]ListMembersRow, error) {
@@ -73,6 +115,7 @@ func (q *Queries) ListMembers(ctx context.Context) ([]ListMembersRow, error) {
 			&i.Email,
 			&i.DisplayName,
 			&i.Role,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -82,4 +125,44 @@ func (q *Queries) ListMembers(ctx context.Context) ([]ListMembersRow, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockMembers = `-- name: LockMembers :exec
+SELECT FROM tenants WHERE id = app_current_tenant() FOR NO KEY UPDATE
+`
+
+// Serializes changes to the site's members (see memberships_keep_admin in
+// migrations/00017_invitations.sql). Taken before changing a member.
+func (q *Queries) LockMembers(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockMembers)
+	return err
+}
+
+const removeMember = `-- name: RemoveMember :execrows
+DELETE FROM memberships WHERE user_id = $1
+`
+
+func (q *Queries) RemoveMember(ctx context.Context, userID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, removeMember, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setMemberRole = `-- name: SetMemberRole :execrows
+UPDATE memberships SET role = $1 WHERE user_id = $2
+`
+
+type SetMemberRoleParams struct {
+	Role   string
+	UserID uuid.UUID
+}
+
+func (q *Queries) SetMemberRole(ctx context.Context, arg SetMemberRoleParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMemberRole, arg.Role, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

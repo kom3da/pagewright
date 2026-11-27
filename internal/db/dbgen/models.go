@@ -77,6 +77,18 @@ type FormSubmission struct {
 	HandledBy *uuid.UUID
 }
 
+type Invitation struct {
+	TenantID  uuid.UUID
+	ID        int64
+	Email     string
+	Role      string
+	TokenHash []byte
+	ExpiresAt time.Time
+	InvitedBy *uuid.UUID
+	SentAt    time.Time
+	CreatedAt time.Time
+}
+
 type LoginToken struct {
 	TokenHash []byte
 	UserID    uuid.UUID

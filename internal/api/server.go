@@ -78,6 +78,8 @@ type Server struct {
 	previewFiles *limiter // per address, for a preview link's assets and media
 	// privateWarnedAt is when allowByIP last warned (Unix nanoseconds).
 	privateWarnedAt atomic.Int64
+	inviteBySite    *limiter
+	inviteTo        *limiter
 }
 
 const (
@@ -106,6 +108,9 @@ func New(o Options) *Server {
 		// Each lookup of a preview link's files reads the database; a page
 		// loads a few assets and its images.
 		previewFiles: newLimiter(600, time.Minute),
+		// Invitation mails: per site, and per address across all sites.
+		inviteBySite: newLimiter(30, 24*time.Hour),
+		inviteTo:     newLimiter(5, 24*time.Hour),
 	}
 }
 
@@ -120,6 +125,17 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/me/sessions", s.authed(s.listSessions))
 	mux.Handle("POST /api/me/sessions/logout-others", s.authed(s.revokeOtherSessions))
 	mux.Handle("DELETE /api/me/sessions/{id}", s.authed(s.revokeSession))
+	mux.Handle("PATCH /api/me", s.authed(s.patchMe))
+	mux.Handle("POST /api/invitations/lookup", s.public(s.lookupInvitation))
+	mux.Handle("POST /api/invitations/accept", s.public(s.acceptInvitation))
+
+	mux.Handle("GET /api/members", s.site(s.listMembers))
+	mux.Handle("PATCH /api/members/{userId}", s.site(s.patchMember))
+	mux.Handle("DELETE /api/members/{userId}", s.site(s.removeMember))
+	mux.Handle("GET /api/invitations", s.site(s.listInvitations))
+	mux.Handle("POST /api/invitations", s.site(s.createInvitation))
+	mux.Handle("POST /api/invitations/{id}/resend", s.site(s.resendInvitation))
+	mux.Handle("DELETE /api/invitations/{id}", s.site(s.deleteInvitation))
 
 	mux.Handle("GET /api/contents", s.site(s.listContents))
 	mux.Handle("POST /api/contents", s.site(s.createContent))
@@ -361,6 +377,9 @@ func errorBody(code, msg, field string) any {
 // can show the message next to it.
 var errorFields = map[string]string{
 	"invalid_email":        "email",
+	"already_member":       "email",
+	"invalid_role":         "role",
+	"invalid_display_name": "displayName",
 	"invalid_type":         "type",
 	"invalid_title":        "title",
 	"invalid_body":         "body",

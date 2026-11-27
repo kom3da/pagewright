@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -363,7 +364,7 @@ func TestTenantCannotReadOtherTenant(t *testing.T) {
 			{ID: e.alice, Email: "alice@example.com", Role: "admin"},
 			{ID: e.carol, Email: "carol@example.com", Role: "editor"},
 		}
-		if diff := cmp.Diff(wantMembers, members); diff != "" {
+		if diff := cmp.Diff(wantMembers, members, cmpopts.IgnoreFields(dbgen.ListMembersRow{}, "CreatedAt")); diff != "" {
 			t.Errorf("ListMembers (-want +got):\n%s", diff)
 		}
 
@@ -410,7 +411,7 @@ func TestTenantCannotReadOtherTenant(t *testing.T) {
 	})
 
 	// Raw SQL, with no WHERE clause at all, still sees only A.
-	for _, table := range []string{"tenants", "memberships", "contents", "content_revisions", "categories", "tags", "content_categories", "content_tags", "media", "routes"} {
+	for _, table := range []string{"tenants", "memberships", "contents", "content_revisions", "categories", "tags", "content_categories", "content_tags", "media", "routes", "invitations"} {
 		foreign := e.countInTenant(t, e.tenantA, "SELECT count(*) FROM "+table+" WHERE "+tenantColumn(table)+" <> $1", e.tenantA)
 		if foreign != 0 {
 			t.Errorf("%s: %d rows of other tenants visible", table, foreign)
@@ -547,7 +548,7 @@ func TestNoTenantSeesNothing(t *testing.T) {
 		t.Errorf("InTenant without tenant: err = %v, want ErrNoTenant", err)
 	}
 
-	for _, table := range []string{"tenants", "users", "memberships", "contents", "content_revisions", "categories", "tags", "content_categories", "content_tags", "media", "routes"} {
+	for _, table := range []string{"tenants", "users", "memberships", "contents", "content_revisions", "categories", "tags", "content_categories", "content_tags", "media", "routes", "invitations"} {
 		var n int
 		if err := e.app.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&n); err != nil {
 			t.Fatalf("%s: %v", table, err)
@@ -643,12 +644,28 @@ func TestAllDigitSlugIsRejected(t *testing.T) {
 	}
 }
 
-func TestRemovingAnAuthorIsRefused(t *testing.T) {
+// Removing a member keeps what they made; only who made it is cleared.
+func TestRemovingAnAuthorKeepsTheirWork(t *testing.T) {
 	e := newTestEnv(t)
-	_, err := e.admin.Exec(context.Background(),
-		"DELETE FROM memberships WHERE tenant_id = $1 AND user_id = $2", e.tenantA, e.alice)
-	if code := pgCode(err); code != "23503" {
-		t.Errorf("removing alice from A: err = %v, want SQLSTATE 23503", err)
+	// alice made A's post, revision and image. carol becomes an admin
+	// first, so that A keeps one.
+	if err := e.execInTenant(e.tenantA, "UPDATE memberships SET role = 'admin' WHERE user_id = $1", e.carol); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.execInTenant(e.tenantA, "DELETE FROM memberships WHERE user_id = $1", e.alice); err != nil {
+		t.Fatalf("removing alice from A: %v", err)
+	}
+	var author, createdBy, uploadedBy *uuid.UUID
+	err := e.admin.QueryRow(context.Background(), `SELECT
+		(SELECT author_id FROM contents WHERE tenant_id = $1 AND id = $2),
+		(SELECT created_by FROM content_revisions WHERE tenant_id = $1 AND id = $3),
+		(SELECT uploaded_by FROM media WHERE tenant_id = $1 AND id = $4)`,
+		e.tenantA, e.postA.ID, e.revA.ID, e.mediaA.ID).Scan(&author, &createdBy, &uploadedBy)
+	if err != nil {
+		t.Fatalf("alice's work is gone: %v", err)
+	}
+	if author != nil || createdBy != nil || uploadedBy != nil {
+		t.Errorf("author %v, revision by %v, image by %v; want all cleared", author, createdBy, uploadedBy)
 	}
 }
 
@@ -827,11 +844,13 @@ func TestAppCannotCreateTenantsOrUsers(t *testing.T) {
 		"UPDATE users SET email = 'x@example.com'",
 		// A user can belong to several tenants, so no tenant may edit them.
 		"UPDATE users SET display_name = 'renamed'",
-		// Membership changes come with invitations; adding a member would
-		// also expose that user's profile to the tenant.
+		// Members are added only by accepting an invitation; adding one
+		// would also expose that user's profile to the tenant. Of a
+		// membership, only the role may change.
 		"INSERT INTO memberships (user_id, role) VALUES ('" + e.bob.String() + "', 'admin')",
-		"UPDATE memberships SET role = 'admin'",
-		"DELETE FROM memberships",
+		"UPDATE memberships SET user_id = '" + e.bob.String() + "'",
+		"UPDATE memberships SET tenant_id = '" + e.tenantB.String() + "'",
+		"UPDATE memberships SET created_at = now()",
 	} {
 		err := e.execInTenant(e.tenantA, q)
 		if code := pgCode(err); code != "42501" {

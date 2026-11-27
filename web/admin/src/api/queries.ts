@@ -82,6 +82,13 @@ export const buildsQuery = queryOptions({
 /** The current user's logged-in browsers (the account screen). */
 export const sessionsQuery = queryOptions({ queryKey: ["sessions"], queryFn: api.listSessions });
 
+/** Members and invitations of the current site (admins only). */
+export const membersQuery = queryOptions({ queryKey: ["members"], queryFn: api.listMembers });
+export const invitationsQuery = queryOptions({
+  queryKey: ["invitations"],
+  queryFn: api.listInvitations,
+});
+
 /** Which contact messages a list shows: 未対応 (false), 対応済み (true) or all (undefined). */
 export type SubmissionsFilter = boolean | undefined;
 

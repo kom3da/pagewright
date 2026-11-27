@@ -15,8 +15,9 @@
 // migrations exactly as on a fresh install.
 //
 // Not saved: built sites (rebuilt after restore), River's jobs (the
-// restore queues what must run again), and the rows of login_tokens and
-// sessions (secrets for logging in; everyone logs in again).
+// restore queues what must run again), and the rows of login_tokens,
+// sessions and invitations (secrets for logging in; everyone logs in
+// again, and pending invitations are sent again).
 package backup
 
 import (
@@ -50,7 +51,7 @@ const Format = 1
 const ManifestName = "manifest.json"
 
 // ExcludedTables keep their schema but not their rows.
-var ExcludedTables = []string{"login_tokens", "sessions"}
+var ExcludedTables = []string{"login_tokens", "sessions", "invitations"}
 
 // Manifest describes an archive.
 type Manifest struct {
