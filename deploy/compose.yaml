@@ -20,11 +20,19 @@ name: pagewright
 # 使う版は .env の PAGEWRIGHT_IMAGE で固定する（latest は使わない。docs/install/versioning.md）
 x-image: &image ${PAGEWRIGHT_IMAGE:?.env に PAGEWRIGHT_IMAGE を書いてください（例 ghcr.io/kom3da/pagewright:0.1.0）}
 
+# ログは1つのサービスにつき 10MB × 5 個まで残す（ディスクがいっぱいにならないように）。
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   # データベース。データは db-data ボリュームに残る。
   db:
     image: postgres:18
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_USER: pagewright # テーブルの所有者。マイグレーションと init だけが使う
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?.env に POSTGRES_PASSWORD を書いてください}
@@ -47,6 +55,7 @@ services:
     image: *image
     command: ["migrate"]
     restart: "no"
+    logging: *logging
     environment:
       # テーブルの所有者として接続する（migrate・init・login-url・site）
       PAGEWRIGHT_MIGRATE_DATABASE_URL: postgres://pagewright:${POSTGRES_PASSWORD}@db:5432/pagewright?sslmode=disable
@@ -67,6 +76,7 @@ services:
     image: *image
     command: ["serve"]
     restart: unless-stopped
+    logging: *logging
     environment:
       # アプリ用ユーザー（pagewright_app）で接続する。RLSで他のサイトのデータは見えない
       PAGEWRIGHT_DATABASE_URL: postgres://pagewright_app:${PAGEWRIGHT_APP_DB_PASSWORD}@db:5432/pagewright?sslmode=disable
@@ -101,6 +111,7 @@ services:
   nginx:
     image: nginxinc/nginx-unprivileged:1.30-alpine
     restart: unless-stopped
+    logging: *logging
     # app（ユーザーID 10001）が書き出した画像を読めるように、同じグループに入れる
     group_add: ["10001"]
     environment:
@@ -121,6 +132,7 @@ services:
   caddy:
     image: caddy:2
     restart: unless-stopped
+    logging: *logging
     ports:
       - "${PAGEWRIGHT_HTTP_PORT:-80}:80"
       - "${PAGEWRIGHT_HTTPS_PORT:-443}:443"
