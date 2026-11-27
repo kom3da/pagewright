@@ -33,13 +33,18 @@
   background: var(--mantine-color-gray-1);
 }
 
-/* The account name in its button: cut with … when long (the full address is in the menu). */
+/* The account name in its button: cut with … when long (the full address is in the menu).
+   The label is a flex box, where text-overflow does not apply: the name is its own item. */
 .userLabel {
   flex: 1;
   min-width: 0;
+  text-align: start;
+}
+.userName {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-align: start;
+  white-space: nowrap;
 }
 
 /* Phone top bar: the menu button keeps its size next to a long site name. */

@@ -293,7 +293,7 @@ function UserMenu() {
           classNames={{ label: classes.userLabel }}
         >
           <VisuallyHidden>アカウントのメニュー：</VisuallyHidden>
-          {name}
+          <span className={classes.userName}>{name}</span>
         </Button>
       </Menu.Target>
       <Menu.Dropdown>
