@@ -30,6 +30,16 @@ export const contentsPagesQuery = (type: ContentType, filter: ContentFilter = {}
     getNextPageParam: (last) => (last.more ? last.next : undefined),
   });
 
+/** How many choices the content picker shows at a time. */
+export const CONTENT_PICKER_LIMIT = 20;
+
+/** The picker's choices: the newest, or those matching `q`. Shares the ["contents", type] prefix. */
+export const contentChoicesQuery = (type: ContentType, q: string) =>
+  queryOptions({
+    queryKey: ["contents", type, "choices", q],
+    queryFn: () => api.listContents(type, { q }, { limit: CONTENT_PICKER_LIMIT }),
+  });
+
 /** The last updated contents of a type, for the home. Shares the ["contents", type] prefix. */
 export const recentContentsQuery = (type: ContentType, limit: number) =>
   queryOptions({
