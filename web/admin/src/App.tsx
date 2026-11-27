@@ -1,4 +1,5 @@
 import { MantineProvider } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import { DatesProvider } from "@mantine/dates";
 import { ModalsProvider } from "@mantine/modals";
 import { Notifications } from "@mantine/notifications";
@@ -9,7 +10,7 @@ import "dayjs/locale/ja";
 import { meQuery } from "./api/queries";
 import { createQueryClient } from "./queryClient";
 import { createAppRouter } from "./router";
-import { theme } from "./theme";
+import { DESKTOP_QUERY, theme } from "./theme";
 
 export function createApp(history?: RouterHistory) {
   let router: ReturnType<typeof createAppRouter>;
@@ -37,11 +38,20 @@ export function App({ history }: { history?: RouterHistory }) {
       <DatesProvider settings={{ locale: "ja", firstDayOfWeek: 0, labelSeparator: "〜" }}>
         <QueryClientProvider client={queryClient}>
           <ModalsProvider>
-            <Notifications position="bottom-right" limit={3} />
+            <AppNotifications />
             <RouterProvider router={router} />
           </ModalsProvider>
         </QueryClientProvider>
       </DatesProvider>
     </MantineProvider>
   );
+}
+
+/**
+ * On phones the editor and the site settings have a save bar fixed to the bottom of the
+ * screen, so notifications show at the top there instead of covering its buttons.
+ */
+function AppNotifications() {
+  const desktop = useMediaQuery(DESKTOP_QUERY, true, { getInitialValueInEffect: false });
+  return <Notifications position={desktop ? "bottom-right" : "top-center"} limit={3} />;
 }

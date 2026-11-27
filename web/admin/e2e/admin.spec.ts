@@ -198,6 +198,14 @@ test("on a phone, the editor's actions stay in a slim bottom bar", async ({ page
   await expect(page.getByRole("heading", { name: "公開", exact: true })).toBeFocused();
   await expect(page.getByRole("group", { name: "公開日（日本時間）" })).toBeInViewport();
   await expect(bar.getByRole("button", { name: "変更を公開する" })).toBeInViewport();
+
+  // Notifications show at the top, not over the bar's buttons.
+  await bar.getByRole("button", { name: "保存", exact: true }).click();
+  const note = page.getByRole("status").filter({ hasText: "変更はありません。" });
+  await expect(note).toBeVisible();
+  const noteBox = await note.boundingBox();
+  const barBox = await bar.boundingBox();
+  expect((noteBox?.y ?? 0) + (noteBox?.height ?? 0)).toBeLessThan(barBox?.y ?? 0);
 });
 
 test("Japanese IME composition is not broken by the editor", async ({ page }) => {
