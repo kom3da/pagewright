@@ -127,6 +127,7 @@ func (s *Server) verify(w http.ResponseWriter, r *http.Request, _ *session) erro
 	if err != nil {
 		return err
 	}
+	s.recordUse(r, sess)
 	return s.writeMe(w, r, sess)
 }
 

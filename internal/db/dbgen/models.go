@@ -137,11 +137,13 @@ type Route struct {
 }
 
 type Session struct {
-	TokenHash []byte
-	UserID    uuid.UUID
-	TenantID  *uuid.UUID
-	ExpiresAt time.Time
-	CreatedAt time.Time
+	TokenHash  []byte
+	UserID     uuid.UUID
+	TenantID   *uuid.UUID
+	ExpiresAt  time.Time
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+	Device     string
 }
 
 type SiteBuild struct {

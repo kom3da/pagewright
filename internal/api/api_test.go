@@ -243,6 +243,8 @@ func newEnvWith(t *testing.T, set func(*api.Options)) *env {
 type client struct {
 	e    *env
 	http *http.Client
+	// userAgent, when set, is sent as the User-Agent.
+	userAgent string
 }
 
 func (e *env) anon() *client {
@@ -255,7 +257,14 @@ var tokenRE = regexp.MustCompile(`token=([A-Za-z0-9_%-]+)`)
 // login signs in through the mailed link.
 func (e *env) login(email string) *client {
 	e.t.Helper()
+	return e.loginFrom(email, "")
+}
+
+// loginFrom is login from a browser with this User-Agent.
+func (e *env) loginFrom(email, userAgent string) *client {
+	e.t.Helper()
 	c := e.anon()
+	c.userAgent = userAgent
 	c.mustDo(http.MethodPost, "/api/auth/login-link", map[string]string{"email": email}, nil, http.StatusNoContent)
 	m, ok := e.mail.last()
 	if !ok || m.To != email {
@@ -281,6 +290,9 @@ func (c *client) do(method, path string, in any, out any) int {
 	req, _ := http.NewRequest(method, c.e.srv.URL+path, body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Pagewright", "1")
+	if c.userAgent != "" {
+		req.Header.Set("User-Agent", c.userAgent)
+	}
 	return c.send(req, out)
 }
 

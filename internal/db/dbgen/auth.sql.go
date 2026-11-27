@@ -7,6 +7,7 @@ package dbgen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -20,6 +21,49 @@ func (q *Queries) AuthCleanup(ctx context.Context) (int64, error) {
 	var removed int64
 	err := row.Scan(&removed)
 	return removed, err
+}
+
+const authListSessions = `-- name: AuthListSessions :many
+SELECT s.id::bytea AS id, s.device::text AS device, s.created_at::timestamptz AS created_at,
+  s.last_used_at::timestamptz AS last_used_at, s.expires_at::timestamptz AS expires_at,
+  s.is_current::boolean AS is_current
+FROM auth_list_sessions($1::bytea) AS s
+`
+
+type AuthListSessionsRow struct {
+	ID         []byte
+	Device     string
+	CreatedAt  time.Time
+	LastUsedAt time.Time
+	ExpiresAt  time.Time
+	IsCurrent  bool
+}
+
+func (q *Queries) AuthListSessions(ctx context.Context, tokenHash []byte) ([]AuthListSessionsRow, error) {
+	rows, err := q.db.Query(ctx, authListSessions, tokenHash)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuthListSessionsRow
+	for rows.Next() {
+		var i AuthListSessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Device,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+			&i.ExpiresAt,
+			&i.IsCurrent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const authLogin = `-- name: AuthLogin :one
@@ -67,6 +111,33 @@ func (q *Queries) AuthRequestLogin(ctx context.Context, arg AuthRequestLoginPara
 	return found, err
 }
 
+const authRevokeOtherSessions = `-- name: AuthRevokeOtherSessions :one
+SELECT auth_revoke_other_sessions($1::bytea)::bigint AS revoked
+`
+
+func (q *Queries) AuthRevokeOtherSessions(ctx context.Context, tokenHash []byte) (int64, error) {
+	row := q.db.QueryRow(ctx, authRevokeOtherSessions, tokenHash)
+	var revoked int64
+	err := row.Scan(&revoked)
+	return revoked, err
+}
+
+const authRevokeSession = `-- name: AuthRevokeSession :one
+SELECT auth_revoke_session($1::bytea, $2::bytea)::boolean AS ok
+`
+
+type AuthRevokeSessionParams struct {
+	TokenHash []byte
+	SessionID []byte
+}
+
+func (q *Queries) AuthRevokeSession(ctx context.Context, arg AuthRevokeSessionParams) (bool, error) {
+	row := q.db.QueryRow(ctx, authRevokeSession, arg.TokenHash, arg.SessionID)
+	var ok bool
+	err := row.Scan(&ok)
+	return ok, err
+}
+
 const authSelectSite = `-- name: AuthSelectSite :one
 SELECT auth_select_site($1::bytea, $2::uuid)::boolean AS ok
 `
@@ -85,7 +156,8 @@ func (q *Queries) AuthSelectSite(ctx context.Context, arg AuthSelectSiteParams) 
 
 const authSession = `-- name: AuthSession :one
 SELECT s.user_id::uuid AS user_id, s.email::text AS email, s.display_name::text AS display_name,
-  s.tenant_id::uuid AS tenant_id, coalesce(s.role, '')::text AS role
+  s.tenant_id::uuid AS tenant_id, coalesce(s.role, '')::text AS role,
+  coalesce(s.last_used_at < now() - interval '1 hour', true)::boolean AS touch_due
 FROM auth_session($1::bytea) AS s
 `
 
@@ -95,8 +167,10 @@ type AuthSessionRow struct {
 	DisplayName string
 	TenantID    uuid.UUID
 	Role        string
+	TouchDue    bool
 }
 
+// touch_due: the last recorded use is over an hour old (see auth_touch_session).
 func (q *Queries) AuthSession(ctx context.Context, tokenHash []byte) (AuthSessionRow, error) {
 	row := q.db.QueryRow(ctx, authSession, tokenHash)
 	var i AuthSessionRow
@@ -106,6 +180,7 @@ func (q *Queries) AuthSession(ctx context.Context, tokenHash []byte) (AuthSessio
 		&i.DisplayName,
 		&i.TenantID,
 		&i.Role,
+		&i.TouchDue,
 	)
 	return i, err
 }
@@ -139,4 +214,18 @@ func (q *Queries) AuthSessionSites(ctx context.Context, tokenHash []byte) ([]Aut
 		return nil, err
 	}
 	return items, nil
+}
+
+const authTouchSession = `-- name: AuthTouchSession :exec
+SELECT auth_touch_session($1::bytea, $2::text)
+`
+
+type AuthTouchSessionParams struct {
+	TokenHash []byte
+	Device    string
+}
+
+func (q *Queries) AuthTouchSession(ctx context.Context, arg AuthTouchSessionParams) error {
+	_, err := q.db.Exec(ctx, authTouchSession, arg.TokenHash, arg.Device)
+	return err
 }

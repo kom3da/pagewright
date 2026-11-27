@@ -110,6 +110,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/auth/logout", s.authed(s.logout))
 	mux.Handle("GET /api/me", s.authed(s.me))
 	mux.Handle("POST /api/me/site", s.authed(s.selectSite))
+	mux.Handle("GET /api/me/sessions", s.authed(s.listSessions))
+	mux.Handle("POST /api/me/sessions/logout-others", s.authed(s.revokeOtherSessions))
+	mux.Handle("DELETE /api/me/sessions/{id}", s.authed(s.revokeSession))
 
 	mux.Handle("GET /api/contents", s.site(s.listContents))
 	mux.Handle("POST /api/contents", s.site(s.createContent))
@@ -166,6 +169,8 @@ type session struct {
 	displayName string
 	tenantID    uuid.UUID // uuid.Nil until a site is chosen
 	role        string    // "admin" or "editor"; empty until a site is chosen
+	// touchDue: the session's last recorded use is over an hour old.
+	touchDue bool
 }
 
 type handler func(w http.ResponseWriter, r *http.Request, sess *session) error
@@ -185,6 +190,7 @@ func (s *Server) authed(h handler) http.Handler {
 			s.finish(w, r, err)
 			return
 		}
+		s.recordUse(r, sess)
 		s.finish(w, r, h(w, r, sess))
 	})
 }
@@ -224,7 +230,7 @@ func (s *Server) sessionByHash(ctx context.Context, h []byte) (*session, error) 
 	}
 	return &session{
 		tokenHash: h, userID: row.UserID, email: row.Email, displayName: row.DisplayName,
-		tenantID: row.TenantID, role: row.Role,
+		tenantID: row.TenantID, role: row.Role, touchDue: row.TouchDue,
 	}, nil
 }
 

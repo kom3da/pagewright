@@ -33,6 +33,22 @@
 | `POST /api/auth/logout` | なし | 204 |
 | `GET /api/me` | なし | 200 `Me` または 401 |
 | `POST /api/me/site` | `{"siteId": "uuid"}` | 200 `Me`。所属していないサイトは 403 |
+| `GET /api/me/sessions` | なし | 200 `Session[]`。自分のログイン中のセッション（端末）。いまの端末が最初、あとは最後に使った順 |
+| `DELETE /api/me/sessions/{id}` | | 204。その端末をログアウトさせる。ほかの人のセッション、いまの端末（`current`、ログアウトは `POST /api/auth/logout`）、ないものは 404 |
+| `POST /api/me/sessions/logout-others` | なし | 200 `{"revoked": number}`。「ほかの端末からログアウト」。いまの端末のほかの、自分のセッションをすべて終わらせ、その数を返す |
+
+```ts
+type Session = {
+  id: string;         // 取り消し用の名前（64 文字の16進数）。Cookie のトークンでも、サーバーが持つハッシュでもない
+  device: string;     // 「Windows の Chrome」のような端末の名前。分からなければ ""
+  createdAt: string;  // ログインした日時
+  lastUsedAt: string; // 最後に使った日時（1 時間ごとにしか記録しないので、最大 1 時間古い）
+  expiresAt: string;  // ログインの期限（ログインから 30 日。使っても延びない）
+  current: boolean;   // いまの端末
+};
+```
+
+セッションには、端末の名前のほか User-Agent も IP アドレスも保存しない（個人情報で、一覧には要らないため）。端末の名前は、ログインした直後と、その後 1 時間に 1 回まで、使った端末の User-Agent から作り直す。
 
 ```ts
 type Me = {
