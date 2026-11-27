@@ -25,7 +25,7 @@ Docker Compose で、データベース（PostgreSQL）ごとまとめて動か�
 ## 必要なもの
 
 - **Linux のサーバー1台**（VPS やクラウドのサーバー）。x86_64 か arm64。メモリ 2GB 以上、ディスク 20GB 以上を目安に（画像が多ければ増やす）
-- **Docker Engine と Docker Compose v2**（`docker compose version` で確認）
+- **Docker Engine 27 以降と Docker Compose v2**（`docker version`・`docker compose version` で確認。IPv6 の閲覧者を区別するため。「[HTTPS について](./https.md#ipv6-の閲覧者)」）
 - **sudo を使える普通のユーザー**で作業すること。手順の `docker` コマンドは sudo なしで書いているので、そのユーザーを `docker` グループに入れておく（入れないなら `sudo docker …` と読み替える）
 - **ドメイン2つ**：公開サイト用と管理画面用。DNS を設定できること
 - **ポート 80 と 443** が外から届くこと（証明書の取得に使う）

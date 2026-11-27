@@ -81,7 +81,8 @@ services:
       # Caddy もロードバランサーも置かずに nginx を直接公開するなら、ここを
       # nginx のIPだけにする（Docker のゲートウェイも信じてしまい、閲覧者が
       # X-Forwarded-For を偽れるため）。docs/install/https.md を参照。
-      PAGEWRIGHT_TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      # fc00::/7 は下の networks の IPv6（Caddy から nginx へは IPv6 で届くことがある）。
+      PAGEWRIGHT_TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
       PAGEWRIGHT_MAIL_FROM: ${PAGEWRIGHT_MAIL_FROM:?.env に PAGEWRIGHT_MAIL_FROM を書いてください}
       # サイト内検索（Pagefind）。off で使わない
       PAGEWRIGHT_PAGEFIND: ${PAGEWRIGHT_PAGEFIND:-/usr/local/bin/pagefind_extended}
@@ -134,6 +135,16 @@ services:
       - caddy-config:/config
     depends_on:
       - nginx
+
+# コンテナのネットワークで IPv6 も使う。こうしないと IPv6 の閲覧者は Docker の
+# ゲートウェイ（プライベートIP）から来たように見え、ログインやお問い合わせの回数制限が
+# IPv6 の閲覧者全員でまとめてかかる。Docker Engine 27 以降が必要（docs/install/https.md）。
+networks:
+  default:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: fd70:6167:6577::/64 # コンテナ用の IPv6（ほかのネットワークと重なるときだけ変える）
 
 volumes:
   db-data: # データベース

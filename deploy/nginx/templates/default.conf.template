@@ -12,6 +12,7 @@ resolver 127.0.0.11 valid=10s ipv6=off;
 set_real_ip_from 10.0.0.0/8;
 set_real_ip_from 172.16.0.0/12;
 set_real_ip_from 192.168.0.0/16;
+set_real_ip_from fc00::/7; # compose.yaml の networks の IPv6
 real_ip_header X-Forwarded-For;
 
 # アクセスログにログイン用URLやプレビューURLの合言葉（token）を残さない。
