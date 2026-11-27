@@ -16,6 +16,7 @@ import { AppLayout } from "./components/AppLayout";
 import { AnchorLink } from "./components/ui/AnchorLink";
 import { ErrorMessage, Loading } from "./components/ui/feedback";
 import { PageTitle } from "./components/ui/PageHeader";
+import { AccountPage } from "./pages/AccountPage";
 import { CategoriesPage } from "./pages/CategoriesPage";
 import { ContentListPage, validateListSearch } from "./pages/ContentListPage";
 import { HomePage } from "./pages/HomePage";
@@ -163,6 +164,12 @@ const tagsRoute = createRoute({
   component: TagsPage,
 });
 
+const accountRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "account",
+  component: AccountPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "settings",
@@ -192,6 +199,7 @@ const routeTree = rootRoute.addChildren([
     tagsRoute,
     settingsRoute,
     inquiriesRoute,
+    accountRoute,
   ]),
 ]);
 

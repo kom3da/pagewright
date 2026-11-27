@@ -56,6 +56,7 @@ test("lists and management screens are accessible", async ({ page }) => {
     ["tags", "タグ"],
     ["settings", "サイトの設定"],
     ["inquiries", "お問い合わせ"],
+    ["account", "アカウント"],
   ] as const) {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();

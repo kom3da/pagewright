@@ -8,6 +8,20 @@ export type Me = {
   currentSiteId: string | null;
 };
 
+/** A logged-in browser of the current user (GET /api/me/sessions). */
+export type Session = {
+  /** Names the session for revoking it; not its token. */
+  id: string;
+  /** 「Windows の Chrome」, or "" when not recognized. */
+  device: string;
+  createdAt: string;
+  /** Recorded at most hourly, so up to an hour old. */
+  lastUsedAt: string;
+  expiresAt: string;
+  /** The browser making the request. */
+  current: boolean;
+};
+
 export type ContentType = "post" | "page";
 export type ContentStatus = "draft" | "scheduled" | "published";
 

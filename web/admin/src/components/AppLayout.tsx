@@ -25,6 +25,7 @@ import {
   LogOut,
   type LucideIcon,
   Menu as MenuIcon,
+  MonitorSmartphone,
   Newspaper,
   Settings,
   Tags,
@@ -290,6 +291,13 @@ function UserMenu() {
       </Menu.Target>
       <Menu.Dropdown>
         <Menu.Label>{me.user.email} でログイン中</Menu.Label>
+        <Menu.Item
+          component={Link}
+          to="/account"
+          leftSection={<MonitorSmartphone aria-hidden="true" size={16} />}
+        >
+          ログイン中の端末
+        </Menu.Item>
         <Menu.Item
           leftSection={<LogOut aria-hidden="true" size={16} />}
           onClick={() => logout.mutate()}

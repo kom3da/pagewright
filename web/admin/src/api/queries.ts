@@ -79,6 +79,9 @@ export const buildsQuery = queryOptions({
   queryFn: () => api.listBuilds(1),
 });
 
+/** The current user's logged-in browsers (the account screen). */
+export const sessionsQuery = queryOptions({ queryKey: ["sessions"], queryFn: api.listSessions });
+
 /** Which contact messages a list shows: 未対応 (false), 対応済み (true) or all (undefined). */
 export type SubmissionsFilter = boolean | undefined;
 

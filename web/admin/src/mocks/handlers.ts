@@ -10,6 +10,7 @@ import type {
   Media,
   MenuItem,
   PreviewLink,
+  Session,
   SiteSettings,
   Submission,
   Tag,
@@ -30,6 +31,8 @@ type Db = {
   /** Settings of the current site. The mock keeps one set for every site. */
   site: SiteSettings;
   submissions: Submission[];
+  /** The logged-in user's sessions; the one with `current` is this browser. */
+  sessions: Session[];
   /** The real server stores only a hash of the token; the mock keeps it for tests. */
   previewLinks: (PreviewLink & { contentId: number; token: string })[];
   builds: number;
@@ -191,6 +194,32 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
         createdAt: "2026-11-19T23:40:00Z",
         handledAt: null,
         handledBy: null,
+      },
+    ],
+    sessions: [
+      {
+        id: "a".repeat(64),
+        device: "Windows の Chrome",
+        createdAt: "2026-11-20T00:00:00Z",
+        lastUsedAt: "2026-11-21T03:00:00Z",
+        expiresAt: "2026-12-20T00:00:00Z",
+        current: true,
+      },
+      {
+        id: "b".repeat(64),
+        device: "iPhone の Safari",
+        createdAt: "2026-11-18T09:30:00Z",
+        lastUsedAt: "2026-11-20T12:00:00Z",
+        expiresAt: "2026-12-18T09:30:00Z",
+        current: false,
+      },
+      {
+        id: "c".repeat(64),
+        device: "",
+        createdAt: "2026-11-01T00:00:00Z",
+        lastUsedAt: "2026-11-02T00:00:00Z",
+        expiresAt: "2026-12-01T00:00:00Z",
+        current: false,
       },
     ],
     previewLinks: [],
@@ -566,6 +595,30 @@ export const handlers = [
     }
     db.me = { ...db.me, currentSiteId: siteId };
     return HttpResponse.json(db.me);
+  }),
+
+  http.get(
+    "/api/me/sessions",
+    ({ request }) => guard(request, { site: false }) ?? HttpResponse.json(db.sessions),
+  ),
+
+  http.delete("/api/me/sessions/:id", ({ request, params }) => {
+    const denied = guard(request, { site: false });
+    if (denied) return denied;
+    // The current session is not found here, as on the server (it ends with logout).
+    if (!db.sessions.some((s) => s.id === params.id && !s.current)) {
+      return error(404, "not_found", "見つかりません。");
+    }
+    db.sessions = db.sessions.filter((s) => s.id !== params.id);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.post("/api/me/sessions/logout-others", ({ request }) => {
+    const denied = guard(request, { site: false });
+    if (denied) return denied;
+    const revoked = db.sessions.filter((s) => !s.current).length;
+    db.sessions = db.sessions.filter((s) => s.current);
+    return HttpResponse.json({ revoked });
   }),
 
   http.get("/api/contents", ({ request }) => {

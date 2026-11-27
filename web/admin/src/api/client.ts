@@ -13,6 +13,7 @@ import type {
   Me,
   Media,
   PreviewLink,
+  Session,
   SiteSettings,
   SiteSettingsInput,
   Submission,
@@ -142,6 +143,12 @@ export const api = {
   logout: () => post<void>("/auth/logout").then(forgetShownSite),
   me: () => get<Me>("/me").then(rememberSite),
   selectSite: (siteId: string) => post<Me>("/me/site", { siteId }).then(rememberSite),
+  /** This browser first, then by last use. */
+  listSessions: () => get<Session[]>("/me/sessions"),
+  /** Logs another browser out (not this one: that is logout). */
+  revokeSession: (id: string) => del(`/me/sessions/${id}`),
+  /** 「ほかの端末からログアウト」: returns how many were logged out. */
+  logoutOtherSessions: () => post<{ revoked: number }>("/me/sessions/logout-others"),
 
   /** Newest number first; `page` continues below the last number received (`before`). */
   listContents: (
