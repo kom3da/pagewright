@@ -54,26 +54,52 @@ func (s *Server) loginLink(w http.ResponseWriter, r *http.Request, _ *session) e
 		return nil
 	}
 
+	// Both registered and unknown addresses take the same steps (the token
+	// insert and the mail job, in one transaction), so the response time
+	// does not tell them apart. An unknown address rolls it all back.
+	ctx := r.Context()
+	tx, err := s.DB.Pool().Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 	token := newToken()
-	found, err := s.DB.Queries().AuthRequestLogin(r.Context(), dbgen.AuthRequestLoginParams{
+	found, err := dbgen.New(tx).AuthRequestLogin(ctx, dbgen.AuthRequestLoginParams{
 		Email: email, TokenHash: hashToken(token), TtlSeconds: int64(loginTTL.Seconds()),
 	})
 	if err != nil {
 		return fmt.Errorf("request login: %w", err)
 	}
-	// Answer the same whether or not the address is registered.
-	if found {
-		link := s.BaseURL + "/admin/login/verify?token=" + url.QueryEscape(token)
-		msg := pwmail.Message{
-			To:      email,
-			Subject: "Pagewright ログイン用のリンク",
-			Body: "Pagewright の管理画面にログインするには、次のリンクを開いて「ログイン」ボタンを押してください。\n\n" +
-				link + "\n\n" +
-				"このリンクの有効期限は15分で、1回だけ使えます。\n" +
-				"心当たりがない場合は、このメールを無視してください。\n",
-		}
-		s.sendMail(r.Context(), nil, msg)
+	link := s.BaseURL + "/admin/login/verify?token=" + url.QueryEscape(token)
+	msg := pwmail.Message{
+		To:      email,
+		Subject: "Pagewright ログイン用のリンク",
+		Body: "Pagewright の管理画面にログインするには、次のリンクを開いて「ログイン」ボタンを押してください。\n\n" +
+			link + "\n\n" +
+			"このリンクの有効期限は15分で、1回だけ使えます。\n" +
+			"心当たりがない場合は、このメールを無視してください。\n",
 	}
+	if s.Jobs == nil {
+		// No queue (tests and tools only): send directly after commit.
+		if found {
+			if err := tx.Commit(ctx); err != nil {
+				return fmt.Errorf("commit: %w", err)
+			}
+			s.sendMail(ctx, nil, msg)
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+	if err := s.Jobs.EnqueueMail(ctx, tx, msg); err != nil {
+		s.Logger.Error("send mail", "subject", msg.Subject, "err", err)
+		found = false // a token nobody receives is of no use
+	}
+	if found {
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit: %w", err)
+		}
+	}
+	// Answer the same whether or not the address is registered.
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kom3da/pagewright/internal/api"
 	"github.com/kom3da/pagewright/internal/db/dbgen"
@@ -34,6 +35,15 @@ import (
 type fakeMail struct {
 	mu   sync.Mutex
 	sent []mail.Message
+	// pending are mails queued in a transaction, delivered once it has
+	// committed (dropped when it rolled back), as a River job would be.
+	pending []pendingMail
+	admin   *pgxpool.Pool
+}
+
+type pendingMail struct {
+	xid string
+	m   mail.Message
 }
 
 func (f *fakeMail) Send(_ context.Context, m mail.Message) error {
@@ -43,19 +53,53 @@ func (f *fakeMail) Send(_ context.Context, m mail.Message) error {
 	return nil
 }
 
-func (f *fakeMail) last() (mail.Message, bool) {
+// queue holds m until the transaction tx is over.
+func (f *fakeMail) queue(ctx context.Context, tx pgx.Tx, m mail.Message) error {
+	var xid string
+	if err := tx.QueryRow(ctx, "SELECT pg_current_xact_id()::text").Scan(&xid); err != nil {
+		return err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if len(f.sent) == 0 {
+	f.pending = append(f.pending, pendingMail{xid, m})
+	return nil
+}
+
+// all returns the mails sent so far, delivering queued ones whose
+// transaction committed.
+func (f *fakeMail) all() []mail.Message {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var still []pendingMail
+	for _, p := range f.pending {
+		var status *string
+		if err := f.admin.QueryRow(context.Background(), "SELECT pg_xact_status($1::text::xid8)", p.xid).Scan(&status); err != nil {
+			panic(err)
+		}
+		switch {
+		case status != nil && *status == "committed":
+			f.sent = append(f.sent, p.m)
+		case status != nil && *status == "in progress":
+			still = append(still, p)
+		}
+	}
+	f.pending = still
+	return append([]mail.Message(nil), f.sent...)
+}
+
+func (f *fakeMail) last() (mail.Message, bool) {
+	sent := f.all()
+	if len(sent) == 0 {
 		return mail.Message{}, false
 	}
-	return f.sent[len(f.sent)-1], true
+	return sent[len(sent)-1], true
 }
 
 type fakeBuilds struct {
 	mu        sync.Mutex
 	tenants   []uuid.UUID
 	publishes []scheduledPublish
+	mailJobs  int // EnqueueMail calls, committed or not
 	mail      *fakeMail
 }
 
@@ -88,9 +132,22 @@ func (f *fakeBuilds) EnqueueContactNotify(ctx context.Context, tx pgx.Tx, args j
 	return f.mail.Send(ctx, jobs.ContactNotification(args.To, args.SiteName, sub))
 }
 
-// EnqueueMail delivers right away through the env's fake mail.
-func (f *fakeBuilds) EnqueueMail(ctx context.Context, _ pgx.Tx, m mail.Message) error {
-	return f.mail.Send(ctx, m)
+// EnqueueMail delivers through the env's fake mail: right away without
+// tx, else when tx commits.
+func (f *fakeBuilds) EnqueueMail(ctx context.Context, tx pgx.Tx, m mail.Message) error {
+	f.mu.Lock()
+	f.mailJobs++
+	f.mu.Unlock()
+	if tx == nil {
+		return f.mail.Send(ctx, m)
+	}
+	return f.mail.queue(ctx, tx, m)
+}
+
+func (f *fakeBuilds) mailJobCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.mailJobs
 }
 
 func (f *fakeBuilds) count(id uuid.UUID) int {
@@ -131,7 +188,7 @@ func newEnv(t *testing.T) *env {
 func newEnvOverlappingIDs(t *testing.T) *env {
 	t.Helper()
 	d := dbtest.New(t)
-	fm := &fakeMail{}
+	fm := &fakeMail{admin: d.Admin}
 	e := &env{t: t, db: d, mail: fm, builds: &fakeBuilds{mail: fm}, tenantA: uuid.New(), tenantB: uuid.New()}
 	ctx := context.Background()
 	seed := []string{
@@ -304,10 +361,21 @@ func TestLogin(t *testing.T) {
 		t.Errorf("login-link without X-Pagewright = %d, want 403", got)
 	}
 
-	// Unknown addresses get the same answer and no mail.
+	// Unknown addresses get the same answer and no mail, though they go
+	// through the same steps (a mail job, rolled back) as known ones.
 	anon.mustDo(http.MethodPost, "/api/auth/login-link", map[string]string{"email": "nobody@example.com"}, nil, http.StatusNoContent)
 	if _, sent := e.mail.last(); sent {
 		t.Error("mail sent to an unknown address")
+	}
+	if got := e.builds.mailJobCount(); got != 1 {
+		t.Errorf("mail jobs for an unknown address = %d, want 1 (rolled back)", got)
+	}
+	var tokens int
+	if err := e.db.Admin.QueryRow(context.Background(), "SELECT count(*) FROM login_tokens").Scan(&tokens); err != nil {
+		t.Fatal(err)
+	}
+	if tokens != 0 {
+		t.Errorf("login tokens after an unknown address = %d, want 0", tokens)
 	}
 	if got, code := anon.errorCode(http.MethodPost, "/api/auth/verify", map[string]string{"token": "bogus"}); got != http.StatusBadRequest || code != "invalid_token" {
 		t.Errorf("verify bogus token = %d %s, want 400 invalid_token", got, code)
@@ -853,10 +921,7 @@ func TestLoginLinkRateLimit(t *testing.T) {
 		}
 	}
 	// The 6th answers the same but sends nothing.
-	e.mail.mu.Lock()
-	n := len(e.mail.sent)
-	e.mail.mu.Unlock()
-	if n != 5 {
+	if n := len(e.mail.all()); n != 5 {
 		t.Errorf("%d login mails sent, want 5", n)
 	}
 	// Other addresses are not affected.
@@ -965,7 +1030,7 @@ func TestContactForm(t *testing.T) {
 	alice := e.login("alice@example.com")
 	bob := e.login("bob@example.com")
 	dave := e.login("dave@example.com")
-	sentBefore := len(e.mail.sent)
+	sentBefore := len(e.mail.all())
 	if status, _ := e.postContact(uuid.New(), contactForm()); status != http.StatusNotFound {
 		t.Errorf("unknown site = %d, want 404", status)
 	}
@@ -974,9 +1039,7 @@ func TestContactForm(t *testing.T) {
 	if status != http.StatusOK || !strings.Contains(page, "送信しました") || !strings.Contains(page, `href="https://site-a.example/contact/"`) {
 		t.Fatalf("post = %d:\n%s", status, page)
 	}
-	e.mail.mu.Lock()
-	sent := e.mail.sent[sentBefore:]
-	e.mail.mu.Unlock()
+	sent := e.mail.all()[sentBefore:]
 	var to []string
 	for _, m := range sent {
 		to = append(to, m.To)
