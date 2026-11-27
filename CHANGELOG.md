@@ -48,7 +48,7 @@ GitHub のリリースノートは、この中のその版の節から作りま�
 #### 導入と運用
 
 - Docker イメージ `ghcr.io/kom3da/pagewright`（amd64・arm64）と、PostgreSQL 18・nginx・Caddy（HTTPS の証明書の自動取得）をまとめた Docker Compose の構成（`deploy/`）
-- コマンド：`serve`・`migrate`・`init`（最初のサイトと管理者を作る）・`login-url`（メールが届かないときのログイン用URL）・`site set-url`／`site clear-url`・`import-wxr`・`backup`・`restore`・`version`
+- コマンド：`serve`・`migrate`・`init`（最初のサイトと管理者を作る）・`login-url`（メールが届かないときのログイン用URL）・`site list`（サイトのIDの一覧）／`site set-url`／`site clear-url`・`import-wxr`・`backup`・`restore`・`version`
 - バックアップと復元（`pagewright backup`・`pagewright restore`）。すべてのサイトのデータベースの中身と画像を1つのファイルにまとめ、サービスを止めずに取れます。`--keep` で古いものを消せます。`restore --force` は、上書きする前に今の状態をバックアップします（docs/install/backup.md）
 - 起動のたびにデータベースを自動で最新の形にします（マイグレーション）
 - SMTP の暗号化の設定（`PAGEWRIGHT_SMTP_TLS`。`starttls` で暗号化できないサーバーには送らない）と、信頼するプロキシの設定（`PAGEWRIGHT_TRUSTED_PROXIES`）

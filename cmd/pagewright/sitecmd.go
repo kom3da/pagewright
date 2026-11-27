@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -17,6 +19,7 @@ import (
 )
 
 const siteUsage = `使い方:
+  pagewright site list                     サイトのID・名前・公開サイトのURLを一覧にする
   pagewright site set-url サイトのID URL   公開サイトのURL（例: https://www.example.jp）を設定する
   pagewright site clear-url サイトのID     公開サイトのURLを外し、PAGEWRIGHT_PUBLIC_BASE_URL に戻す`
 
@@ -29,6 +32,8 @@ func runSite(ctx context.Context, cfg config.Config, args []string) error {
 		return errors.New(siteUsage)
 	}
 	switch {
+	case args[0] == "list" && len(args) == 1:
+		return listSites(ctx, cfg, os.Stdout)
 	case args[0] == "set-url" && len(args) == 3:
 		u, err := site.ParsePublicURL(args[2])
 		if err != nil {
@@ -39,6 +44,45 @@ func runSite(ctx context.Context, cfg config.Config, args []string) error {
 		return setSiteURL(ctx, cfg, args[1], nil)
 	}
 	return errors.New(siteUsage)
+}
+
+// listSites prints every site's ID, name and public URL, oldest first.
+func listSites(ctx context.Context, cfg config.Config, w io.Writer) error {
+	conn, err := pgx.Connect(ctx, cfg.MigrateDatabaseURL)
+	if err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	rows, err := conn.Query(ctx, "SELECT id::text, name, public_base_url FROM tenants ORDER BY created_at, id")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	n := 0
+	for rows.Next() {
+		var id, name string
+		var u *string
+		if err := rows.Scan(&id, &name, &u); err != nil {
+			return err
+		}
+		// The cli container has no PAGEWRIGHT_PUBLIC_BASE_URL, so the
+		// default is named rather than shown.
+		url := "（設定なし：PAGEWRIGHT_PUBLIC_BASE_URL）"
+		if u != nil {
+			url = *u
+		}
+		if _, err := fmt.Fprintf(w, "%s\t%s\t%s\n", id, name, url); err != nil {
+			return err
+		}
+		n++
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if n == 0 {
+		_, err = fmt.Fprintln(w, "サイトはまだありません（pagewright init で作ります）。")
+	}
+	return err
 }
 
 // setSiteURL stores the site's public URL (nil: none) and queues a build,

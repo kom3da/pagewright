@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/kom3da/pagewright/internal/config"
 	"github.com/kom3da/pagewright/internal/db/dbtest"
 )
@@ -20,6 +22,7 @@ func TestSiteArgs(t *testing.T) {
 	}{
 		{"none", nil, "使い方"},
 		{"unknown", []string{"remove"}, "使い方"},
+		{"list extra", []string{"list", id}, "使い方"},
 		{"no url", []string{"set-url", id}, "使い方"},
 		{"extra", []string{"clear-url", id, "https://example.jp"}, "使い方"},
 		{"bad id", []string{"set-url", "abc", "https://example.jp"}, "サイトのID"},
@@ -99,5 +102,34 @@ func TestSiteSetURL(t *testing.T) {
 		if _, err := env.Admin.Exec(ctx, "UPDATE tenants SET public_base_url = $1 WHERE id = $2", bad, b); err == nil {
 			t.Errorf("CHECK accepted %q", bad)
 		}
+	}
+}
+
+func TestSiteList(t *testing.T) {
+	env := dbtest.New(t)
+	ctx := context.Background()
+	cfg := config.Config{MigrateDatabaseURL: env.URL}
+
+	var b strings.Builder
+	if err := listSites(ctx, cfg, &b); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(b.String(), "まだありません") {
+		t.Errorf("no sites: got %q", b.String())
+	}
+
+	a := env.CreateTenant(t, "サイトA")
+	c := env.CreateTenant(t, "サイトB")
+	if _, err := env.Admin.Exec(ctx, "UPDATE tenants SET public_base_url = 'https://b.example' WHERE id = $1", c); err != nil {
+		t.Fatal(err)
+	}
+	b.Reset()
+	if err := listSites(ctx, cfg, &b); err != nil {
+		t.Fatal(err)
+	}
+	want := a.String() + "\tサイトA\t（設定なし：PAGEWRIGHT_PUBLIC_BASE_URL）\n" +
+		c.String() + "\tサイトB\thttps://b.example\n"
+	if diff := cmp.Diff(want, b.String()); diff != "" {
+		t.Errorf("list (-want +got):\n%s", diff)
 	}
 }

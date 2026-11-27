@@ -18,6 +18,7 @@ const usage = `使い方: pagewright <サブコマンド>
   migrate                        データベースを最新の形にする
   init --site 名前 --email メール  サイトと管理者を作り、ログイン用URLを表示する
   login-url --email メール        ログイン用URLを発行する（メールが届かないとき）
+  site list                      サイトのID・名前・公開URLを一覧にする
   site set-url サイトのID URL      サイトの公開URLを設定する（2つ目以降のサイト用）
   site clear-url サイトのID        サイトの公開URLを外す（PAGEWRIGHT_PUBLIC_BASE_URL を使う）
   backup [--out ディレクトリ] [--keep 残す数]
