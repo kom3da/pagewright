@@ -22,7 +22,7 @@ import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { SelectSitePage } from "./pages/SelectSitePage";
 import { SiteSettingsPage } from "./pages/SiteSettingsPage";
-import { SubmissionsPage } from "./pages/SubmissionsPage";
+import { SubmissionsPage, validateSubmissionsSearch } from "./pages/SubmissionsPage";
 import { TagsPage } from "./pages/TagsPage";
 import { VerifyPage } from "./pages/VerifyPage";
 
@@ -172,7 +172,10 @@ const settingsRoute = createRoute({
 const inquiriesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "inquiries",
-  component: SubmissionsPage,
+  validateSearch: validateSubmissionsSearch,
+  component: function Inquiries() {
+    return <SubmissionsPage search={inquiriesRoute.useSearch()} />;
+  },
 });
 
 const routeTree = rootRoute.addChildren([

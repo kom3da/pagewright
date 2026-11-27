@@ -211,9 +211,19 @@ export const api = {
   /** Newest first. */
   listBuilds: (limit = 5) => get<Build[]>(`/site/builds?limit=${limit}`),
 
-  /** Newest first, SUBMISSIONS_PAGE_SIZE at a time; `before` is the last id received. */
-  listSubmissions: (before?: number) =>
-    get<Submission[]>(`/forms/submissions${before === undefined ? "" : `?before=${before}`}`),
+  /**
+   * Newest first, SUBMISSIONS_PAGE_SIZE at a time; `before` is the last id received.
+   * `handled`: only 対応済み (true) or only 未対応 (false) messages; all when left out.
+   */
+  listSubmissions: (handled?: boolean, before?: number) => {
+    const params = new URLSearchParams();
+    if (handled !== undefined) params.set("handled", String(handled));
+    if (before !== undefined) params.set("before", String(before));
+    const q = params.toString();
+    return get<Submission[]>(`/forms/submissions${q ? `?${q}` : ""}`);
+  },
+  setSubmissionHandled: (id: number, handled: boolean) =>
+    patch<Submission>(`/forms/submissions/${id}`, { handled }),
   deleteSubmission: (id: number) => del(`/forms/submissions/${id}`),
 };
 

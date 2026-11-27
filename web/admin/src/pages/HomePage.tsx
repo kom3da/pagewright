@@ -46,7 +46,6 @@ import { usePublicUrl } from "../lib/usePublicUrl";
 import type { ListStatus } from "./ContentListPage";
 
 const RECENT = 5;
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const typeLabel = { post: "記事", page: "固定ページ" } as const;
 
 /** The things a site owner may want to follow up, by the list filter that shows them. */
@@ -304,12 +303,10 @@ function TileLink({
 }
 
 function InquiriesTile() {
-  // Only the first page (newest 100) is needed to count the last 7 days.
-  const { data, isPending, error } = useInfiniteQuery(submissionsQuery);
+  // The first page (newest 100) of the 未対応 ones is enough to count them up to 100.
+  const { data, isPending, error } = useInfiniteQuery(submissionsQuery(false));
   const firstPage = data?.pages[0];
   const first = firstPage?.items ?? [];
-  const since = Date.now() - WEEK_MS;
-  const recent = first.filter((s) => new Date(s.createdAt).getTime() >= since).length;
   return (
     <Tile
       title="お問い合わせ"
@@ -327,9 +324,9 @@ function InquiriesTile() {
         </Text>
       ) : (
         <>
-          <Count n={recent} more={recent === first.length && firstPage?.more} />
+          <Count n={first.length} more={firstPage?.more} />
           <Text size="sm" c="dimmed">
-            この7日間に届いたもの
+            まだ対応していないもの
             {first[0] && `。最新は${formatDateTime(first[0].createdAt)}`}
           </Text>
         </>

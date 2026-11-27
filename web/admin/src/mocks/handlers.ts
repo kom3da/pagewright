@@ -177,6 +177,8 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
         message: "キッチンのリフォームについて相談したいです。\n見積もりは無料でしょうか。",
         pagePath: "/contact/",
         createdAt: "2026-11-21T03:15:00Z",
+        handledAt: null,
+        handledBy: null,
       },
       {
         id: 1,
@@ -187,6 +189,8 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
         message: "見学会の日程を教えてください。",
         pagePath: "/contact/",
         createdAt: "2026-11-19T23:40:00Z",
+        handledAt: null,
+        handledBy: null,
       },
     ],
     previewLinks: [],
@@ -1059,15 +1063,38 @@ export const handlers = [
   http.get("/api/forms/submissions", ({ request }) => {
     const denied = adminGuard(request, "お問い合わせの内容を見られるのは管理者だけです");
     if (denied) return denied;
-    const before = Number(
-      new URL(request.url).searchParams.get("before") ?? Number.POSITIVE_INFINITY,
-    );
+    const params = new URL(request.url).searchParams;
+    const before = Number(params.get("before") ?? Number.POSITIVE_INFINITY);
+    const handled = params.get("handled");
+    if (handled !== null && handled !== "true" && handled !== "false") {
+      return error(422, "invalid_handled", "対応の状態の指定が正しくありません");
+    }
     return HttpResponse.json(
       db.submissions
         .filter((f) => f.id < before)
+        .filter((f) => handled === null || (f.handledAt !== null) === (handled === "true"))
         .sort((a, b) => b.id - a.id)
         .slice(0, 100),
     );
+  }),
+
+  http.patch("/api/forms/submissions/:id", async ({ request, params }) => {
+    const denied = adminGuard(request, "お問い合わせの内容を見られるのは管理者だけです");
+    if (denied) return denied;
+    const sub = db.submissions.find((f) => f.id === Number(params.id));
+    if (!sub) return error(404, "not_found", "見つかりません。");
+    const { handled } = (await request.json()) as { handled?: unknown };
+    if (typeof handled !== "boolean") {
+      return error(422, "invalid_handled", "対応の状態の指定が正しくありません");
+    }
+    if (!handled) {
+      sub.handledAt = null;
+      sub.handledBy = null;
+    } else if (!sub.handledAt) {
+      sub.handledAt = now();
+      sub.handledBy = db.me.user.displayName || db.me.user.email;
+    }
+    return HttpResponse.json(sub);
   }),
 
   http.delete("/api/forms/submissions/:id", ({ request, params }) => {

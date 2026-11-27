@@ -79,22 +79,26 @@ export const buildsQuery = queryOptions({
   queryFn: () => api.listBuilds(1),
 });
 
+/** Which contact messages a list shows: 未対応 (false), 対応済み (true) or all (undefined). */
+export type SubmissionsFilter = boolean | undefined;
+
 // Contact messages are personal data: never persisted, and dropped from memory as soon
-// as no screen shows them.
-export const submissionsQuery = infiniteQueryOptions({
-  queryKey: ["submissions"],
-  // Whether there may be more, and where to continue, are decided from the page as it was
-  // fetched: deleting from the cached page must not hide 「もっと見る」.
-  queryFn: async ({ pageParam }) => {
-    const items = await api.listSubmissions(pageParam);
-    return {
-      items,
-      more: items.length >= SUBMISSIONS_PAGE_SIZE,
-      next: items.at(-1)?.id,
-    };
-  },
-  initialPageParam: undefined as number | undefined,
-  // A full page means there may be more; the next page starts below its last id.
-  getNextPageParam: (last) => (last.more ? last.next : undefined),
-  gcTime: 0,
-});
+// as no screen shows them. Every filter's key starts with ["submissions"].
+export const submissionsQuery = (handled: SubmissionsFilter) =>
+  infiniteQueryOptions({
+    queryKey: ["submissions", handled ?? "all"],
+    // Whether there may be more, and where to continue, are decided from the page as it was
+    // fetched: removing from the cached page must not hide 「もっと見る」.
+    queryFn: async ({ pageParam }) => {
+      const items = await api.listSubmissions(handled, pageParam);
+      return {
+        items,
+        more: items.length >= SUBMISSIONS_PAGE_SIZE,
+        next: items.at(-1)?.id,
+      };
+    },
+    initialPageParam: undefined as number | undefined,
+    // A full page means there may be more; the next page starts below its last id.
+    getNextPageParam: (last) => (last.more ? last.next : undefined),
+    gcTime: 0,
+  });

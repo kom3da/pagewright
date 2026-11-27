@@ -1,5 +1,5 @@
 import { Badge, Group } from "@mantine/core";
-import { CalendarClock, CircleCheck, CircleDashed, PenLine } from "lucide-react";
+import { CalendarClock, CircleAlert, CircleCheck, CircleDashed, PenLine } from "lucide-react";
 import type { ContentStatus } from "../../api/types";
 
 /**
@@ -12,6 +12,9 @@ const statuses = {
   published: { label: "公開中", color: "green", icon: CircleCheck },
   unpublishedChanges: { label: "未公開の変更あり", color: "brand", icon: PenLine },
   scheduledUpdate: { label: "更新を予約", color: "orange", icon: CalendarClock },
+  // Contact messages.
+  unhandled: { label: "未対応", color: "orange", icon: CircleAlert },
+  handled: { label: "対応済み", color: "green", icon: CircleCheck },
 } as const;
 
 export type StatusKind = keyof typeof statuses;

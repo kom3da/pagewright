@@ -76,11 +76,18 @@ describe("home dashboard", () => {
     expect(rows[0]).toHaveTextContent("固定ページ");
   });
 
-  it("counts the inquiries of the last 7 days for admins", async () => {
-    db.submissions[0].createdAt = daysAgo(1);
-    db.submissions[1].createdAt = daysAgo(10);
+  it("counts the unhandled inquiries for admins", async () => {
+    db.submissions[1].handledAt = daysAgo(1);
+    db.submissions[1].handledBy = "山田太郎";
+    const requests = recordRequests();
     renderApp("/");
     await waitFor(() => expect(tile("お問い合わせ")).toHaveTextContent("1件"));
+    expect(tile("お問い合わせ")).toHaveTextContent(
+      "まだ対応していないもの。最新は2026/11/21 12:15",
+    );
+    expect(requests.filter((r) => r.path.startsWith("/api/forms")).map((r) => r.path)).toEqual([
+      "/api/forms/submissions?handled=false",
+    ]);
     expect(
       within(tile("お問い合わせ")).getByRole("link", { name: "お問い合わせを見る" }),
     ).toBeVisible();

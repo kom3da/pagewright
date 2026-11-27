@@ -174,6 +174,10 @@ export type Submission = {
   message: string;
   pagePath: string;
   createdAt: string;
+  /** When it was marked 対応済み; null while 未対応. */
+  handledAt: string | null;
+  /** Who marked it 対応済み (display name or e-mail); null while 未対応 or once they left the site. */
+  handledBy: string | null;
 };
 
 /** A login-free link to the latest revision. `url` is returned only when created. */

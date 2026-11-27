@@ -155,8 +155,27 @@ describe("api client", () => {
 
   it("pages contact messages with ?before", async () => {
     const requests = recordRequests();
-    expect((await api.listSubmissions(2)).map((s) => s.id)).toEqual([1]);
+    expect((await api.listSubmissions(undefined, 2)).map((s) => s.id)).toEqual([1]);
     expect(requests.map((r) => r.path)).toEqual(["/api/forms/submissions?before=2"]);
+  });
+
+  it("marks contact messages handled and filters by it", async () => {
+    const requests = recordRequests();
+    const done = await api.setSubmissionHandled(1, true);
+    expect(done).toMatchObject({ id: 1, handledBy: "山田太郎" });
+    expect(done.handledAt).not.toBeNull();
+    expect((await api.listSubmissions(false)).map((s) => s.id)).toEqual([2]);
+    expect((await api.listSubmissions(true, 5)).map((s) => s.id)).toEqual([1]);
+    expect(await api.setSubmissionHandled(1, false)).toMatchObject({
+      handledAt: null,
+      handledBy: null,
+    });
+    expect(requests.map((r) => [r.method, r.path])).toEqual([
+      ["PATCH", "/api/forms/submissions/1"],
+      ["GET", "/api/forms/submissions?handled=false"],
+      ["GET", "/api/forms/submissions?handled=true&before=5"],
+      ["PATCH", "/api/forms/submissions/1"],
+    ]);
   });
 
   it("sends media as multipart with the alt text", async () => {
