@@ -554,6 +554,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
     content.scheduledRevisionId !== null && content.scheduledRevisionId !== content.revision.id;
   const slug = form.watch("slug");
   const parentId = form.watch("parentId");
+  // All pages (they are few, unlike posts): the parent choice and URL preview need the tree.
   const pages = useQuery({ ...contentsQuery("page"), enabled: type === "page" }).data ?? [];
 
   // Below the `lg` breakpoint the settings are under the body: 「その他」 offers a jump there.

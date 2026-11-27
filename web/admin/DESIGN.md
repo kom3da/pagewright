@@ -113,6 +113,7 @@
 | `Field` | Mantine の入力部品でない欄（ファイル選択、独自の部品）にラベル・説明・エラーを付ける。Mantine の `TextInput` などは自分の `label`・`description`・`error`・`required` を使う |
 | `AnchorLink` | アプリ内の文字のリンク（`to`・`params` が型付き）。ボタンの見た目にしたいときは Mantine の `Button` に `component={Link}` |
 | `ExternalLink` | 新しいタブで開くリンク（公開サイトなど）。アイコンと「（新しいタブで開きます）」を自動で付ける。公開サイトの URL は `usePublicUrl()`（`lib/usePublicUrl.ts`、サーバーの `publicBaseUrl`）で作る |
+| `ContentPicker`（`components/`） | 記事・固定ページを1つ選ぶ欄（サイトの設定のトップページ・個人情報のページ・テーマのページの項目・メニューのリンク先）。**記事を全部読み込んで選択肢にしない**（何千件もあるサイトがある）。入力するとタイトルで探し（`GET /api/contents?q=…&limit=20`、0.3秒待ってから）、開いただけなら新しいものから20件。選んでいるものは一覧になくても `GET /api/contents/{id}` でタイトルを出す。矢印キーで移動・Enter で決定・Escape で閉じる（ダイアログは閉じない）。件数は「「営業」に合う記事：3件」と読み上げ、なければ「見つかりません」。`emptyLabel`（「選ばない」）を渡すと、先頭で選ばないことにできる |
 | `.pw-input` / `.pw-label`（CSS） | Mantine の入力欄の見た目の素の `<input>`。1つの説明・エラーを2つの欄で共有するとき（日付＋時刻、色見本＋色コード）だけ。Mantine の入力欄は `aria-describedby` を上書きできないため |
 
 Mantine をそのまま使うもの：`Button`、`TextInput`、`Textarea`（自動で高さが伸びる）、`NativeSelect`（選択肢が少ないとき。`optgroup` も使える）、`Checkbox`、`Radio.Group`、`Fieldset`、`Menu`、`Tabs`、`Badge`、`Card`、`Paper`、`SimpleGrid`、`Stack`、`Group`、`Code`、`DataList`（詳細表示の項目名と値）、`Toolbar`（矢印キーで移動するツールバー）、`@mantine/dates` の日付入力（`DatesProvider` で日本語・日曜始まりに設定済み）。
@@ -243,10 +244,12 @@ Tailwind と Radix は取り除き、すべての画面の部品（ボタン、�
   - スマホでは「段落の種類」「太字」「リンク」「画像」だけを並べ、残りは「ほか」のメニューに入れる
   - 「左右の矢印キーで移動できます」は画面に出さず、ツールバーの説明（`aria-describedby`）にする。「段落の中で改行するときは Shift＋Enter」は本文の下に、PC の幅でだけ見せる（スマホでは読み上げだけ）
   - 日付と時刻は `components/DateTimeFields.tsx`（`.pw-input` の素の input 2つで説明とエラーを共有）。予約と公開日で使う
+  - 「親ページ」は `ContentPicker` にせず、固定ページを全部読み込んだ `NativeSelect` のまま（階層の字下げ、自分とその下のページを選べなくすること、URL の見本に、ページの木全体が要るため）。固定ページは記事と違い、ふつうは数十件までなので読み込んでよい。記事を全部読み込むのは、管理画面のどこでもしない
 - **ホームと一覧**：組み直し済み。ホームの見出しは「ようこそ、山田太郎 さん」（名前がなければ「ようこそ」だけ。メールアドレスは出さない）。ホームは「記事とページの状況」（件数から絞り込んだ一覧へ）・「最近編集した記事・ページ」・「公開サイトの更新」（`GET /api/site/builds`）・お問い合わせの件数（管理者だけ）。まだ何も公開していないサイトでは「はじめに」の手順を出す
 - 「画像」（メディアライブラリ）の画面はまだない。作るならサイドバーの `navGroups` に足し、`editor/MediaDialog.tsx` の `UploadForm`・`MediaPicker` を使う
 - **サイトの設定**（`pages/SiteSettingsPage.tsx`、`components/ColorField.tsx`・`MenuEditor.tsx`）は組み直し済み
   - セクション7つ（基本／見た目／トップページと案内／テーマの項目／メニュー／お問い合わせの送り先／日付と時刻）。PC では右に目次
+  - ページや記事を選ぶ欄はすべて `ContentPicker`（記事も固定ページも全部は読み込まない。メニューの項目のタイトルは1件ずつ `GET /api/contents/{id}` で出す）
   - 保存は画面の下に固定したバー1つ（`PUT /api/site` が全体を置き換えるため、セクションごとには保存しない）。変更があるときだけ「保存していない変更があります」
   - テーマの項目は、選んだテーマの `settings[]` から欄を作る（項目名を管理画面に書かない）。見出しと説明は、テーマの `settingsTitle`・`settingsDescription`（例：「会社の連絡先」）があればそれを使い、右の目次も同じ名前にする。なければ「テーマの項目」
   - `ColorField` は `.pw-input` の素の input と `<input type="color">`（説明とコントラスト比を2つの欄で共有するため）。読めるかどうかを先にふつうの言葉で書き（「この色の上の白い文字は、はっきり読めます」／「白い文字が読みにくい色です。もう少し濃い色にしてください」）、コントラスト比はその下に補足として出す
