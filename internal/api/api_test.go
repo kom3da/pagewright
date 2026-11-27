@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"slices"
@@ -1258,9 +1259,19 @@ func TestSitePublicURL(t *testing.T) {
 
 func (e *env) postContact(tenant uuid.UUID, form url.Values) (int, string) {
 	e.t.Helper()
+	return e.postContactFrom(tenant, form, "")
+}
+
+// postContactFrom is postContact with X-Forwarded-For set to ip (when not
+// empty), for servers that trust the test client as a proxy.
+func (e *env) postContactFrom(tenant uuid.UUID, form url.Values, ip string) (int, string) {
+	e.t.Helper()
 	req, _ := http.NewRequest(http.MethodPost, e.srv.URL+"/f/"+tenant.String()+"/contact", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Referer", "https://site-a.example/contact/")
+	if ip != "" {
+		req.Header.Set("X-Forwarded-For", ip)
+	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		e.t.Fatal(err)
@@ -1470,6 +1481,30 @@ func TestContactFormRateLimit(t *testing.T) {
 	}
 	if status, _ := e.postContact(e.tenantA, contactForm()); status != http.StatusTooManyRequests {
 		t.Errorf("11th post = %d, want 429", status)
+	}
+}
+
+// Junk posts (honeypot hits, invalid input) from many addresses must not
+// use up the site's budget (200 an hour) for real messages.
+func TestContactFormJunkDoesNotUseSiteLimit(t *testing.T) {
+	e := newEnvWith(t, func(o *api.Options) {
+		o.TrustedProxies = []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("::1/128")}
+	})
+	bot := contactForm()
+	bot.Set("website", "http://spam.example")
+	invalid := contactForm()
+	invalid.Set("email", "taro")
+	for i := range 210 {
+		f, want := bot, http.StatusOK
+		if i%2 == 1 {
+			f, want = invalid, http.StatusUnprocessableEntity
+		}
+		if status, _ := e.postContactFrom(e.tenantA, f, fmt.Sprintf("203.0.113.%d", i%250+1)); status != want {
+			t.Fatalf("junk post %d = %d, want %d", i+1, status, want)
+		}
+	}
+	if status, page := e.postContactFrom(e.tenantA, contactForm(), "198.51.100.1"); status != http.StatusOK {
+		t.Fatalf("real post after junk = %d:\n%s", status, page)
 	}
 }
 

@@ -118,13 +118,6 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 		s.formPage(w, http.StatusInternalServerError, "", "送信できませんでした", []string{"サーバーでエラーが起きました。時間をおいてもう一度お試しください。"}, "")
 		return
 	}
-	// Count per site only for sites that exist, so made-up ids cannot fill
-	// the limiter's table.
-	if !s.formBySite.allow(tenantID.String()) {
-		s.formPage(w, http.StatusTooManyRequests, "", "送信できませんでした", []string{"短い時間に多くの送信がありました。しばらく待ってからお試しください。"}, back)
-		return
-	}
-
 	// A filled honeypot is a bot: thank it and drop the message.
 	if r.PostFormValue("website") != "" {
 		s.formPage(w, http.StatusOK, siteName, "送信しました", []string{"お問い合わせを受け付けました。"}, back)
@@ -137,6 +130,13 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 	if len(errs) > 0 {
 		errs = append(errs, "ブラウザの「戻る」で入力画面に戻ると、入力した内容が残っています。")
 		s.formPage(w, http.StatusUnprocessableEntity, siteName, "入力内容を確認してください", errs, back)
+		return
+	}
+	// Count per site only messages that would be stored (not honeypot hits
+	// or invalid posts, so junk cannot use up the site's budget), and only
+	// for sites that exist, so made-up ids cannot fill the limiter's table.
+	if !s.formBySite.allow(tenantID.String()) {
+		s.formPage(w, http.StatusTooManyRequests, siteName, "送信できませんでした", []string{"短い時間に多くの送信がありました。しばらく待ってからお試しください。"}, back)
 		return
 	}
 
