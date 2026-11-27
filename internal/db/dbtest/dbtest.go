@@ -8,6 +8,7 @@ package dbtest
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"net/url"
 	"os"
@@ -42,6 +43,35 @@ type Env struct {
 func New(t testing.TB) *Env {
 	t.Helper()
 	ctx := context.Background()
+	e := NewEmpty(t)
+	if _, err := e.Provider.Up(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	d, err := db.Open(ctx, e.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(d.Close)
+	return &Env{Admin: e.Admin, DB: d, URL: e.URL}
+}
+
+// Empty is a fresh database with no migrations applied, for tests that
+// move it through the migrations themselves.
+type Empty struct {
+	// Admin is a superuser pool (bypasses RLS).
+	Admin *pgxpool.Pool
+	// Provider runs the migrations as `pagewright migrate` does.
+	Provider *goose.Provider
+	// SQL is the connection Provider uses, for providers of other files.
+	SQL *sql.DB
+	// URL is the database as the admin user.
+	URL string
+}
+
+// NewEmpty creates the database without migrating it.
+func NewEmpty(t testing.TB) *Empty {
+	t.Helper()
+	ctx := context.Background()
 	adminURL := os.Getenv("PAGEWRIGHT_TEST_DATABASE_URL")
 	if adminURL == "" {
 		adminURL = DefaultAdminURL
@@ -71,7 +101,18 @@ func New(t testing.TB) *Env {
 		t.Fatal(err)
 	}
 	cfg.ConnConfig.Database = name
-	migrate(t, cfg.ConnConfig)
+
+	// Registered after the DROP above, so it runs before it.
+	sqlDB := stdlib.OpenDB(*cfg.ConnConfig)
+	t.Cleanup(func() {
+		if err := sqlDB.Close(); err != nil {
+			t.Errorf("close migration connection: %v", err)
+		}
+	})
+	p, err := migrations.NewProvider(sqlDB, migrations.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	admin, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
@@ -84,13 +125,7 @@ func New(t testing.TB) *Env {
 		t.Fatalf("PAGEWRIGHT_TEST_DATABASE_URL must be a URL: %v", err)
 	}
 	u.Path = "/" + name
-	dbURL := u.String()
-	d, err := db.Open(ctx, dbURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(d.Close)
-	return &Env{Admin: admin, DB: d, URL: dbURL}
+	return &Empty{Admin: admin, Provider: p, SQL: sqlDB, URL: u.String()}
 }
 
 // CreateTenant inserts a tenant (the app has no grant for that).
@@ -118,23 +153,6 @@ func SkipIDs(t testing.TB, admin *pgxpool.Pool, tenant uuid.UUID, n int64) {
 		SET last_id = greatest(tenant_id_counters.last_id, EXCLUDED.last_id)`, tenant, n)
 	if err != nil {
 		t.Fatalf("skip ids: %v", err)
-	}
-}
-
-func migrate(t testing.TB, cfg *pgx.ConnConfig) {
-	t.Helper()
-	sqlDB := stdlib.OpenDB(*cfg)
-	defer func() {
-		if err := sqlDB.Close(); err != nil {
-			t.Errorf("close migration connection: %v", err)
-		}
-	}()
-	p, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrations.FS)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := p.Up(context.Background()); err != nil {
-		t.Fatalf("migrate: %v", err)
 	}
 }
 

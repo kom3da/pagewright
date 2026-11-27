@@ -7,7 +7,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
 
@@ -28,7 +27,7 @@ func runMigrate(ctx context.Context, cfg config.Config) error {
 
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	defer func() { _ = sqlDB.Close() }()
-	p, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrations.FS)
+	p, err := migrations.NewProvider(sqlDB, migrations.FS)
 	if err != nil {
 		return err
 	}
