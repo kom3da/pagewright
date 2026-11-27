@@ -20,3 +20,4 @@
   - 送る項目名は固定です：`name`（必須）、`kana`、`email`（必須）、`phone`、`message`（必須）、`consent=yes`（必須）、`page`
   - `website` はスパム対策の隠し欄です。人には見せず（`aria-hidden="true"`、`tabindex="-1"`）、空のまま送られるようにしてください
   - 部品がなければ、フォームのブロックは出力されません
+  - 送信して入力に問題があったときは、結果のページ（`form.html`）でこの部品をもう一度呼びます。そのときは `.Values`（入力された内容：`Name`、`Kana`、`Email`、`Phone`、`Message`、`Consent`）と `.Errors`（項目名ごとのメッセージ。`{{with index .Errors "email"}}…{{end}}` のように使う）が入っています。入力欄に値を戻し、問題のある欄には `aria-invalid="true"` とメッセージ（`aria-describedby` で結びつける）を付けてください。ふだんのページでは、どちらも空です

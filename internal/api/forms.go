@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/kom3da/pagewright/internal/build"
 	"github.com/kom3da/pagewright/internal/db"
 	"github.com/kom3da/pagewright/internal/db/dbgen"
 	"github.com/kom3da/pagewright/internal/jobs"
@@ -36,27 +38,30 @@ func (s *Server) FormHandler() http.Handler {
 
 type contactInput struct {
 	Name, Kana, Email, Phone, Message, Page string
+	consent                                 bool // only to fill the form again
 }
 
 var phonePattern = regexp.MustCompile(`^[0-9０-９+＋()（）\- ー－]{0,30}$`)
 
-func (in *contactInput) check() []string {
-	var errs []string
+// check returns the problems with the input, in form order, by field name.
+func (in *contactInput) check() []build.FieldError {
+	var errs []build.FieldError
+	add := func(field, msg string) { errs = append(errs, build.FieldError{Field: field, Message: msg}) }
 	lenOK := func(s string, max int) bool { return utf8.RuneCountInString(s) <= max }
 	if in.Name == "" || !lenOK(in.Name, 100) || !plainText(in.Name, false) {
-		errs = append(errs, "お名前を100文字以内で入力してください")
+		add("name", "お名前を100文字以内で入力してください。")
 	}
 	if !lenOK(in.Kana, 100) || !plainText(in.Kana, false) {
-		errs = append(errs, "ふりがなは100文字以内で入力してください")
+		add("kana", "ふりがなは100文字以内で入力してください。")
 	}
 	if !replyAddress(in.Email) {
-		errs = append(errs, "メールアドレスを正しい形式で入力してください（例：taro@example.jp）")
+		add("email", "メールアドレスを正しい形式で入力してください（例：taro@example.jp）。")
 	}
 	if !phonePattern.MatchString(in.Phone) {
-		errs = append(errs, "電話番号は数字とハイフンで入力してください")
+		add("phone", "電話番号は数字とハイフンで入力してください。")
 	}
 	if in.Message == "" || !lenOK(in.Message, 5000) || !plainText(in.Message, true) {
-		errs = append(errs, "お問い合わせ内容を5000文字以内で入力してください")
+		add("message", "お問い合わせ内容を5000文字以内で入力してください。")
 	}
 	return errs
 }
@@ -118,18 +123,28 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 		s.formPage(w, http.StatusInternalServerError, "", "送信できませんでした", []string{"サーバーでエラーが起きました。時間をおいてもう一度お試しください。"}, "")
 		return
 	}
+	// From here on the answer is drawn in the frame of the site's theme.
+	answer := func(status int, title string, res build.FormResult) {
+		res.BackURL = back
+		s.siteFormPage(w, r, tenantID, status, siteName, title, in, res)
+	}
+
 	// A filled honeypot is a bot: thank it and drop the message.
 	if r.PostFormValue("website") != "" {
-		s.formPage(w, http.StatusOK, siteName, "送信しました", []string{"お問い合わせを受け付けました。"}, back)
+		answer(http.StatusOK, "送信しました", build.FormResult{Sent: true, Messages: []string{"お問い合わせを受け付けました。"}})
 		return
 	}
 	errs := in.check()
-	if r.PostFormValue("consent") != "yes" {
-		errs = append(errs, "個人情報の取り扱いへの同意にチェックを入れてください")
+	consent := r.PostFormValue("consent") == "yes"
+	if !consent {
+		errs = append(errs, build.FieldError{Field: "consent", Message: "個人情報の取り扱いへの同意にチェックを入れてください。"})
 	}
 	if len(errs) > 0 {
-		errs = append(errs, "ブラウザの「戻る」で入力画面に戻ると、入力した内容が残っています。")
-		s.formPage(w, http.StatusUnprocessableEntity, siteName, "入力内容を確認してください", errs, back)
+		in.consent = consent
+		answer(http.StatusUnprocessableEntity, "入力内容を確認してください", build.FormResult{
+			Messages: []string{"まだ送信していません。下の内容を直して、もう一度送信してください。"},
+			Errors:   errs,
+		})
 		return
 	}
 	// Count per site only messages that would be stored (not honeypot hits
@@ -159,11 +174,14 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		s.Logger.Error("contact form: save", "tenant_id", tenantID, "err", err)
-		s.formPage(w, http.StatusInternalServerError, siteName, "送信できませんでした", []string{"サーバーでエラーが起きました。時間をおいてもう一度お試しください。"}, back)
+		answer(http.StatusInternalServerError, "送信できませんでした", build.FormResult{
+			Messages: []string{"サーバーでエラーが起きました。時間をおいてもう一度お試しください。"},
+		})
 		return
 	}
-	s.formPage(w, http.StatusOK, siteName, "送信しました",
-		[]string{"お問い合わせを受け付けました。確認のメールをお送りしましたので、ご確認ください。", "担当者より折り返しご連絡いたします。"}, back)
+	answer(http.StatusOK, "送信しました", build.FormResult{Sent: true, Messages: []string{
+		"お問い合わせを受け付けました。確認のメールをお送りしましたので、ご確認ください。", "担当者より折り返しご連絡いたします。",
+	}})
 }
 
 // queueContactMails notifies the site and acknowledges the sender. The
@@ -228,11 +246,66 @@ a { color: #0a4f8f; }
 </html>
 `))
 
-func (s *Server) formPage(w http.ResponseWriter, status int, siteName, title string, lines []string, back string) {
+// siteFormPage answers a contact form post in the frame of the site's
+// theme (site name, logo, menu, colors), loaded from the public site under
+// a <base>. It needs no script. If the theme cannot draw it, the plain
+// page is the answer.
+func (s *Server) siteFormPage(w http.ResponseWriter, r *http.Request, tenantID uuid.UUID, status int, siteName, title string, in contactInput, res build.FormResult) {
+	page, base, err := build.RenderFormResult(r.Context(), s.DB, tenantID, build.FormResultOptions{
+		PublicBaseURL: s.PublicBaseURL,
+		FormBaseURL:   s.BaseURL,
+		SelfURL:       s.BaseURL + r.URL.Path,
+		Page:          in.Page,
+		Title:         title,
+		Result:        res,
+		Values: build.ContactValues{
+			Name: in.Name, Kana: in.Kana, Email: in.Email, Phone: in.Phone, Message: in.Message, Consent: in.consent,
+		},
+	})
+	site := originOf(base)
+	if err != nil || site == "" {
+		if err != nil {
+			s.Logger.Error("contact form: render in theme", "tenant_id", tenantID, "err", err)
+		}
+		lines := res.Messages
+		for _, e := range res.Errors {
+			lines = append(lines, e.Message)
+		}
+		if len(res.Errors) > 0 {
+			lines = append(lines, "ブラウザの「戻る」で入力画面に戻ると、入力した内容が残っています。")
+		}
+		s.formPage(w, status, siteName, title, lines, res.BackURL)
+		return
+	}
+	// Styles, images and fonts come from the public site only; no scripts.
+	csp := "default-src 'none'; style-src 'unsafe-inline' " + site + "; img-src " + site + " data:; font-src " + site +
+		"; base-uri " + site + "; frame-ancestors 'none'"
+	if self := originOf(s.BaseURL); self != "" {
+		csp += "; form-action " + self
+	}
+	formHeaders(w, csp)
+	w.WriteHeader(status)
+	_, _ = w.Write(page)
+}
+
+// originOf is the scheme://host[:port] of an absolute URL, or empty.
+func originOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" || strings.ContainsAny(u.Host, " ;'") {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+func formHeaders(w http.ResponseWriter, csp string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", csp)
+}
+
+func (s *Server) formPage(w http.ResponseWriter, status int, siteName, title string, lines []string, back string) {
+	formHeaders(w, "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'")
 	w.WriteHeader(status)
 	label := "サイトに戻る"
 	if status == http.StatusUnprocessableEntity {

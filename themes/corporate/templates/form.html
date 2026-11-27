@@ -1,0 +1,34 @@
+{{define "main" -}}
+{{- /* The result of sending the contact form. The core serves it from its
+       own address under a <base> for the public site: in-page links use
+       {{.SelfURL}}. */ -}}
+<div class="container container--narrow form-result">
+  <h1>{{.Title}}</h1>
+  {{- with .Form}}
+  {{- range .Messages}}
+  <p>{{.}}</p>
+  {{- end}}
+  {{- with .Errors}}
+  <div class="form-errors">
+    <p class="form-errors__title">入力内容に{{len .}}件の問題があります。</p>
+    <ul>
+      {{- range .}}
+      <li>{{if $.Form.Form}}<a href="{{$.SelfURL}}#cf-{{.Field}}">{{.Message}}</a>{{else}}{{.Message}}{{end}}</li>
+      {{- end}}
+    </ul>
+  </div>
+  {{- end}}
+  {{- with .Form}}
+{{.}}
+  {{- end}}
+  {{- if or .Sent (not .Form)}}
+  <p class="form-result__actions">
+    {{- with .BackURL}}
+    <a class="button" href="{{.}}">{{if $.Form.Sent}}元のページに戻る{{else}}入力画面に戻る{{end}}</a>
+    {{- end}}
+    <a class="button button--secondary" href="/">ホームへ戻る</a>
+  </p>
+  {{- end}}
+  {{- end}}
+</div>
+{{- end}}

@@ -1262,12 +1262,19 @@ func TestSitePublicURL(t *testing.T) {
 
 func (e *env) postContact(tenant uuid.UUID, form url.Values) (int, string) {
 	e.t.Helper()
-	return e.postContactFrom(tenant, form, "")
+	status, _, page := e.postContactHeader(tenant, form, "")
+	return status, page
 }
 
 // postContactFrom is postContact with X-Forwarded-For set to ip (when not
 // empty), for servers that trust the test client as a proxy.
 func (e *env) postContactFrom(tenant uuid.UUID, form url.Values, ip string) (int, string) {
+	e.t.Helper()
+	status, _, page := e.postContactHeader(tenant, form, ip)
+	return status, page
+}
+
+func (e *env) postContactHeader(tenant uuid.UUID, form url.Values, ip string) (int, http.Header, string) {
 	e.t.Helper()
 	req, _ := http.NewRequest(http.MethodPost, e.srv.URL+"/f/"+tenant.String()+"/contact", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -1281,7 +1288,7 @@ func (e *env) postContactFrom(tenant uuid.UUID, form url.Values, ip string) (int
 	}
 	defer func() { _ = res.Body.Close() }()
 	b, _ := io.ReadAll(res.Body)
-	return res.StatusCode, string(b)
+	return res.StatusCode, res.Header, string(b)
 }
 
 func contactForm() url.Values {
@@ -1312,6 +1319,43 @@ func TestContactForm(t *testing.T) {
 	}
 	if diff := cmp.Diff([]string{"alice@example.com", "taro@example.jp"}, to); diff != "" {
 		t.Errorf("mail recipients (-want +got):\n%s", diff)
+	}
+	// The answer is drawn in the site's theme, with the public site as its
+	// base, and a policy that lets in that site's styles and images only.
+	for _, want := range []string{`<base href="https://site-a.example/">`, `class="site-header"`, `href="/_assets/style.css?v=`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("result page lacks %q", want)
+		}
+	}
+
+	// Errors show the form again, filled in, with a message at each field.
+	bad := contactForm()
+	bad.Set("email", "taro")
+	bad.Del("consent")
+	status, hdr, page := e.postContactHeader(e.tenantA, bad, "")
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("bad post = %d", status)
+	}
+	for _, want := range []string{
+		"入力内容を確認してください", `value="taro"`, `value="山田 太郎&lt;script&gt;"`, "見積もりをお願いします。</textarea>",
+		`id="cf-email" name="email"`, `aria-describedby="cf-email-error"`, `href="` + "http://admin.test/f/" + e.tenantA.String() + `/contact#cf-consent"`,
+		`action="http://admin.test/f/` + e.tenantA.String() + `/contact"`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("error page lacks %q:\n%s", want, page)
+		}
+	}
+	if strings.Contains(page, "<script>") || strings.Contains(page, `aria-describedby="cf-name-error"`) {
+		t.Errorf("error page has a script tag or an error on a good field:\n%s", page)
+	}
+	csp := hdr.Get("Content-Security-Policy")
+	for _, want := range []string{"default-src 'none'", "style-src 'unsafe-inline' https://site-a.example;", "form-action http://admin.test"} {
+		if !strings.Contains(csp, want) {
+			t.Errorf("CSP %q lacks %q", csp, want)
+		}
+	}
+	if strings.Contains(csp, "script-src") {
+		t.Errorf("CSP %q allows scripts", csp)
 	}
 
 	var subs []struct {

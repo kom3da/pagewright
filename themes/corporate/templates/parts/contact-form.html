@@ -1,35 +1,55 @@
 {{define "contact-form" -}}
 {{- /* Field names are fixed: the server reads name, kana, email, phone,
-       message, consent=yes, page, and treats a filled "website" as spam. */ -}}
+       message, consent=yes, page, and treats a filled "website" as spam.
+       After a post with errors the form is shown again with .Values and
+       a message per field in .Errors. */ -}}
 <form class="contact-form" id="contact" method="post" action="{{.Action}}">
 <input type="hidden" name="page" value="{{.Page}}">
 <p class="contact-form__note"><span class="required">必須</span>の項目は必ず入力してください。</p>
 <div class="form-field">
 <label for="cf-name">お名前<span class="required">必須</span></label>
-<input id="cf-name" name="name" type="text" required maxlength="100" autocomplete="name" placeholder="例：山田 太郎">
+{{- with index .Errors "name"}}
+<p class="form-field__error" id="cf-name-error">{{.}}</p>
+{{- end}}
+<input id="cf-name" name="name" type="text" required maxlength="100" autocomplete="name" placeholder="例：山田 太郎"{{with .Values.Name}} value="{{.}}"{{end}}{{if index .Errors "name"}} aria-invalid="true" aria-describedby="cf-name-error"{{end}}>
 </div>
 <div class="form-field">
 <label for="cf-kana">ふりがな</label>
-<input id="cf-kana" name="kana" type="text" maxlength="100" placeholder="例：やまだ たろう">
+{{- with index .Errors "kana"}}
+<p class="form-field__error" id="cf-kana-error">{{.}}</p>
+{{- end}}
+<input id="cf-kana" name="kana" type="text" maxlength="100" placeholder="例：やまだ たろう"{{with .Values.Kana}} value="{{.}}"{{end}}{{if index .Errors "kana"}} aria-invalid="true" aria-describedby="cf-kana-error"{{end}}>
 </div>
 <div class="form-field">
 <label for="cf-email">メールアドレス<span class="required">必須</span></label>
-<input id="cf-email" name="email" type="email" required maxlength="254" autocomplete="email" inputmode="email" placeholder="例：taro@example.jp">
+{{- with index .Errors "email"}}
+<p class="form-field__error" id="cf-email-error">{{.}}</p>
+{{- end}}
+<input id="cf-email" name="email" type="email" required maxlength="254" autocomplete="email" inputmode="email" placeholder="例：taro@example.jp"{{with .Values.Email}} value="{{.}}"{{end}}{{if index .Errors "email"}} aria-invalid="true" aria-describedby="cf-email-error"{{end}}>
 </div>
 <div class="form-field">
 <label for="cf-phone">電話番号</label>
-<input id="cf-phone" name="phone" type="tel" maxlength="30" autocomplete="tel" inputmode="tel" placeholder="例：03-1234-5678">
+{{- with index .Errors "phone"}}
+<p class="form-field__error" id="cf-phone-error">{{.}}</p>
+{{- end}}
+<input id="cf-phone" name="phone" type="tel" maxlength="30" autocomplete="tel" inputmode="tel" placeholder="例：03-1234-5678"{{with .Values.Phone}} value="{{.}}"{{end}}{{if index .Errors "phone"}} aria-invalid="true" aria-describedby="cf-phone-error"{{end}}>
 </div>
 <div class="form-field">
 <label for="cf-message">お問い合わせ内容<span class="required">必須</span></label>
-<textarea id="cf-message" name="message" required maxlength="5000" rows="8"></textarea>
+{{- with index .Errors "message"}}
+<p class="form-field__error" id="cf-message-error">{{.}}</p>
+{{- end}}
+<textarea id="cf-message" name="message" required maxlength="5000" rows="8"{{if index .Errors "message"}} aria-invalid="true" aria-describedby="cf-message-error"{{end}}>{{.Values.Message}}</textarea>
 </div>
 <div class="form-field form-field--check">
 {{- with .PrivacyURL}}
 <p class="form-field__note">いただいた個人情報は、お問い合わせへの回答のためだけに使います。詳しくは<a href="{{.}}">個人情報の取り扱い</a>をご覧ください。</p>
 {{- end}}
+{{- with index .Errors "consent"}}
+<p class="form-field__error" id="cf-consent-error">{{.}}</p>
+{{- end}}
 <div class="form-field__check">
-<input id="cf-consent" name="consent" type="checkbox" value="yes" required>
+<input id="cf-consent" name="consent" type="checkbox" value="yes" required{{if .Values.Consent}} checked{{end}}{{if index .Errors "consent"}} aria-invalid="true" aria-describedby="cf-consent-error"{{end}}>
 <label for="cf-consent">個人情報の取り扱いに同意します<span class="required">必須</span></label>
 </div>
 </div>

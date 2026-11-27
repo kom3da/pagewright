@@ -76,7 +76,7 @@ type Summary struct {
 // Page is one HTML page.
 type Page struct {
 	Site *Site
-	// Kind is home, post, page, posts, category, tag or 404.
+	// Kind is home, post, page, posts, category, tag, 404, search or form.
 	Kind        string
 	Title       string // for <title>; empty on the home page
 	Heading     string // h1 of list pages
@@ -91,10 +91,12 @@ type Page struct {
 	// Front is the page featured on the home page (Content then holds its
 	// body), or nil.
 	Front *Summary
-	// SelfURL is this page's own URL on preview pages, which the core
-	// serves under a <base> pointing at the public site: in-page links
-	// should be written as {{.SelfURL}}#id. Empty elsewhere.
+	// SelfURL is this page's own URL on preview and form result pages,
+	// which the core serves under a <base> pointing at the public site:
+	// in-page links should be written as {{.SelfURL}}#id. Empty elsewhere.
 	SelfURL string
+	// Form is the result of a contact form post, on the "form" page only.
+	Form *FormResult
 }
 
 // Content is a rendered post or page.
@@ -189,13 +191,17 @@ type Labels struct {
 
 // pageTemplates are the page templates every theme provides, each defining
 // "main" for the frame "base" in templates/base.html.
-var pageTemplates = []string{"home", "single", "list", "404", "search"}
+var pageTemplates = []string{"home", "single", "list", "404", "search", "form"}
 
 // ContactForm is the data of the theme's "contact-form" part.
 type ContactForm struct {
 	Action     string // where the form posts
 	Page       string // the public path of the page the form is on
 	PrivacyURL string // the page about personal data, or empty
+	// Values and Errors are set when the form is shown again after a post
+	// with errors: what was typed, and a message by field name.
+	Values ContactValues
+	Errors map[string]string
 }
 
 // part renders the named part; ok is false when the theme has none.

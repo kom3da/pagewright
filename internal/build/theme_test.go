@@ -67,11 +67,49 @@ func TestBuildWithAnotherTheme(t *testing.T) {
 	}
 }
 
+// TestRenderFormResult draws a form post with errors in the site's theme
+// (the default, corporate): the form comes back filled in, under a <base>
+// for the public site.
+func TestRenderFormResult(t *testing.T) {
+	env := dbtest.New(t)
+	s := newSeeder(t, env, "Acme", "owner@example.com")
+	at := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+	contact := s.content("page", ptr("contact"), nil)
+	s.publish(contact.ID, s.revision(contact.ID, "Contact", `{"type":"doc","content":[{"type":"contactForm"}]}`).ID, at)
+
+	page, base, err := build.RenderFormResult(context.Background(), env.DB, s.tenant(), build.FormResultOptions{
+		PublicBaseURL: "https://acme.example", FormBaseURL: "https://admin.example",
+		SelfURL: "https://admin.example/f/x/contact", Page: "/contact/", Title: "Check",
+		Result: build.FormResult{
+			Messages: []string{"Not sent."},
+			Errors:   []build.FieldError{{Field: "name", Message: "Name is required."}},
+			BackURL:  "https://acme.example/contact/",
+		},
+		Values: build.ContactValues{Name: `Taro"<`},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if base != "https://acme.example" {
+		t.Errorf("base = %q", base)
+	}
+	for _, want := range []string{
+		`<base href="https://acme.example/">`, "<h1>Check</h1>", "<p>Not sent.</p>",
+		`<a href="https://admin.example/f/x/contact#cf-name">Name is required.</a>`,
+		`class="contact-form"`, `value="Taro&#34;&lt;"`, `aria-invalid="true"`,
+		`<li><a href="/contact/">Contact</a></li>`,
+	} {
+		if !strings.Contains(string(page), want) {
+			t.Errorf("result page lacks %q:\n%s", want, page)
+		}
+	}
+}
+
 func TestLoadThemeErrors(t *testing.T) {
 	base := func() fstest.MapFS {
 		fsys := fstest.MapFS{}
 		for _, f := range []string{"theme.json", "templates/base.html", "templates/home.html", "templates/single.html",
-			"templates/list.html", "templates/404.html", "templates/search.html", "assets/style.css"} {
+			"templates/list.html", "templates/404.html", "templates/search.html", "templates/form.html", "assets/style.css"} {
 			b, err := os.ReadFile(filepath.Join("testdata/minimal-theme", f))
 			if err != nil {
 				t.Fatal(err)

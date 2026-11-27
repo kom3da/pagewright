@@ -1,0 +1,7 @@
+{{define "main" -}}
+<h1>{{.Title}}</h1>
+{{- with .Form}}{{range .Messages}}<p>{{.}}</p>{{end}}
+{{- with .Errors}}<ul class="minimal-errors">{{range .}}<li><a href="{{$.SelfURL}}#f-{{.Field}}">{{.Message}}</a></li>{{end}}</ul>{{end}}
+{{- with .Form}}{{.}}{{end}}
+{{- with .BackURL}}<p><a href="{{.}}">Back</a></p>{{end}}{{end}}
+{{- end}}
