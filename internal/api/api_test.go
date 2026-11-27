@@ -1525,6 +1525,23 @@ func (e *env) getPreview(previewURL, suffix string) (int, http.Header, string) {
 	return res.StatusCode, res.Header, string(b)
 }
 
+// Guessing preview tokens through the files of a link is rate-limited too.
+func TestPreviewFilesRateLimit(t *testing.T) {
+	e := newEnv(t)
+	for i := range 600 {
+		suffix := "media/x.png"
+		if i%2 == 1 {
+			suffix = "_assets/style.css"
+		}
+		if status, _, _ := e.getPreview(fmt.Sprintf("http://admin.test/p/guess%d/", i), suffix); status != http.StatusNotFound {
+			t.Fatalf("lookup %d = %d, want 404", i+1, status)
+		}
+	}
+	if status, _, _ := e.getPreview("http://admin.test/p/guess/", "media/x.png"); status != http.StatusTooManyRequests {
+		t.Errorf("lookup 601 = %d, want 429", status)
+	}
+}
+
 func TestPreviewLinks(t *testing.T) {
 	e := newEnv(t)
 	alice := e.login("alice@example.com")

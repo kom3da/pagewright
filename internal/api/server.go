@@ -75,6 +75,7 @@ type Server struct {
 	formBySite   *limiter
 	autoReplyTo  *limiter
 	previewByIP  *limiter
+	previewFiles *limiter // per address, for a preview link's assets and media
 	// privateWarnedAt is when allowByIP last warned (Unix nanoseconds).
 	privateWarnedAt atomic.Int64
 }
@@ -102,6 +103,9 @@ func New(o Options) *Server {
 		autoReplyTo:  newLimiter(3, 24*time.Hour),
 		// A preview page renders the whole site and needs no login.
 		previewByIP: newLimiter(60, time.Minute),
+		// Each lookup of a preview link's files reads the database; a page
+		// loads a few assets and its images.
+		previewFiles: newLimiter(600, time.Minute),
 	}
 }
 

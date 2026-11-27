@@ -232,6 +232,10 @@ func (s *Server) renderPreview(w http.ResponseWriter, r *http.Request, tenantID 
 }
 
 func (s *Server) previewAsset(w http.ResponseWriter, r *http.Request) {
+	if !s.allowByIP(s.previewFiles, r) {
+		http.Error(w, "too many requests", http.StatusTooManyRequests)
+		return
+	}
 	link, ok := s.lookupPreview(r)
 	if !ok {
 		http.NotFound(w, r)
@@ -241,6 +245,10 @@ func (s *Server) previewAsset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) previewMedia(w http.ResponseWriter, r *http.Request) {
+	if !s.allowByIP(s.previewFiles, r) {
+		http.Error(w, "too many requests", http.StatusTooManyRequests)
+		return
+	}
 	link, ok := s.lookupPreview(r)
 	if !ok {
 		http.NotFound(w, r)
