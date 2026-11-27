@@ -2,6 +2,19 @@ import { defineConfig, type DefaultTheme } from "vitepress";
 
 const repo = "https://github.com/kom3da/pagewright";
 
+// @mdit-vue/shared's slugify (VitePress's default) with the result recomposed (NFC).
+const slugify = (s: string) =>
+  s
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036F]/g, "")
+    .replace(/[\u0000-\u001f]/g, "")
+    .replace(/[\s~`!@#$%^&*()\-_+=[\]{}|\\;:"'“”‘’<>,.?/]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/^(\d)/, "_$1")
+    .toLowerCase()
+    .normalize("NFC");
+
 const guide: DefaultTheme.SidebarItem[] = [
   {
     text: "使い方",
@@ -78,6 +91,9 @@ export default defineConfig({
   ignoreDeadLinks: "localhostLinks",
   lastUpdated: true,
   markdown: {
+    // VitePress's slugify decomposes (NFKD) and leaves 「で」 as 「て」+ U+3099, but links
+    // written in Markdown stay composed, so #…で… never matched. Same rules, recomposed.
+    anchor: { slugify },
     config(md) {
       // Inline code shows Go templates and JSX (`{{.SelfURL}}`, `style={{ … }}`);
       // keep Vue from reading it as interpolation, as it already does for code blocks.
