@@ -1,6 +1,6 @@
 import { MantineProvider } from "@mantine/core";
-import { useMediaQuery } from "@mantine/hooks";
 import { DatesProvider } from "@mantine/dates";
+import { useMediaQuery } from "@mantine/hooks";
 import { ModalsProvider } from "@mantine/modals";
 import { Notifications } from "@mantine/notifications";
 import { QueryClientProvider } from "@tanstack/react-query";

@@ -1,3 +1,4 @@
+import type { Node as PMNode } from "@tiptap/pm/model";
 import type { BodyNode } from "../api/types";
 
 export const BODY_SCHEMA_VERSION = 1;
@@ -78,4 +79,26 @@ export function editorContent(body: BodyNode | null | undefined): BodyNode | und
     return undefined;
   }
   return body;
+}
+
+/**
+ * The body as plain text to read and copy: one block per line, and a table one row per line
+ * with its cells side by side (not one cell per line).
+ */
+export function plainText(doc: PMNode) {
+  const lines: string[] = [];
+  doc.forEach((node) => {
+    if (node.type.name !== "table") {
+      lines.push(node.textBetween(0, node.content.size, "\n"));
+      return;
+    }
+    node.forEach((row) => {
+      const cells: string[] = [];
+      row.forEach((cell) => {
+        cells.push(cell.textBetween(0, cell.content.size, " "));
+      });
+      lines.push(cells.join(" | "));
+    });
+  });
+  return lines.join("\n");
 }

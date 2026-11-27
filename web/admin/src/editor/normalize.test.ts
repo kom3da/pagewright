@@ -2,7 +2,7 @@ import { Editor } from "@tiptap/core";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BodyNode } from "../api/types";
 import { extensions } from "./extensions";
-import { normalizeBody } from "./normalize";
+import { normalizeBody, plainText } from "./normalize";
 
 const text = (t: string, marks?: BodyNode["marks"]): BodyNode =>
   marks ? { type: "text", text: t, marks } : { type: "text", text: t };
@@ -160,5 +160,35 @@ describe("body JSON v1", () => {
     );
     e.chain().setTextSelection(2).unsetRuby().run();
     expect(normalizeBody(e.getJSON() as BodyNode).content?.[0]).toEqual(p(text("東京都")));
+  });
+});
+
+describe("plainText", () => {
+  it("puts blocks on their own lines and a table's cells side by side", () => {
+    const cell = (type: string, t: string): BodyNode => ({ type, content: [p(text(t))] });
+    editor = new Editor({
+      extensions,
+      content: {
+        type: "doc",
+        content: [
+          p(text("はじめに")),
+          {
+            type: "table",
+            content: [
+              {
+                type: "tableRow",
+                content: [cell("tableHeader", "曜日"), cell("tableHeader", "時間")],
+              },
+              {
+                type: "tableRow",
+                content: [cell("tableCell", "平日"), cell("tableCell", "9:00〜18:00")],
+              },
+            ],
+          },
+          p(text("おわりに")),
+        ],
+      },
+    });
+    expect(plainText(editor.state.doc)).toBe("はじめに\n曜日 | 時間\n平日 | 9:00〜18:00\nおわりに");
   });
 });

@@ -59,7 +59,7 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { Section } from "../components/ui/Section";
 import { ContentStatusBadges } from "../components/ui/StatusBadge";
 import { BodyEditor, useBodyEditor } from "../editor/BodyEditor";
-import { editorContent, normalizeBody } from "../editor/normalize";
+import { editorContent, normalizeBody, plainText } from "../editor/normalize";
 import {
   formatDateTime,
   formatJapanDateTime,
@@ -482,12 +482,14 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       update(await api.unpublish(id));
       notify("公開をやめました。");
     });
+    // 「その他」 was disabled while working, which lost the focus: give it back.
+    setTimeout(focusMoreButton);
   };
 
   const remove = async () => {
     const ok = await confirm({
       title: `この${label}を削除しますか？`,
-      message: `「${title || "（タイトルなし）"}」を削除します。元に戻せません。`,
+      message: `「${title || "（タイトルなし）"}」を削除します。${isPublic ? "公開サイトからも消えます。" : ""}元に戻せません。`,
       confirmLabel: "削除する",
       danger: true,
     });
@@ -806,7 +808,11 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
 
           <Section
             title="ほかの人に見せる"
-            description={`公開する前の${label}を、ログインしていない人に見てもらうリンクを作れます。`}
+            description={
+              isPublic
+                ? `まだ公開していない変更も含めた、保存した最新の${label}を、ログインしていない人に見てもらうリンクを作れます。`
+                : `公開する前の${label}を、ログインしていない人に見てもらうリンクを作れます。`
+            }
           >
             <Group>
               <Button
@@ -909,7 +915,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         open={conflict}
         onClose={() => setConflict(false)}
         label={label}
-        myText={conflict ? `${title}\n\n${editor.getText({ blockSeparator: "\n" })}` : ""}
+        myText={conflict ? `${title}\n\n${plainText(editor.state.doc)}` : ""}
         busy={busy !== null}
         onLoadLatest={loadLatest}
         onOverwrite={overwrite}

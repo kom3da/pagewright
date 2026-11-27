@@ -323,6 +323,16 @@ describe("editor", () => {
     const card = screen.getByRole("region", { name: "公開" });
     expect(card).toHaveTextContent("「変更を公開する」を押すまで公開サイトに出ません");
     expect(within(card).getByRole("button", { name: "変更の公開を予約する" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "ほかの人に見せる" })).toHaveTextContent(
+      /まだ公開していない変更も含めた/,
+    );
+  });
+
+  it("says that deleting a published post removes it from the site", async () => {
+    const { user } = await openEditor("/posts/3");
+    await chooseMore(user, "削除する");
+    const dialog = await screen.findByRole("alertdialog", { name: "この記事を削除しますか？" });
+    expect(dialog).toHaveTextContent("公開サイトからも消えます。元に戻せません。");
   });
 
   it("keeps the title on one logical line that wraps instead of being cut", async () => {
@@ -597,6 +607,7 @@ describe("editor", () => {
     await user.click(within(dialog).getByRole("button", { name: "公開をやめる" }));
     expect(await screen.findByText("公開をやめました。")).toBeInTheDocument();
     expect(db.contents.find((c) => c.id === 1)?.status).toBe("draft");
+    await waitFor(() => expect(screen.getByRole("button", { name: "その他" })).toHaveFocus());
   });
 
   it("requires a title to publish", async () => {
@@ -613,6 +624,7 @@ describe("editor", () => {
     const { user } = await openEditor();
     await chooseMore(user, "削除する");
     const dialog = await screen.findByRole("alertdialog", { name: "この記事を削除しますか？" });
+    expect(dialog).not.toHaveTextContent("公開サイトからも消えます");
     expect(within(dialog).getByRole("button", { name: "キャンセル" })).toHaveFocus();
     await user.click(within(dialog).getByRole("button", { name: "削除する" }));
     expect(await screen.findByRole("heading", { name: "記事の一覧" })).toBeInTheDocument();
