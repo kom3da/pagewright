@@ -72,6 +72,7 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
     extra: Partial<ContentDetail> = {},
   ): ContentDetail => ({
     id,
+    latestRevisionId: id * 100,
     number: id,
     type,
     title,
@@ -300,21 +301,14 @@ const error = (status: number, code: string, message: string) =>
 
 /** Lists show the live settings, as the server does. */
 const summary = (c: ContentDetail): ContentSummary => {
-  const {
-    categoryIds,
-    tagIds,
-    revision,
-    publishedRevisionId,
-    scheduledRevisionId,
-    pendingSettings,
-    ...s
-  } = live(c);
+  const { categoryIds, tagIds, revision, publishedRevisionId, pendingSettings, ...s } = live(c);
   return s;
 };
 
 /** Recomputes the derived fields after a change, as the server does. */
 function refresh(c: ContentDetail) {
   c.status = c.publishedRevisionId ? "published" : c.scheduledRevisionId ? "scheduled" : "draft";
+  c.latestRevisionId = c.revision.id;
   // Saved settings wait only while the content is live.
   if (!c.publishedRevisionId) delete db.liveSettings[c.id];
   c.pendingSettings = c.id in db.liveSettings;
@@ -613,6 +607,7 @@ export const handlers = [
     const number = Math.max(0, ...db.contents.map((c) => c.number)) + 1;
     const c: ContentDetail = {
       id,
+      latestRevisionId: id * 100,
       number,
       type,
       title: "",

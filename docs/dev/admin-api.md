@@ -12,7 +12,9 @@
 - エラー：`{"error": {"code": "invalid_slug", "message": "ページのURLは英小文字・数字・ハイフンで入力してください", "field": "slug"}}`。`message` は管理画面にそのまま出せる日本語。`field` は入力欄に関係するエラーのときだけ付き、リクエストの項目名（`slug`、`title`、`parentId`、`name`、`altText`、`file`、`publishAt` など）が入る
   - 401 `unauthenticated`：ログインしていない
   - 403 `no_site`：サイトを選んでいない／`forbidden`：権限がない／`csrf`
-  - 404 `not_found`、409 `conflict`（URL の重複など）／`site_changed`（上の「表示中のサイト」）、422 入力エラー（`code` は項目ごと）
+  - 404 `not_found`、409 `conflict`（ほかのものと重なる）／`site_changed`（上の「表示中のサイト」）、422 入力エラー（`code` は項目ごと）
+  - 409 `conflict`：URL（記事・固定ページ・カテゴリ・タグの「ページのURL（英数字）」）の重複なら `field: "slug"` が付き、メッセージもそう伝える。それ以外の重複（管理画面からはふつう起きない）は `field` なしで、URL のこととは言わない
+  - どの API でも起こりうる 422：`invalid_json`（送られた JSON を読めない、知らない項目がある、4MB を超える）。500 `internal`（サーバーの不具合。メッセージは「時間をおいてもう一度」）
   - どの API でも起こりうる 422：`invalid_reference`（存在しないものを指している。DB の外部キー違反）、`invalid_value`（値が DB の制約に合わない。DB の CHECK 違反）。どちらも `field` なし。管理画面の検査をすり抜けた入力や、ほかの人が同時に消したものを指したときに出る
 - テナントは画面上「サイト」と呼ぶ
 
@@ -26,7 +28,7 @@
 
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
-| `POST /api/auth/login-link` | `{"email": "..."}` | 204。登録の有無にかかわらず同じ応答。登録済みならメールで `/admin/login/verify?token=...` を送る（有効 15 分、1 回限り）。同じアドレスへは 15 分に 5 回、同じ IP からは 15 分に 30 回まで。超えると 429 `too_many_requests` |
+| `POST /api/auth/login-link` | `{"email": "..."}` | 204。登録の有無にかかわらず同じ応答（登録のないアドレスでも同じ処理をして取り消すので、応答時間でも見分けにくい）。メールアドレスの形式が違えば 422 `invalid_email`。登録済みならメールで `/admin/login/verify?token=...` を送る（有効 15 分、1 回限り）。同じアドレスへは 15 分に 5 回、同じ IP からは 15 分に 30 回まで。超えると 429 `too_many_requests` |
 | `POST /api/auth/verify` | `{"token": "..."}` | 200 `Me`。Cookie を発行。リンクを開いただけではトークンを使わず、画面のボタンでこの API を呼ぶ。無効・期限切れは 400 `invalid_token` |
 | `POST /api/auth/logout` | なし | 204 |
 | `GET /api/me` | なし | 200 `Me` または 401 |
@@ -86,11 +88,11 @@ type ContentDetail = ContentSummary & {
 
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
-| `GET /api/contents?type=post&q=...&status=...&before=...&limit=...` | `type`：`post` / `page`。`q`（省略可）：タイトルか「ページのURL」の部分一致、100文字まで。`status`（省略可）：`draft` / `scheduled` / `published`。`limit`（省略可）：1〜1000、省略すると 1000。`before`（省略可）：この番号より古いものから | 200 `ContentSummary[]`（番号の降順、`limit` 件まで）。続きは、受け取った最後の `number` を `before` に入れて取る。`q` が 100 文字を超えるか制御文字を含むと 422 `invalid_q`、`status` がそれ以外なら 422 `invalid_status`、`limit` が範囲外なら 422 `invalid_limit`、`before` が正の整数でなければ 422 `invalid_before` |
-| `POST /api/contents` | `{"type": "post"}` | 201 `ContentDetail`（空の版を 1 つ作る） |
+| `GET /api/contents?type=post&q=...&status=...&before=...&limit=...` | `type`：`post` / `page`（それ以外は 422 `invalid_type`）。`q`（省略可）：タイトルか「ページのURL」の部分一致、100文字まで。`status`（省略可）：`draft` / `scheduled` / `published`。`limit`（省略可）：1〜1000、省略すると 1000。`before`（省略可）：この番号より古いものから | 200 `ContentSummary[]`（番号の降順、`limit` 件まで）。続きは、受け取った最後の `number` を `before` に入れて取る。`q` が 100 文字を超えるか制御文字を含むと 422 `invalid_q`、`status` がそれ以外なら 422 `invalid_status`、`limit` が範囲外なら 422 `invalid_limit`、`before` が正の整数でなければ 422 `invalid_before` |
+| `POST /api/contents` | `{"type": "post"}` | 201 `ContentDetail`（空の版を 1 つ作る）。`type` が `post`・`page` でなければ 422 `invalid_type` |
 | `GET /api/contents/{id}` | | 200 `ContentDetail` |
-| `PUT /api/contents/{id}/draft` | `{"title": "...", "body": {...}, "fields": {...}, "baseRevisionId": 12}`（`fields`・`baseRevisionId` は省略可） | 200 `ContentDetail`。保存のたびに新しい版を作る。`baseRevisionId`（編集を始めたときの `revision.id`）が最新の版と違えば、ほかの人が先に保存したので 409 `edit_conflict` |
-| `PATCH /api/contents/{id}` | `{"slug"?: string \| null, "parentId"?: number \| null, "categoryIds"?: number[], "tagIds"?: number[], "publishedAt"?: string}` | 200 `ContentDetail`。公開中でなければそのまま保存する。公開中なら同じように検証したうえで、公開中の値と違う項目だけを公開待ちとして残し（前に残したものに重ねる。すべて公開中の値に戻れば公開待ちはなくなる）、公開サイトは変えず再ビルドもしない。URL の重なりは保存の時点でも確かめる（409 `conflict`）。`publishedAt` はサイトに出る公開日（今より前の日時。未公開ならその日付で公開される）。先の日時は 422 `invalid_published_at`。ないカテゴリ・タグは 422 `invalid_reference` |
+| `PUT /api/contents/{id}/draft` | `{"title": "...", "body": {...}, "fields": {...}, "baseRevisionId": 12}`（`fields`・`baseRevisionId` は省略可） | 200 `ContentDetail`。保存のたびに新しい版を作る。タイトルが 200 文字を超えると 422 `invalid_title`、本文がスキーマに合わなければ 422 `invalid_body`、`fields` がオブジェクトでなければ 422 `invalid_fields`。`baseRevisionId`（編集を始めたときの `revision.id`）が最新の版と違えば、ほかの人が先に保存したので 409 `edit_conflict` |
+| `PATCH /api/contents/{id}` | `{"slug"?: string \| null, "parentId"?: number \| null, "categoryIds"?: number[], "tagIds"?: number[], "publishedAt"?: string}` | 200 `ContentDetail`。公開中でなければそのまま保存する。公開中なら同じように検証したうえで、公開中の値と違う項目だけを公開待ちとして残し（前に残したものに重ねる。すべて公開中の値に戻れば公開待ちはなくなる）、公開サイトは変えず再ビルドもしない。URL の重なりは保存の時点でも確かめる（409 `conflict`）。`publishedAt` はサイトに出る公開日（今より前の日時。未公開ならその日付で公開される）。先の日時は 422 `invalid_published_at`。ないカテゴリ・タグは 422 `invalid_reference`。親ページの指定が正しくない（記事に親を付けた、ない・固定ページでない親、自分やその下のページを親にした）と 422 `invalid_parent` |
 | `POST /api/contents/{id}/publish` | なし、または `{"baseRevisionId": 12}` | 200 `ContentDetail`。最新の版を公開し、公開を待つ設定も反映して（公開中に URL が変われば古い URL はリダイレクトとして残す）、サイトの再ビルドを予約する。そのあいだに消えたカテゴリ・タグは飛ばす。URL がほかで使われていれば 409 `conflict`（`field: "slug"`）で、何も変えない。公開の予約があれば取り消す。`baseRevisionId`（画面で見ていた版）が最新の版と違えば、ほかの人が先に保存したので 409 `edit_conflict` |
 | `POST /api/contents/{id}/unpublish` | なし | 200 `ContentDetail`。公開を待つ設定は反映して下書きの設定にする（URL が反映できなければ URL の変更だけは捨てる。取り消しは止めない）。公開の予約があれば取り消す。再ビルドを予約する |
 | `POST /api/contents/{id}/schedule` | `{"publishAt": "RFC 3339", "baseRevisionId"?: 12}`（今から 1 分以上あと） | 200 `ContentDetail`。最新の版をその日時に公開する。そのときに公開を待っている設定も反映する（URL が反映できなければ、URL の変更だけ公開待ちに残して公開は進める）。もう一度呼ぶと予約を置き換える。過去の日時は 422 `invalid_publish_at`。`baseRevisionId` は公開と同じ |
@@ -130,7 +132,7 @@ type Tag = { id: number; name: string; slug: string };
 | `PATCH /api/tags/{id}` | `{"name"?, "slug"?}` | 200 `Tag` |
 | `DELETE /api/tags/{id}` | | 204 |
 
-カテゴリとタグの slug も同じ検査。重複は 409 `conflict`。slug を変えると、古い URL はリダイレクトとして残る。
+カテゴリとタグの slug も同じ検査。名前が空か 100 文字を超えると 422 `invalid_name`。親カテゴリの指定が正しくない（ない、自分やその下のカテゴリ）と 422 `invalid_parent`。slug の重複は 409 `conflict`（`field: "slug"`。ほかのカテゴリ・タグと重なったときは、そう伝えるメッセージ）。slug を変えると、古い URL はリダイレクトとして残る。
 
 ## メディア（画像）
 
@@ -151,10 +153,10 @@ type Media = {
 
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
-| `POST /api/media` | multipart：`file`、`altText` | 201 `Media`。画像（JPEG・PNG・GIF・WebP）だけ、10MB まで |
+| `POST /api/media` | multipart：`file`、`altText` | 201 `Media`。画像（JPEG・PNG・GIF・WebP）だけ、10MB まで。`altText` が空か 500 文字を超えると 422 `alt_required`、ファイルがなければ 422 `file_required`、画像でないか読めなければ 422 `unsupported_type`、大きすぎれば 413 `too_large`（どれも `field` 付き） |
 | `GET /api/media` | | 200 `Media[]`（新しい順） |
 | `GET /api/media/{id}/file` | | 画像そのもの |
-| `PATCH /api/media/{id}` | `{"altText"}` | 200 `Media` |
+| `PATCH /api/media/{id}` | `{"altText"}` | 200 `Media`。空か 500 文字を超えると 422 `alt_required` |
 | `DELETE /api/media/{id}` | | 204。最新・公開中・予約中のどれかの本文で使われていれば 409 `media_in_use` |
 
 本文に画像を入れるときは `image` ノードに `src = media.url`、`mediaId = media.id`、`alt` を入れる。管理画面のエディタでの表示には `mediaId` から `/api/media/{id}/file` を使う。
@@ -189,7 +191,7 @@ type ThemeInfo = {
 
 - `primaryColor` から `contactEmail` までは、省略・空文字・未設定のどれも「標準のまま」。GET では標準のときは項目が出ない
 - メニュー：20 件まで。`label` は 50 文字まで（`contentId` のときは省略でき、そのページのタイトルになる）。`url` は `/` か `http://`・`https://` で始め、`label` が必須。違反と、存在しないページの指定は 422 `invalid_menu`（`field: "menu"`）
-- 色・書体・タイムゾーン・送り先・テーマの違反は 422 `invalid_setting`、`field` はその項目名。テーマの設定の違反も 422 `invalid_setting` で、`field` は `themeSettings.<key>`（宣言にない項目、型に合わない値、このサイトにない固定ページ）。トップのページが固定ページでなければ 422 `invalid_front_page`。サイト名は `invalid_name`、ロゴの画像が見つからなければ `invalid_logo`
+- 色・書体・タイムゾーン・送り先・テーマの違反は 422 `invalid_setting`、`field` はその項目名。テーマの設定の違反も 422 `invalid_setting` で、`field` は `themeSettings.<key>`（宣言にない項目、型に合わない値、このサイトにない固定ページ）。トップのページが固定ページでなければ 422 `invalid_front_page`、個人情報の取り扱いのページが固定ページでなければ 422 `invalid_privacy_page`。サイト名は `invalid_name`、ロゴの画像が見つからなければ `invalid_logo`
 - ロゴに使っている画像は `DELETE /api/media/{id}` で 409 `media_in_use`
 
 | メソッドとパス | 入力 | 出力 |

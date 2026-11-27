@@ -21,7 +21,12 @@ export type ContentSummary = {
   hasUnpublishedChanges: boolean;
   url: string | null;
   publishedAt: string | null;
+  /** Also set when an update of a live content is scheduled. */
   scheduledAt: string | null;
+  /** The revision that is scheduled. */
+  scheduledRevisionId: number | null;
+  /** The newest revision. Unlike scheduledRevisionId, there are changes saved after scheduling. */
+  latestRevisionId: number;
   parentId: number | null;
   updatedAt: string;
 };
@@ -49,7 +54,6 @@ export type ContentDetail = ContentSummary & {
   tagIds: number[];
   revision: Revision;
   publishedRevisionId: number | null;
-  scheduledRevisionId: number | null;
   /**
    * The settings shown (slug, parentId, categoryIds, tagIds, publishedAt) were saved on a live
    * content and wait for 「変更を公開する」; `url` is still the live one.
