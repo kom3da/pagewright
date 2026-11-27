@@ -565,7 +565,7 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
           <Section id="site-time" title={sectionTitle["site-time"]}>
             <NativeSelect
               label="タイムゾーン"
-              description="公開サイトに表示する日付や、予約公開の時刻の基準になる地域です。日本のサイトなら「日本（東京）」のままにしてください。"
+              description="公開サイトに表示する日付の基準になる地域です。日本のサイトなら「日本（東京）」のままにしてください。管理画面の予約や公開日の日時は、この設定にかかわらず日本時間で入力します。"
               error={shown.timeZone}
               value={form.timeZone}
               onChange={(e) => set("timeZone", e.currentTarget.value)}
