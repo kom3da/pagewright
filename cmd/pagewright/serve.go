@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -78,10 +79,23 @@ func runServe(ctx context.Context, cfg config.Config) error {
 	g.Go(func() error { return listen(ctx, cfg.Addr, logRequests(secureHeaders(mux))) })
 	if cfg.SiteAddr != "" {
 		g.Go(func() error { return listen(ctx, cfg.SiteAddr, previewHandler(cfg.SiteDir())) })
-		slog.Info("公開サイトのプレビューを起動しました", "url", cfg.PublicBaseURL+"/")
+		slog.Info("公開サイトのプレビューを起動しました", "url", listenURL(cfg.SiteAddr))
 	}
 	slog.Info("管理画面を起動しました", "url", cfg.BaseURL+"/admin/", "version", version)
 	return g.Wait()
+}
+
+// listenURL is the URL a listen address answers at (":8081" is
+// http://localhost:8081/).
+func listenURL(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "localhost"
+	}
+	return "http://" + net.JoinHostPort(host, port) + "/"
 }
 
 // listen serves h on addr until ctx is done.

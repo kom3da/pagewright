@@ -20,7 +20,7 @@ type Config struct {
 	DatabaseURL        string // PAGEWRIGHT_DATABASE_URL: the app's connection
 	MigrateDatabaseURL string // PAGEWRIGHT_MIGRATE_DATABASE_URL: table owner, for migrate and init
 	Addr               string // PAGEWRIGHT_ADDR: admin and API
-	SiteAddr           string // PAGEWRIGHT_SITE_ADDR: public site preview; empty disables it
+	SiteAddr           string // PAGEWRIGHT_SITE_ADDR: public site preview (loopback by default); empty disables it
 	BaseURL            string // PAGEWRIGHT_BASE_URL: where the admin is reachable, for mail links
 	PublicBaseURL      string // PAGEWRIGHT_PUBLIC_BASE_URL: the public site of sites without their own URL (pagewright site set-url)
 	DataDir            string // PAGEWRIGHT_DATA_DIR: media and built sites
@@ -43,7 +43,7 @@ func FromEnv() Config {
 	c := Config{
 		DatabaseURL:     env("PAGEWRIGHT_DATABASE_URL", DevDatabaseURL),
 		Addr:            env("PAGEWRIGHT_ADDR", ":8080"),
-		SiteAddr:        envAllowEmpty("PAGEWRIGHT_SITE_ADDR", ":8081"),
+		SiteAddr:        envAllowEmpty("PAGEWRIGHT_SITE_ADDR", "127.0.0.1:8081"),
 		BaseURL:         strings.TrimRight(env("PAGEWRIGHT_BASE_URL", "http://localhost:8080"), "/"),
 		PublicBaseURL:   strings.TrimRight(env("PAGEWRIGHT_PUBLIC_BASE_URL", "http://localhost:8081"), "/"),
 		DataDir:         env("PAGEWRIGHT_DATA_DIR", "data"),
