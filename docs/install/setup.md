@@ -4,6 +4,7 @@
 
 ```sh
 sudo git clone --branch v0.1.0 https://github.com/kom3da/pagewright.git /opt/pagewright
+sudo chown -R "$USER" /opt/pagewright   # 以降は sudo なしで .env を作ったり git を使ったりできる
 cd /opt/pagewright/deploy
 ```
 

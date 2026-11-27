@@ -9,7 +9,7 @@
 
    ```sh
    cd /opt/pagewright
-   sudo git fetch --tags && sudo git checkout v0.2.0
+   git fetch --tags && git checkout v0.2.0
    cd deploy
    grep PAGEWRIGHT_IMAGE .env.example   # 新しい版の値。これを .env に写す
    ```
