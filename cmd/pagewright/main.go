@@ -12,9 +12,6 @@ import (
 	"github.com/kom3da/pagewright/internal/config"
 )
 
-// version is set at build time with -ldflags "-X main.version=...".
-var version = "dev"
-
 const usage = `使い方: pagewright <サブコマンド>
 
   serve                          管理画面・APIと公開サイトのプレビューを起動する
@@ -23,7 +20,7 @@ const usage = `使い方: pagewright <サブコマンド>
   login-url --email メール        ログイン用URLを発行する（メールが届かないとき）
   site set-url サイトのID URL      サイトの公開URLを設定する（2つ目以降のサイト用）
   site clear-url サイトのID        サイトの公開URLを外す（PAGEWRIGHT_PUBLIC_BASE_URL を使う）
-  version                        版を表示する
+  version                        版とコミットを表示する
   import-wxr --site ID --author-email メール [--dry-run] ファイル
                                  WordPressの書き出しファイル（WXR）を取り込む
 
@@ -39,8 +36,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if os.Args[1] == "version" {
-		fmt.Println(version)
+	switch os.Args[1] {
+	case "version", "--version", "-v":
+		printVersion()
 		return
 	}
 	cfg := config.FromEnv()

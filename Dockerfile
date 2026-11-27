@@ -30,11 +30,14 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
 COPY --from=admin /src/web/admin/dist web/admin/dist
 ARG TARGETOS TARGETARCH
-ARG VERSION=dev
+# .git is not in the build context: pass these to stamp `pagewright version`.
+ARG VERSION=dev COMMIT= DATE=
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -tags embedadmin -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/pagewright ./cmd/pagewright
+    go build -tags embedadmin -trimpath \
+      -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
+      -o /out/pagewright ./cmd/pagewright
 
 # --- Pagefind (extended build, static musl binary) -------------------------
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-${DEBIAN_RELEASE} AS pagefind
@@ -57,6 +60,11 @@ RUN set -eu; \
 
 # --- Runtime base ----------------------------------------------------------
 FROM debian:${DEBIAN_RELEASE}-slim AS runtime
+# GoReleaser adds version, revision and created (.goreleaser.yaml).
+LABEL org.opencontainers.image.title="Pagewright" \
+      org.opencontainers.image.description="日本語に強い、セルフホストのCMS" \
+      org.opencontainers.image.source="https://github.com/kom3da/pagewright" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates tzdata curl \
     && rm -rf /var/lib/apt/lists/* \
