@@ -418,7 +418,7 @@ func (s *Server) patchContent(w http.ResponseWriter, r *http.Request, _ *session
 	var set content.Settings
 	if len(in.Slug) > 0 {
 		if err := json.Unmarshal(in.Slug, &set.Slug); err != nil {
-			return invalid("invalid_slug", slugMessage)
+			return invalid("invalid_slug", slugMessage("ページ"))
 		}
 		if set.Slug != nil && *set.Slug == "" {
 			set.Slug = nil
@@ -501,7 +501,7 @@ func (s *Server) patchContent(w http.ResponseWriter, r *http.Request, _ *session
 // from WordPress can stay.
 func checkSettings(ctx context.Context, q *dbgen.Queries, c dbgen.Content, set content.Settings) error {
 	if set.SlugSet && set.Slug != nil && !equalPtr(set.Slug, c.Slug) {
-		if err := checkSlug(*set.Slug); err != nil {
+		if err := checkSlug(*set.Slug, "ページ"); err != nil {
 			return err
 		}
 	}

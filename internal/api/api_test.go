@@ -1099,6 +1099,15 @@ func TestTaxonomySlugConflict(t *testing.T) {
 			t.Errorf("%s = %d %+v, want 409 conflict on slug naming %s", tt.name, got, out.Error, tt.word)
 		}
 	}
+	// A slug that cannot be used names its field as the admin labels it.
+	for path, word := range map[string]string{"/api/categories": "カテゴリのURL（英数字）", "/api/tags": "タグのURL（英数字）"} {
+		var out struct {
+			Error struct{ Code, Message string } `json:"error"`
+		}
+		if got := alice.do(http.MethodPost, path, map[string]any{"name": "空", "slug": ""}, &out); got != http.StatusUnprocessableEntity || !strings.HasPrefix(out.Error.Message, word) {
+			t.Errorf("%s with no slug = %d %+v, want 422 naming %s", path, got, out.Error, word)
+		}
+	}
 	// Another site may use the same slugs.
 	bob.mustDo(http.MethodPost, "/api/categories", map[string]any{"name": "お知らせ", "slug": "news"}, nil, http.StatusCreated)
 	bob.mustDo(http.MethodPost, "/api/tags", map[string]any{"name": "イベント", "slug": "event"}, nil, http.StatusCreated)

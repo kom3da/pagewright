@@ -8,13 +8,14 @@ import { slugSchema } from "../lib/slug";
 import { Form } from "./ui/Form";
 import { ErrorMessage } from "./ui/feedback";
 
-const schema = z.object({
-  name: z.string().trim().min(1, "名前を入力してください。"),
-  slug: slugSchema,
-  parentId: z.string(),
-});
+const schemaFor = (noun: string) =>
+  z.object({
+    name: z.string().trim().min(1, `${noun}の名前を入力してください。`),
+    slug: slugSchema(`${noun}のURL（英数字）`),
+    parentId: z.string(),
+  });
 
-export type NameSlugValues = z.infer<typeof schema>;
+export type NameSlugValues = z.infer<ReturnType<typeof schemaFor>>;
 
 type Props = {
   /** "カテゴリ" or "タグ" */
@@ -39,7 +40,7 @@ export function NameSlugForm({
   extraButtons,
 }: Props) {
   const form = useForm<NameSlugValues>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schemaFor(noun)),
     mode: "onChange",
     defaultValues: { name: "", slug: "", parentId: "", ...defaultValues },
   });

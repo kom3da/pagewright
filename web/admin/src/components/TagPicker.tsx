@@ -114,7 +114,7 @@ function NewTag({ onCreated }: { onCreated: (id: number) => void }) {
   const submit = () => {
     const next = {
       name: name.trim() ? undefined : "タグの名前を入力してください。",
-      slug: slugProblem(slug) ?? undefined,
+      slug: slugProblem(slug, "タグのURL（英数字）") ?? undefined,
     };
     setErrors(next);
     if (!next.name && !next.slug) create.mutate({ name: name.trim(), slug });

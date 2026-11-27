@@ -9,7 +9,7 @@
 - 認証：HTTP-only の Cookie `pw_session`（SameSite=Lax、本番は Secure）
 - CSRF 対策：GET 以外は、ヘッダー `X-Pagewright: 1` を必ず付ける。付いていなければ 403
 - 表示中のサイト：管理画面は、いま表示しているサイトの ID（`Me.currentSiteId`）をヘッダー `X-Pagewright-Site` に付けて送る。サイトを選んで使う API（`/api/auth/*`・`/api/me` 以外）は、セッションで選んでいるサイトと違えば 409 `site_changed` で何もしない。ID はサイトごとの連番なので、別のタブでサイトを切り替えたあとに古いタブが、同じ ID の別のサイトのものを変えてしまわないため。ヘッダーがなければ確かめない
-- エラー：`{"error": {"code": "invalid_slug", "message": "ページのURLは英小文字・数字・ハイフンで入力してください", "field": "slug"}}`。`message` は管理画面にそのまま出せる日本語。`field` は入力欄に関係するエラーのときだけ付き、リクエストの項目名（`slug`、`title`、`parentId`、`name`、`altText`、`file`、`publishAt` など）が入る
+- エラー：`{"error": {"code": "invalid_slug", "message": "ページのURL（英数字）は、英小文字・数字・ハイフンで入力してください（数字だけにはできません）。", "field": "slug"}}`。`message` は管理画面にそのまま出せる日本語。`field` は入力欄に関係するエラーのときだけ付き、リクエストの項目名（`slug`、`title`、`parentId`、`name`、`altText`、`file`、`publishAt` など）が入る
   - 401 `unauthenticated`：ログインしていない
   - 403 `no_site`：サイトを選んでいない／`forbidden`：権限がない／`csrf`
   - 404 `not_found`、409 `conflict`（ほかのものと重なる）／`site_changed`（上の「表示中のサイト」）、422 入力エラー（`code` は項目ごと）
@@ -137,7 +137,7 @@ type PreviewLink = { id: number; url?: string; expiresAt: string; createdAt: str
 
 プレビューのページ（`/p/{token}/`）は本体が描画する。帯で「プレビュー」と示し、検索エンジンには載せない。ページ内のリンクは公開サイトを指す。
 
-`slug` の検査：英小文字・数字・ハイフンのみ、数字だけは不可、1〜100 文字。日本語が入っていたら 422 `invalid_slug`（「ページのURLは英小文字・数字・ハイフンで入力してください」）。
+`slug` の検査：英小文字・数字・ハイフンのみ、数字だけは不可、1〜100 文字。日本語が入っていたら 422 `invalid_slug`（「ページのURL（英数字）は、英小文字・数字・ハイフンで入力してください（数字だけにはできません）。」。カテゴリとタグでは「カテゴリのURL（英数字）は…」「タグのURL（英数字）は…」）。
 いちばん上の固定ページの URL を `posts`・`media`・`search`・`pagefind`・`_assets` にする（サイトの仕組みが使うパスと重なる）と 422 `reserved_slug`（`field: "slug"`）。下に固定ページがある固定ページを `DELETE` すると 422 `has_children`（先に下のページを移すか削除する）。
 
 URL の決まり方（MVP）：記事は `/posts/{slug または番号}/`、固定ページは `/{親の slug}/{slug または番号}/`。

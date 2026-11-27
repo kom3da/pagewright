@@ -21,6 +21,11 @@ describe("categories", () => {
     const form = await screen.findByRole("dialog", { name: "カテゴリを追加" });
     await user.type(within(form).getByLabelText(/カテゴリの名前/), "新築");
     const slug = within(form).getByLabelText(/カテゴリのURL/);
+    // An empty URL is asked for by the field's name.
+    await user.click(within(form).getByRole("button", { name: "追加する" }));
+    await waitFor(() =>
+      expect(slug).toHaveAccessibleDescription(/カテゴリのURL（英数字）を入力してください。/),
+    );
     await user.type(slug, "しんちく");
     expect(slug).toHaveAccessibleDescription(/日本語や全角文字は使えません/);
     await user.clear(slug);

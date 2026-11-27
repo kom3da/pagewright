@@ -14,18 +14,22 @@ import (
 	"github.com/kom3da/pagewright/internal/routing"
 )
 
-const slugMessage = "ページのURLは英小文字・数字・ハイフンで入力してください（数字だけにはできません）。"
+// slugMessage names the field, as the admin labels it: 「ページのURL（英数字）」.
+func slugMessage(what string) string {
+	return what + "のURL（英数字）は、英小文字・数字・ハイフンで入力してください（数字だけにはできません）。"
+}
 
 var (
 	slugPattern = regexp.MustCompile(`^[a-z0-9-]{1,100}$`)
 	allDigits   = regexp.MustCompile(`^[0-9]+$`)
 )
 
-// checkSlug validates a new slug typed in the admin. Slugs migrated from
-// WordPress (e.g. Japanese) are only kept, never typed.
-func checkSlug(s string) error {
+// checkSlug validates a new slug typed in the admin for a page, category
+// or tag (what). Slugs migrated from WordPress (e.g. Japanese) are only
+// kept, never typed.
+func checkSlug(s, what string) error {
 	if !slugPattern.MatchString(s) || allDigits.MatchString(s) {
-		return invalid("invalid_slug", slugMessage)
+		return invalid("invalid_slug", slugMessage(what))
 	}
 	return nil
 }
@@ -85,7 +89,7 @@ func (s *Server) createCategory(w http.ResponseWriter, r *http.Request, sess *se
 	if err != nil {
 		return err
 	}
-	if err := checkSlug(in.Slug); err != nil {
+	if err := checkSlug(in.Slug, "カテゴリ"); err != nil {
 		return err
 	}
 	ctx := r.Context()
@@ -145,7 +149,7 @@ func (s *Server) patchCategory(w http.ResponseWriter, r *http.Request, sess *ses
 			return err
 		}
 		if in.Slug != nil && *in.Slug != cur.Slug {
-			if err := checkSlug(*in.Slug); err != nil {
+			if err := checkSlug(*in.Slug, "カテゴリ"); err != nil {
 				return err
 			}
 			p.Slug = in.Slug
@@ -226,7 +230,7 @@ func (s *Server) patchTag(w http.ResponseWriter, r *http.Request, sess *session)
 			return err
 		}
 		if in.Slug != nil && *in.Slug != cur.Slug {
-			if err := checkSlug(*in.Slug); err != nil {
+			if err := checkSlug(*in.Slug, "タグ"); err != nil {
 				return err
 			}
 			p.Slug = in.Slug
@@ -310,7 +314,7 @@ func (s *Server) createTag(w http.ResponseWriter, r *http.Request, sess *session
 	if err != nil {
 		return err
 	}
-	if err := checkSlug(in.Slug); err != nil {
+	if err := checkSlug(in.Slug, "タグ"); err != nil {
 		return err
 	}
 	ctx := r.Context()

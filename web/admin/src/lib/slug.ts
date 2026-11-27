@@ -3,9 +3,12 @@ import { z } from "zod";
 // Mirrors the server-side check in docs/dev/admin-api.md:
 // lowercase letters, digits and hyphens only, not digits only, 1-100 characters.
 
-/** Returns a message explaining what is wrong, or null if the value is valid. */
-export function slugProblem(value: string): string | null {
-  if (value.length === 0) return "ページのURLを入力してください。";
+/**
+ * Returns a message explaining what is wrong, or null if the value is valid. `label` is the
+ * field's label, which an empty value is asked for by name.
+ */
+export function slugProblem(value: string, label = "ページのURL（英数字）"): string | null {
+  if (value.length === 0) return `${label}を入力してください。`;
   if (/[^\x20-\x7e]/.test(value)) {
     return "日本語や全角文字は使えません。英小文字（a〜z）・数字・ハイフン（-）で入力してください。例：company-profile";
   }
@@ -20,10 +23,12 @@ export function slugProblem(value: string): string | null {
   return null;
 }
 
-export const slugSchema = z.string().superRefine((value, ctx) => {
-  const problem = slugProblem(value);
-  if (problem) ctx.addIssue({ code: "custom", message: problem });
-});
+/** A required slug, for the field labeled `label`. */
+export const slugSchema = (label: string) =>
+  z.string().superRefine((value, ctx) => {
+    const problem = slugProblem(value, label);
+    if (problem) ctx.addIssue({ code: "custom", message: problem });
+  });
 
 /** Optional slug: an empty string means "not set". */
 export const optionalSlugSchema = z.string().superRefine((value, ctx) => {
