@@ -78,7 +78,8 @@ describe("site settings", () => {
     expect(code).toHaveAccessibleDescription(
       /明るすぎて.*コントラスト比 2\.\d:1.*4\.5:1 以上が必要/,
     );
-    expect(within(theme).getByText(/白い文字が読みにくい色です/)).toBeInTheDocument();
+    // Said once, beside the preview (not again under the field).
+    expect(within(theme).getAllByText(/明るすぎて/)).toHaveLength(1);
 
     await save(user);
     await waitFor(() => expect(code).toHaveFocus());

@@ -46,7 +46,12 @@ export function ColorField({ label, hint, value, defaultColor, error, onChange }
   const shown = value === "" ? defaultColor : valid ? value.toLowerCase() : null;
   const ratio = shown ? contrast(shown) : null;
   const ok = ratio !== null && ratio >= MIN_CONTRAST;
-  const describedBy = [ids.hint, ids.ratio, error && ids.error].filter(Boolean).join(" ");
+  // An error about the contrast says what the warning beside the preview says: show it
+  // there instead, once.
+  const errorBeside = Boolean(error) && ratio !== null && !ok;
+  const describedBy = [ids.hint, ids.ratio, error && !errorBeside && ids.error]
+    .filter(Boolean)
+    .join(" ");
   const RatioIcon = ok ? CircleCheck : TriangleAlert;
 
   return (
@@ -113,11 +118,17 @@ export function ColorField({ label, hint, value, defaultColor, error, onChange }
                 <Text size="sm">色コードを読み取れないため、見え方を表示できません。</Text>
               ) : (
                 <>
-                  <Text size="sm" fw={700}>
-                    {ok
-                      ? "この色の上の白い文字は、はっきり読めます。"
-                      : "白い文字が読みにくい色です。もう少し濃い色にしてください。"}
-                  </Text>
+                  {errorBeside ? (
+                    <Text size="sm" fw={700} c="red.7">
+                      {error}
+                    </Text>
+                  ) : (
+                    <Text size="sm" fw={700}>
+                      {ok
+                        ? "この色の上の白い文字は、はっきり読めます。"
+                        : "白い文字が読みにくい色です。もう少し濃い色にしてください。"}
+                    </Text>
+                  )}
                   <Text size="sm" c="dimmed">
                     白い文字とのコントラスト比 {formatRatio(ratio)}（基準は 4.5:1 以上）
                   </Text>
@@ -126,7 +137,7 @@ export function ColorField({ label, hint, value, defaultColor, error, onChange }
             </Box>
           </Group>
         </Group>
-        {error && (
+        {error && !errorBeside && (
           <Input.Error id={ids.error} size="sm">
             {error}
           </Input.Error>
