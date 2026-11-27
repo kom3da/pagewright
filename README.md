@@ -8,6 +8,11 @@
 
 開発中です。
 
+| 管理画面（記事の編集） | 公開サイト（コーポレートテーマ） |
+| --- | --- |
+| ![管理画面の記事の編集画面](.github/assets/admin-editor.png) | ![コーポレートテーマで作った公開サイトのトップページ](.github/assets/site-top.png) |
+| ![管理画面のホーム。記事とページの状況や最近編集したものが並ぶ](.github/assets/admin-home.png) | ![スマホで見た公開サイトのトップページ](.github/assets/site-top-phone.png) |
+
 ## 導入する
 
 サーバーへの導入手順は [docs/install/](docs/install/index.md)（Docker Compose で PostgreSQL・Pagewright・nginx・Caddy をまとめて動かす）。
