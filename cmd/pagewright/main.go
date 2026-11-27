@@ -20,6 +20,9 @@ const usage = `使い方: pagewright <サブコマンド>
   login-url --email メール        ログイン用URLを発行する（メールが届かないとき）
   site set-url サイトのID URL      サイトの公開URLを設定する（2つ目以降のサイト用）
   site clear-url サイトのID        サイトの公開URLを外す（PAGEWRIGHT_PUBLIC_BASE_URL を使う）
+  backup [--out ディレクトリ] [--keep 残す数]
+                                 データベースと画像を1つのファイルにバックアップする
+  restore [--force] ファイル        バックアップから復元する（空のデータベースへ）
   version                        版とコミットを表示する
   import-wxr --site ID --author-email メール [--dry-run] ファイル
                                  WordPressの書き出しファイル（WXR）を取り込む
@@ -55,6 +58,10 @@ func main() {
 		err = runLoginURL(ctx, cfg, args)
 	case "site":
 		err = runSite(ctx, cfg, args)
+	case "backup":
+		err = runBackup(ctx, cfg, args)
+	case "restore":
+		err = runRestore(ctx, cfg, args)
 	case "import-wxr":
 		err = runImportWXR(ctx, args)
 	default:
