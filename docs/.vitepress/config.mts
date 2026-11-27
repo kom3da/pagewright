@@ -38,20 +38,33 @@ const guide: DefaultTheme.SidebarItem[] = [
 
 const install: DefaultTheme.SidebarItem[] = [
   {
-    text: "導入・運用",
+    text: "最短の道",
     items: [
       { text: "はじめに（必要なもの）", link: "/install/" },
+      { text: "メール送信サービスを用意する", link: "/install/mail" },
       { text: "導入", link: "/install/setup" },
-      { text: "HTTPS", link: "/install/https" },
-      { text: "メール", link: "/install/mail" },
-      { text: "画像の容量・DBパスワード", link: "/install/settings" },
+      { text: "使う人に渡すもの", link: "/install/handover" },
       { text: "バックアップと復元", link: "/install/backup" },
       { text: "アップデート", link: "/install/update" },
-      { text: "版の付け方と互換性", link: "/install/versioning" },
-      { text: "WordPress からの移行", link: "/install/wordpress" },
-      { text: "2つ目のサイト", link: "/install/second-site" },
       { text: "困ったとき", link: "/install/troubleshooting" },
     ],
+  },
+  {
+    text: "WordPress から移る",
+    items: [{ text: "WordPress からの移行", link: "/install/wordpress" }],
+  },
+  {
+    text: "くわしい設定",
+    items: [
+      { text: "HTTPS と構成の変更", link: "/install/https" },
+      { text: "2つ目のサイト", link: "/install/second-site" },
+      { text: "画像の容量・DBパスワード", link: "/install/settings" },
+      { text: "版の付け方と互換性", link: "/install/versioning" },
+    ],
+  },
+  {
+    text: "資料",
+    items: [{ text: "用語集", link: "/install/glossary" }],
   },
 ];
 
