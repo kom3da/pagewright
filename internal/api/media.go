@@ -136,7 +136,7 @@ func (s *Server) checkMediaQuota(ctx context.Context, q *dbgen.Queries, size int
 	}
 	return &apiError{http.StatusUnprocessableEntity, "quota_exceeded", fmt.Sprintf(
 		"画像を保存できる容量（%s）がいっぱいのため、この画像を追加できません（今の使用量：%s）。"+
-			"使っていない古い画像を削除してから、もう一度お試しください。容量を増やしたいときは、サイトの管理者に相談してください。",
+			"使っていない古い画像を削除してから、もう一度お試しください。容量を増やしたいときは、サーバーの管理者（このサーバーを用意した会社や担当者）に相談してください。",
 		formatMB(s.MediaQuotaBytes), formatMB(used))}
 }
 
@@ -222,7 +222,8 @@ func (s *Server) deleteMedia(w http.ResponseWriter, r *http.Request, sess *sessi
 			return err
 		}
 		if inUse {
-			return &apiError{Status: http.StatusConflict, Code: "media_in_use", Message: "この画像は記事やページで使われているため削除できません。先に本文から外してください。"}
+			return &apiError{Status: http.StatusConflict, Code: "media_in_use", Message: "この画像は記事やページ、またはロゴで使われているため削除できません。先に本文から外して保存してください。" +
+				"公開中・予約中の版で使っている場合は、本文から外して「変更を公開する」まで押すと削除できます。"}
 		}
 		key, err = q.DeleteMedia(ctx, id)
 		return err

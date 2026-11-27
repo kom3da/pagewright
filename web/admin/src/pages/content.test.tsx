@@ -1020,7 +1020,7 @@ describe("images", () => {
     const confirm = await screen.findByRole("alertdialog");
     await user.click(within(confirm).getByRole("button", { name: "削除する" }));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      "この画像は記事やページで使われているため削除できません。先に本文から外してください",
+      "公開中・予約中の版で使っている場合は、本文から外して「変更を公開する」まで押すと削除できます。",
     );
     expect(db.media).toHaveLength(1);
     await user.keyboard("{Escape}");

@@ -701,7 +701,7 @@ func TestMediaQuota(t *testing.T) {
 		Error struct{ Code, Message string } `json:"error"`
 	}
 	if got := alice.upload("c.png", img, "3枚目", &out); got != http.StatusUnprocessableEntity || out.Error.Code != "quota_exceeded" ||
-		!strings.Contains(out.Error.Message, "古い画像を削除") {
+		!strings.Contains(out.Error.Message, "古い画像を削除") || !strings.Contains(out.Error.Message, "サーバーの管理者") {
 		t.Errorf("upload over quota = %d %+v, want 422 quota_exceeded", got, out.Error)
 	}
 	// Site A's images do not count against site B.
