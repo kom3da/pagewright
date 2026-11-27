@@ -7,11 +7,19 @@
 # ログイン用URL（/admin/login/verify?token=…）とプレビューURL（/p/<token>/…）の
 # 合言葉が残るため。アクセスログは token を伏せる nginx のものを見る。
 
+# HSTS：1年間は HTTPS だけで開くようブラウザに伝える（preload と includeSubDomains は付けない。
+# 同じドメインの下に HTTPS でないサイトがあっても困らないように）。
+(hsts) {
+	header Strict-Transport-Security "max-age=31536000"
+}
+
 {$PAGEWRIGHT_SITE_DOMAIN} {$PAGEWRIGHT_EXTRA_SITE_DOMAINS} {
+	import hsts
 	encode zstd gzip
 	reverse_proxy nginx:8080
 }
 
 {$PAGEWRIGHT_ADMIN_DOMAIN} {
+	import hsts
 	reverse_proxy nginx:8080
 }
