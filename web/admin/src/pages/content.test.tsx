@@ -71,6 +71,11 @@ describe("content list", () => {
     await user.click(screen.getByRole("button", { name: "もっと見る" }));
     await waitFor(() => expect(within(table).getAllByRole("row")).toHaveLength(104));
     expect(screen.queryByRole("button", { name: "もっと見る" })).not.toBeInTheDocument();
+    // The first new row gets the focus, and the count is announced.
+    expect(await screen.findByText("3件を読み込みました。")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(within(table).getAllByRole("row")[101]).getAllByRole("link")[0]).toHaveFocus(),
+    );
     expect(requests.map((r) => r.path).filter((p) => p.startsWith("/api/contents?"))).toEqual([
       "/api/contents?type=post&limit=100",
       `/api/contents?type=post&before=${top + 1}&limit=100`,

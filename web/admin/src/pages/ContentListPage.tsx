@@ -7,6 +7,7 @@ import {
   Stack,
   Text,
   TextInput,
+  VisuallyHidden,
 } from "@mantine/core";
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -105,6 +106,22 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
         ? flatPageRows(found, all.data ?? found)
         : pageRows(found);
 
+  // 「もっと見る」: the first newly loaded row gets the focus, and the count is announced.
+  const listRef = useRef<HTMLDivElement>(null);
+  const [loaded, setLoaded] = useState("");
+  const loadMore = async () => {
+    const before = rows.length;
+    setLoaded("");
+    const result = await postList.fetchNextPage();
+    if (result.isError) return;
+    const added = (result.data?.pages.flatMap((p) => p.items).length ?? before) - before;
+    setLoaded(`${added}件を読み込みました。`);
+    // After the new rows are drawn.
+    setTimeout(() =>
+      listRef.current?.querySelectorAll<HTMLElement>("[data-row-link]")[before]?.focus(),
+    );
+  };
+
   const statusLabel = statusOptions.find((o) => o.value === search.status)?.label;
   const conditions = [search.q && `「${search.q}」`, statusLabel].filter(Boolean).join("・");
 
@@ -141,84 +158,88 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
             description={label.emptyText}
           />
         ) : (
-          <ResponsiveList
-            items={rows}
-            getKey={(c) => c.id}
-            caption={`${label.title}の一覧（${
-              filtered
-                ? `${conditions}で絞り込み`
-                : type === "page"
-                  ? "親ページの下に子ページ"
-                  : "番号の新しい順"
-            }）`}
-            columns={[
-              {
-                key: "title",
-                header: "タイトル",
-                render: (c) => (
-                  <div style={{ paddingLeft: `${c.depth * 1.5}rem` }}>
-                    {c.ancestors.length > 0 && (
-                      <Text component="span" size="sm" c="dimmed" mr={4}>
-                        {c.ancestors.map((a) => `${a.title || "（タイトルなし）"} › `).join("")}
-                      </Text>
-                    )}
-                    <AnchorLink
-                      to={type === "post" ? "/posts/$id" : "/pages/$id"}
-                      params={{ id: String(c.id) }}
-                      fw={700}
-                    >
-                      {c.title || "（タイトルなし）"}
-                    </AnchorLink>
-                    {/* Only published contents have a public URL. */}
-                    {c.url && (
-                      <Box>
-                        {c.id === frontPageId ? (
-                          <ExternalLink href={publicUrl("/")} size="sm" c="dimmed">
-                            トップページに表示中
-                          </ExternalLink>
-                        ) : (
-                          <ExternalLink href={publicUrl(c.url)} size="sm" c="dimmed">
-                            {c.url}
-                          </ExternalLink>
-                        )}
-                      </Box>
-                    )}
-                  </div>
-                ),
-              },
-              {
-                key: "status",
-                header: "状態",
-                render: (c) => (
-                  <Stack gap={4}>
-                    <ContentStatusBadges {...c} />
-                    {/* A scheduled first publication is in 公開日; an update is said here. */}
-                    {c.status === "published" && c.scheduledAt && (
-                      <Text size="sm" style={{ whiteSpace: "nowrap" }}>
-                        {formatJapanDateTime(c.scheduledAt)}に更新
-                      </Text>
-                    )}
-                  </Stack>
-                ),
-              },
-              {
-                key: "publishedAt",
-                header: "公開日",
-                nowrap: true,
-                render: (c) => <Text size="sm">{publishedDate(c)}</Text>,
-              },
-              {
-                key: "updatedAt",
-                header: "最終更新",
-                nowrap: true,
-                render: (c) => <Text size="sm">{formatDateTime(c.updatedAt)}</Text>,
-              },
-            ]}
-          />
+          <Box ref={listRef}>
+            <ResponsiveList
+              items={rows}
+              getKey={(c) => c.id}
+              caption={`${label.title}の一覧（${
+                filtered
+                  ? `${conditions}で絞り込み`
+                  : type === "page"
+                    ? "親ページの下に子ページ"
+                    : "番号の新しい順"
+              }）`}
+              columns={[
+                {
+                  key: "title",
+                  header: "タイトル",
+                  render: (c) => (
+                    <div style={{ paddingLeft: `${c.depth * 1.5}rem` }}>
+                      {c.ancestors.length > 0 && (
+                        <Text component="span" size="sm" c="dimmed" mr={4}>
+                          {c.ancestors.map((a) => `${a.title || "（タイトルなし）"} › `).join("")}
+                        </Text>
+                      )}
+                      <AnchorLink
+                        to={type === "post" ? "/posts/$id" : "/pages/$id"}
+                        params={{ id: String(c.id) }}
+                        fw={700}
+                        data-row-link
+                      >
+                        {c.title || "（タイトルなし）"}
+                      </AnchorLink>
+                      {/* Only published contents have a public URL. */}
+                      {c.url && (
+                        <Box>
+                          {c.id === frontPageId ? (
+                            <ExternalLink href={publicUrl("/")} size="sm" c="dimmed">
+                              トップページに表示中
+                            </ExternalLink>
+                          ) : (
+                            <ExternalLink href={publicUrl(c.url)} size="sm" c="dimmed">
+                              {c.url}
+                            </ExternalLink>
+                          )}
+                        </Box>
+                      )}
+                    </div>
+                  ),
+                },
+                {
+                  key: "status",
+                  header: "状態",
+                  render: (c) => (
+                    <Stack gap={4}>
+                      <ContentStatusBadges {...c} />
+                      {/* A scheduled first publication is in 公開日; an update is said here. */}
+                      {c.status === "published" && c.scheduledAt && (
+                        <Text size="sm" style={{ whiteSpace: "nowrap" }}>
+                          {formatJapanDateTime(c.scheduledAt)}に更新
+                        </Text>
+                      )}
+                    </Stack>
+                  ),
+                },
+                {
+                  key: "publishedAt",
+                  header: "公開日",
+                  nowrap: true,
+                  render: (c) => <Text size="sm">{publishedDate(c)}</Text>,
+                },
+                {
+                  key: "updatedAt",
+                  header: "最終更新",
+                  nowrap: true,
+                  render: (c) => <Text size="sm">{formatDateTime(c.updatedAt)}</Text>,
+                },
+              ]}
+            />
+          </Box>
         )}
+        <VisuallyHidden role="status">{loaded}</VisuallyHidden>
         {more && !isPending && (
           <Stack gap={4} align="flex-start">
-            <Button onClick={() => postList.fetchNextPage()} loading={postList.isFetchingNextPage}>
+            <Button onClick={loadMore} loading={postList.isFetchingNextPage}>
               もっと見る
             </Button>
             <Text size="sm" c="dimmed">
