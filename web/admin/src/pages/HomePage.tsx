@@ -435,7 +435,7 @@ function SiteUpdate() {
           <Stack gap="xs">
             <Text size="sm">
               {formatJapanDateTime(last.finishedAt)}
-              に公開サイトを更新しようとしましたが、失敗しました。下の「サイトを更新」をもう一度押してください。何度も失敗するときは、サイトを作った会社や担当者に連絡してください。
+              に公開サイトを更新しようとしましたが、失敗しました。下の「サイトを更新」をもう一度押してください。何度も失敗するときは、サーバーの担当者（Pagewright をサーバーに入れた人や会社）に連絡してください。
             </Text>
             <Text size="sm">くわしい内容：{last.error}</Text>
           </Stack>

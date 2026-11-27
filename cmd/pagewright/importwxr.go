@@ -21,7 +21,6 @@ import (
 	"github.com/kom3da/pagewright/internal/migrate/wxrimport"
 )
 
-
 // runImportWXR implements `pagewright import-wxr [flags] <file.xml>`: it
 // imports a WordPress export into one site and prints the report.
 func runImportWXR(ctx context.Context, args []string) error {
