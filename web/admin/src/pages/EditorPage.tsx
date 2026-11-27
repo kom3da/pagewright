@@ -152,9 +152,6 @@ type Busy =
   | "view"
   | null;
 
-/** A preview link for 「プレビューを見る」 is reused while it is valid at least this long. */
-const PREVIEW_REUSE_MS = 60 * 60 * 1000;
-
 function EditorForm({ content: initial }: { content: ContentDetail }) {
   const publicUrl = usePublicUrl();
   const { id, type } = initial;
@@ -196,8 +193,6 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
   const previewButtonRef = useRef<HTMLButtonElement>(null);
   // Set when saving before creating a preview link failed: focus then goes to the problem.
   const previewSaveFailed = useRef(false);
-  // The link 「プレビューを見る」 opens; kept for the visit so that each click does not add one.
-  const viewLink = useRef<{ url: string; expiresAt: string } | null>(null);
 
   // The action bar is sticky at the top on desktop and fixed at the bottom on phones. Its
   // height keeps the body toolbar below it (desktop) and the page end above it (phones).
@@ -434,36 +429,23 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
     }
   };
 
-  // 「プレビューを見る」: the preview page is drawn by the server from a login-free link
-  // (/p/{token}/) and always shows the latest saved revision. Unsaved changes are saved
-  // first, and one short-lived link is reused while it is valid.
+  // 「プレビューを見る」: the server draws the latest saved revision at an address only
+  // logged-in members can open, so no shareable link is made. Unsaved changes are saved
+  // first.
   const viewPreview = () => {
     if (busy) return;
-    // Opened now, while the click still counts as the user's: after the awaits below a
+    // Opened now, while the click still counts as the user's: after the await below a
     // browser may block a new tab.
     const tab = window.open("about:blank", "_blank");
     if (tab) tab.opener = null;
     void run("view", async () => {
-      try {
-        if (dirty && !(await persist())) {
-          tab?.close();
-          return;
-        }
-        const cached = viewLink.current;
-        let url = cached?.url;
-        if (!cached || new Date(cached.expiresAt).getTime() - Date.now() < PREVIEW_REUSE_MS) {
-          const link = await api.createPreviewLink(id, 1);
-          if (!link.url) throw new Error("プレビューのリンクを作れませんでした。");
-          viewLink.current = { url: link.url, expiresAt: link.expiresAt };
-          url = link.url;
-        }
-        if (!url) return;
-        if (tab) tab.location.href = url;
-        else window.open(url, "_blank", "noopener");
-      } catch (e) {
+      if (dirty && !(await persist())) {
         tab?.close();
-        throw e;
+        return;
       }
+      const url = api.previewUrl(id);
+      if (tab) tab.location.href = url;
+      else window.open(url, "_blank", "noopener");
     });
   };
 

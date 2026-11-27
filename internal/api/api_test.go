@@ -1098,6 +1098,71 @@ func TestPreviewLinks(t *testing.T) {
 	}
 }
 
+// getPage fetches a page (not JSON) with the client's cookies.
+func (c *client) getPage(path string) (int, http.Header, string) {
+	c.e.t.Helper()
+	res, err := c.http.Get(c.e.srv.URL + path)
+	if err != nil {
+		c.e.t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	b, _ := io.ReadAll(res.Body)
+	return res.StatusCode, res.Header, string(b)
+}
+
+func TestAdminPreview(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	bob := e.login("bob@example.com")
+
+	var img mediaOut
+	alice.upload("a.png", pngBytes(t), "社屋", &img)
+	d := alice.newContent("post", "下書きの記事", false)
+	body := fmt.Sprintf(`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"まだ公開していない本文"}]},{"type":"image","attrs":{"src":%q,"alt":"社屋","mediaId":%d}}]}`, img.URL, img.ID)
+	alice.mustDo(http.MethodPut, fmt.Sprintf("/api/contents/%d/draft", d.ID), map[string]any{"title": "下書きの記事", "body": json.RawMessage(body)}, nil, http.StatusOK)
+
+	self := fmt.Sprintf("/api/contents/%d/preview/", d.ID)
+	status, hdr, page := alice.getPage(self)
+	if status != http.StatusOK {
+		t.Fatalf("preview = %d:\n%s", status, page)
+	}
+	for _, want := range []string{"まだ公開していない本文", "これはプレビューです", `<base href="https://site-a.example/">`, "http://admin.test" + self + "media/"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("preview lacks %q", want)
+		}
+	}
+	if csp := hdr.Get("Content-Security-Policy"); !strings.Contains(csp, "sandbox allow-same-origin;") || !strings.Contains(csp, "script-src 'none'") {
+		t.Errorf("preview CSP = %q", csp)
+	}
+	if hdr.Get("X-Robots-Tag") == "" || hdr.Get("Cache-Control") != "private, no-store" {
+		t.Errorf("preview headers = %v", hdr)
+	}
+	key := strings.TrimPrefix(img.URL, "/media/")
+	if status, _, _ := alice.getPage(self + "media/" + key); status != http.StatusOK {
+		t.Errorf("preview image = %d, want 200", status)
+	}
+	// No preview link is made.
+	var links []json.RawMessage
+	alice.mustDo(http.MethodGet, fmt.Sprintf("/api/contents/%d/preview-links", d.ID), nil, &links, http.StatusOK)
+	if len(links) != 0 {
+		t.Errorf("links = %s, want none", links)
+	}
+
+	// Without a login, and from another site, nothing is shown.
+	if status, _, page := e.anon().getPage(self); status != http.StatusUnauthorized || strings.Contains(page, "まだ公開していない本文") {
+		t.Errorf("anonymous preview = %d", status)
+	}
+	if status, _, page := bob.getPage(self); status != http.StatusNotFound || strings.Contains(page, "まだ公開していない本文") {
+		t.Errorf("B previewing A's content = %d, want 404", status)
+	}
+	if status, _, _ := bob.getPage(self + "media/" + key); status != http.StatusNotFound {
+		t.Errorf("B fetching A's image = %d, want 404", status)
+	}
+	if status, _, _ := e.anon().getPage(self + "media/" + key); status != http.StatusUnauthorized {
+		t.Errorf("anonymous image = %d, want 401", status)
+	}
+}
+
 func TestContentSearchAndBuilds(t *testing.T) {
 	e := newEnv(t)
 	alice := e.login("alice@example.com")

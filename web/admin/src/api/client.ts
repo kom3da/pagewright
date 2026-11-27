@@ -150,6 +150,8 @@ export const api = {
   listPreviewLinks: (contentId: number) =>
     get<PreviewLink[]>(`/contents/${contentId}/preview-links`),
   deletePreviewLink: (id: number) => del(`/preview-links/${id}`),
+  /** The page 「プレビューを見る」 opens: the latest revision, for logged-in members only. */
+  previewUrl: (contentId: number) => `/api/contents/${contentId}/preview/`,
 
   listCategories: () => get<Category[]>("/categories"),
   createCategory: (input: CategoryInput) => post<Category>("/categories", input),

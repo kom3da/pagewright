@@ -257,21 +257,18 @@ describe("editor", () => {
     expect(db.contents.find((c) => c.id === 1)?.publishedRevisionId).toBeNull();
   });
 
-  it("opens the preview in a new tab, saving first and reusing one link", async () => {
+  it("opens the members-only preview in a new tab, saving first and making no link", async () => {
     const requests = recordRequests();
     const tab = { opener: {}, location: { href: "" }, close: () => {} };
     const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
     const { user } = await openEditor();
     await user.type(screen.getByLabelText("タイトル"), "（改）");
     await user.click(screen.getByRole("button", { name: /^プレビューを見る/ }));
-    await waitFor(() => expect(tab.location.href).toMatch(/\/p\/.+\/$/));
+    await waitFor(() => expect(tab.location.href).toBe("/api/contents/1/preview/"));
     expect(open).toHaveBeenCalledWith("about:blank", "_blank");
     expect(tab.opener).toBeNull();
     expect(requests.some((r) => r.method === "PUT")).toBe(true);
-
-    await user.click(screen.getByRole("button", { name: /^プレビューを見る/ }));
-    await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
-    expect(requests.filter((r) => r.path.endsWith("/preview-links"))).toHaveLength(1);
+    expect(requests.some((r) => r.path.endsWith("/preview-links"))).toBe(false);
     open.mockRestore();
   });
 

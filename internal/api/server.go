@@ -115,6 +115,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/contents/{id}/preview-links", s.site(s.createPreviewLink))
 	mux.Handle("GET /api/contents/{id}/preview-links", s.site(s.listPreviewLinks))
 	mux.Handle("DELETE /api/preview-links/{id}", s.site(s.deletePreviewLink))
+	mux.Handle("GET /api/contents/{id}/preview/{$}", s.adminPreview(s.adminPreviewPage))
+	mux.Handle("GET /api/contents/{id}/preview/_assets/{name}", s.adminPreview(s.adminPreviewAsset))
+	mux.Handle("GET /api/contents/{id}/preview/media/{key...}", s.adminPreview(s.adminPreviewMedia))
 	mux.Handle("DELETE /api/contents/{id}", s.site(s.deleteContent))
 
 	mux.Handle("GET /api/categories", s.site(s.listCategories))

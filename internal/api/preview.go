@@ -6,8 +6,10 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/kom3da/pagewright/internal/build"
@@ -118,16 +120,7 @@ func (s *Server) PreviewHandler() http.Handler {
 	mux.HandleFunc("GET /p/{token}/_assets/{name}", s.previewAsset)
 	mux.HandleFunc("GET /p/{token}/media/{key...}", s.previewMedia)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// The token is in the URL: keep it out of logs elsewhere and of
-		// search engines.
-		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
-		w.Header().Set("Cache-Control", "private, no-store")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		// Previews show the tenant's own body and theme on the admin's
-		// origin: sandbox them so nothing in a page can act with the
-		// admin's cookies, and allow no scripts at all.
-		w.Header().Set("Content-Security-Policy", "sandbox; script-src 'none'; object-src 'none'; frame-ancestors 'none'")
+		previewHeaders(w, false)
 		mux.ServeHTTP(w, r)
 	})
 }
@@ -143,6 +136,66 @@ func (s *Server) lookupPreview(r *http.Request) (dbgen.LookupPreviewLinkRow, boo
 	return row, true
 }
 
+// previewHeaders are set on every preview response. The token is in the
+// URL of preview links: keep it out of referrers and search engines.
+// Previews show the tenant's own body and theme on the admin's origin:
+// sandbox them so that nothing in a page can run or submit, and allow no
+// scripts at all. sameOrigin keeps the admin's origin (without scripts
+// it cannot be used) so that the admin preview's stylesheet and images,
+// which need the login cookie, load.
+func previewHeaders(w http.ResponseWriter, sameOrigin bool) {
+	h := w.Header()
+	h.Set("Referrer-Policy", "no-referrer")
+	h.Set("X-Robots-Tag", "noindex, nofollow")
+	h.Set("Cache-Control", "private, no-store")
+	h.Set("X-Content-Type-Options", "nosniff")
+	sandbox := "sandbox"
+	if sameOrigin {
+		sandbox = "sandbox allow-same-origin"
+	}
+	h.Set("Content-Security-Policy", sandbox+"; script-src 'none'; object-src 'none'; frame-ancestors 'none'")
+}
+
+// adminPreview serves the preview the editor's 「プレビューを見る」 opens: a
+// logged-in member sees the latest revision of a content of the chosen
+// site, with no link to create or share. It answers with pages, not JSON,
+// because it is opened in a browser tab.
+func (s *Server) adminPreview(h func(http.ResponseWriter, *http.Request, uuid.UUID, int64)) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		previewHeaders(w, true)
+		sess, err := s.loadSession(r)
+		if err != nil {
+			if !errors.Is(err, errUnauthenticated) {
+				s.Logger.Error("admin preview session", "err", err)
+			}
+			s.formPage(w, http.StatusUnauthorized, "", "ログインしてください", []string{"プレビューは、管理画面にログインしている人だけが見られます。"}, "")
+			return
+		}
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil || id <= 0 || sess.tenantID == uuid.Nil {
+			s.formPage(w, http.StatusNotFound, "", "プレビューが見つかりません", []string{"管理画面から開き直してください。"}, "")
+			return
+		}
+		h(w, r, sess.tenantID, id)
+	})
+}
+
+func (s *Server) adminPreviewURL(id int64) string {
+	return fmt.Sprintf("%s/api/contents/%d/preview/", s.BaseURL, id)
+}
+
+func (s *Server) adminPreviewPage(w http.ResponseWriter, r *http.Request, tenantID uuid.UUID, id int64) {
+	s.renderPreview(w, r, tenantID, id, s.adminPreviewURL(id), "これはプレビューです。公開サイトにはまだ出ていません（管理画面にログインしている人だけが見られます）")
+}
+
+func (s *Server) adminPreviewAsset(w http.ResponseWriter, r *http.Request, tenantID uuid.UUID, _ int64) {
+	s.serveThemeAsset(w, r, tenantID)
+}
+
+func (s *Server) adminPreviewMedia(w http.ResponseWriter, r *http.Request, tenantID uuid.UUID, _ int64) {
+	s.serveMedia(w, r, tenantID)
+}
+
 func (s *Server) previewPage(w http.ResponseWriter, r *http.Request) {
 	if !s.previewByIP.allow(s.clientKey(r)) {
 		s.formPage(w, http.StatusTooManyRequests, "", "しばらく待ってからお試しください", []string{"短い時間に多くの表示がありました。"}, "")
@@ -154,14 +207,23 @@ func (s *Server) previewPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jst := time.FixedZone("JST", 9*60*60)
-	page, err := build.RenderPreview(r.Context(), s.DB, link.TenantID, link.ContentID, build.PreviewOptions{
+	s.renderPreview(w, r, link.TenantID, link.ContentID, s.previewURL(r.PathValue("token")),
+		"これはプレビューです。公開サイトにはまだ出ていません（このリンクは"+link.ExpiresAt.In(jst).Format("2006年1月2日 15:04")+"まで有効）")
+}
+
+func (s *Server) renderPreview(w http.ResponseWriter, r *http.Request, tenantID uuid.UUID, contentID int64, selfURL, notice string) {
+	page, err := build.RenderPreview(r.Context(), s.DB, tenantID, contentID, build.PreviewOptions{
 		PublicBaseURL: s.PublicBaseURL,
-		SelfURL:       s.previewURL(r.PathValue("token")),
+		SelfURL:       selfURL,
 		FormBaseURL:   s.BaseURL,
-		Notice:        "これはプレビューです。公開サイトにはまだ出ていません（このリンクは" + link.ExpiresAt.In(jst).Format("2006年1月2日 15:04") + "まで有効）",
+		Notice:        notice,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		s.formPage(w, http.StatusNotFound, "", "プレビューが見つかりません", []string{"このページは削除されたか、いま選んでいるサイトのものではありません。"}, "")
+		return
+	}
 	if err != nil {
-		s.Logger.Error("preview render", "tenant_id", link.TenantID, "content_id", link.ContentID, "err", err)
+		s.Logger.Error("preview render", "tenant_id", tenantID, "content_id", contentID, "err", err)
 		s.formPage(w, http.StatusInternalServerError, "", "プレビューを表示できませんでした", []string{"時間をおいてもう一度お試しください。"}, "")
 		return
 	}
@@ -175,14 +237,7 @@ func (s *Server) previewAsset(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	name := r.PathValue("name")
-	b, ok := build.ThemeAsset(r.Context(), s.DB, link.TenantID, name)
-	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", contentTypeOf(name))
-	_, _ = w.Write(b)
+	s.serveThemeAsset(w, r, link.TenantID)
 }
 
 func (s *Server) previewMedia(w http.ResponseWriter, r *http.Request) {
@@ -191,7 +246,22 @@ func (s *Server) previewMedia(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	f, err := s.Media.Open(link.TenantID, r.PathValue("key"))
+	s.serveMedia(w, r, link.TenantID)
+}
+
+func (s *Server) serveThemeAsset(w http.ResponseWriter, r *http.Request, tenantID uuid.UUID) {
+	name := r.PathValue("name")
+	b, ok := build.ThemeAsset(r.Context(), s.DB, tenantID, name)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", contentTypeOf(name))
+	_, _ = w.Write(b)
+}
+
+func (s *Server) serveMedia(w http.ResponseWriter, r *http.Request, tenantID uuid.UUID) {
+	f, err := s.Media.Open(tenantID, r.PathValue("key"))
 	if err != nil {
 		http.NotFound(w, r)
 		return

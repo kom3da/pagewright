@@ -95,6 +95,7 @@ type ContentDetail = ContentSummary & {
 | `POST /api/contents/{id}/preview-links` | `{"days": 1〜30}`（本体は必須。`days` のキーを省くと 3） | 201 `PreviewLink`（`url` 付き）。ログインなしで見られるリンク。開くたびにその時点の最新の版を描く（作った時点の内容に固定しない）。`url` はこのときしか返らない（保存しているのはハッシュだけ）。範囲外は 422 `invalid_days`（`field: "days"`） |
 | `GET /api/contents/{id}/preview-links` | | 200 `PreviewLink[]`（有効なものだけ。`url` なし） |
 | `DELETE /api/preview-links/{id}` | | 204。リンクを取り消す |
+| `GET /api/contents/{id}/preview/` | | 200 HTML。管理画面の「プレビューを見る」が新しいタブで開くページ。最新の版を、ログインして選んでいるサイトのメンバーだけに見せる（リンクは作らない）。画像とスタイルシートは同じ場所の `media/`・`_assets/` から出す。JSON ではなくページで答え、ログインしていなければ 401、別のサイトや存在しない内容は 404。`Content-Security-Policy: sandbox allow-same-origin; script-src 'none'`（スクリプトもフォームの送信も動かない） |
 
 ```ts
 type PreviewLink = { id: number; url?: string; expiresAt: string; createdAt: string };
