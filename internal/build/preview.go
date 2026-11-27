@@ -32,7 +32,7 @@ type PreviewOptions struct {
 // settings, as the site would show it once published, for a preview link.
 func RenderPreview(ctx context.Context, d *db.DB, tenantID uuid.UUID, contentID int64, opts PreviewOptions) ([]byte, error) {
 	ctx = db.WithTenant(ctx, tenantID)
-	snap, err := load(ctx, d)
+	snap, err := load(ctx, d, true)
 	if err != nil {
 		return nil, err
 	}

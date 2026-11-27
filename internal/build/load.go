@@ -23,8 +23,9 @@ type snapshot struct {
 }
 
 // load reads the tenant's site in one transaction. RLS limits every query
-// to the tenant in ctx.
-func load(ctx context.Context, d *db.DB) (*snapshot, error) {
+// to the tenant in ctx. For a preview, post bodies a preview does not
+// need are left out (nil; see ListPublishedContentsForPreview).
+func load(ctx context.Context, d *db.DB, forPreview bool) (*snapshot, error) {
 	var s snapshot
 	err := d.InTenant(ctx, func(q *dbgen.Queries) error {
 		var err error
@@ -34,7 +35,16 @@ func load(ctx context.Context, d *db.DB) (*snapshot, error) {
 		if s.menu, err = q.ListMenuItems(ctx); err != nil {
 			return fmt.Errorf("menu: %w", err)
 		}
-		if s.contents, err = q.ListPublishedContents(ctx); err != nil {
+		if forPreview {
+			rows, err := q.ListPublishedContentsForPreview(ctx)
+			if err != nil {
+				return fmt.Errorf("contents: %w", err)
+			}
+			s.contents = make([]dbgen.ListPublishedContentsRow, len(rows))
+			for i, r := range rows {
+				s.contents[i] = dbgen.ListPublishedContentsRow(r)
+			}
+		} else if s.contents, err = q.ListPublishedContents(ctx); err != nil {
 			return fmt.Errorf("contents: %w", err)
 		}
 		if s.tree, err = q.ListContentTree(ctx); err != nil {

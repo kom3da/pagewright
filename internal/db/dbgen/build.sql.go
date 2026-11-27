@@ -173,3 +173,73 @@ func (q *Queries) ListPublishedContents(ctx context.Context) ([]ListPublishedCon
 	}
 	return items, nil
 }
+
+const listPublishedContentsForPreview = `-- name: ListPublishedContentsForPreview :many
+SELECT c.id, c.number, c.type, c.slug, c.parent_id, c.published_at, c.source_format,
+  r.id AS revision_id, r.title,
+  (CASE WHEN c.type <> 'post'
+      OR r.body->>'type' IS DISTINCT FROM 'doc'
+      OR jsonb_path_exists(r.body, '$.**.type ? (@ == "contactForm")')
+    THEN r.body END)::jsonb AS body,
+  r.body_schema_version, r.fields,
+  r.created_at AS revision_created_at
+FROM contents c
+JOIN content_revisions r
+  ON r.content_id = c.id AND r.id = c.published_revision_id
+WHERE c.published_revision_id IS NOT NULL
+ORDER BY c.published_at DESC, c.number DESC
+`
+
+type ListPublishedContentsForPreviewRow struct {
+	ID                int64
+	Number            int64
+	Type              string
+	Slug              *string
+	ParentID          *int64
+	PublishedAt       *time.Time
+	SourceFormat      *string
+	RevisionID        int64
+	Title             string
+	Body              []byte
+	BodySchemaVersion int64
+	Fields            []byte
+	RevisionCreatedAt time.Time
+}
+
+// ListPublishedContents for previewing one page: the body is left out
+// (NULL) for posts whose body a preview does not need, i.e. a well-formed
+// doc without a contact form block. Pages always keep theirs (menus,
+// page summaries, the home page).
+func (q *Queries) ListPublishedContentsForPreview(ctx context.Context) ([]ListPublishedContentsForPreviewRow, error) {
+	rows, err := q.db.Query(ctx, listPublishedContentsForPreview)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPublishedContentsForPreviewRow
+	for rows.Next() {
+		var i ListPublishedContentsForPreviewRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Number,
+			&i.Type,
+			&i.Slug,
+			&i.ParentID,
+			&i.PublishedAt,
+			&i.SourceFormat,
+			&i.RevisionID,
+			&i.Title,
+			&i.Body,
+			&i.BodySchemaVersion,
+			&i.Fields,
+			&i.RevisionCreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

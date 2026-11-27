@@ -93,7 +93,7 @@ func Build(ctx context.Context, d *db.DB, tenantID uuid.UUID, opts Options) (Res
 	unlock := sync.OnceFunc(release)
 	defer unlock()
 
-	snap, err := load(db.WithTenant(ctx, tenantID), d)
+	snap, err := load(db.WithTenant(ctx, tenantID), d, false)
 	if err != nil {
 		return Result{}, fmt.Errorf("build: %w", err)
 	}

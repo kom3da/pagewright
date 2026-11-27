@@ -207,6 +207,11 @@ func (g *generator) index() {
 		if row.Type == "page" && it.parents == nil {
 			_, it.parents, _ = g.rulePath(row.ID)
 		}
+		if row.Body == nil {
+			// Left out by a preview's load: nothing on the page uses it.
+			g.addItem(it)
+			continue
+		}
 		opts := renderOpts
 		opts.PagePath = it.path
 		opts.ContactForm = g.contactForm(it.path)
@@ -222,9 +227,7 @@ func (g *generator) index() {
 		if row.Type == "page" {
 			it.rest = restOf(row.Body, opts)
 		}
-		g.items = append(g.items, it)
-		g.itemByID[row.ID] = it
-		g.itemByPath[it.path] = it
+		g.addItem(it)
 	}
 
 	g.postsOfCat, g.postsOfTag = map[int64][]*item{}, map[int64][]*item{}
@@ -262,6 +265,12 @@ func (g *generator) index() {
 			slices.SortFunc(list, func(a, b *item) int { return order[a] - order[b] })
 		}
 	}
+}
+
+func (g *generator) addItem(it *item) {
+	g.items = append(g.items, it)
+	g.itemByID[it.row.ID] = it
+	g.itemByPath[it.path] = it
 }
 
 // rulePath computes the MVP URL of a content: /posts/{seg}/ for posts and

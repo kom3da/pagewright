@@ -12,6 +12,25 @@ JOIN content_revisions r
 WHERE c.published_revision_id IS NOT NULL
 ORDER BY c.published_at DESC, c.number DESC;
 
+-- name: ListPublishedContentsForPreview :many
+-- ListPublishedContents for previewing one page: the body is left out
+-- (NULL) for posts whose body a preview does not need, i.e. a well-formed
+-- doc without a contact form block. Pages always keep theirs (menus,
+-- page summaries, the home page).
+SELECT c.id, c.number, c.type, c.slug, c.parent_id, c.published_at, c.source_format,
+  r.id AS revision_id, r.title,
+  (CASE WHEN c.type <> 'post'
+      OR r.body->>'type' IS DISTINCT FROM 'doc'
+      OR jsonb_path_exists(r.body, '$.**.type ? (@ == "contactForm")')
+    THEN r.body END)::jsonb AS body,
+  r.body_schema_version, r.fields,
+  r.created_at AS revision_created_at
+FROM contents c
+JOIN content_revisions r
+  ON r.content_id = c.id AND r.id = c.published_revision_id
+WHERE c.published_revision_id IS NOT NULL
+ORDER BY c.published_at DESC, c.number DESC;
+
 -- name: ListContentTree :many
 -- Every content's place in the URL tree, published or not, so page paths
 -- can be built from their parents' slugs.
