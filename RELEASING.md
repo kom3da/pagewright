@@ -48,7 +48,6 @@
 リポジトリを Public にしたら、Settings で次を有効にする。
 
 - **Private vulnerability reporting**（Security → Advisories）：[SECURITY.md](SECURITY.md) の報告の窓口になる
-- **Reported content**（Moderation options）：Issue やコメントの通報を受け付ける（[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)）
 
 ## 試験版（プレリリース）
 

@@ -4,17 +4,18 @@ Pagewright は [Contributor Covenant 2.1](https://www.contributor-covenant.org/v
 
 ## 知らせ方 / How to report
 
-困ったことがあったら、メンテナー（[@kom3da](https://github.com/kom3da)）に非公開で知らせてください。メールでの受け付けはしていません。
+困ったことがあったら、GitHub の仕組みで非公開に知らせてください。メールでの受け付けはしていません。
 
-- Issue やコメントの問題：そのコメントの「…」メニューの **Report content** から、**Report to repository admins** を選ぶ
-- それ以外、または上の方法が使えないとき：GitHub の [Report abuse](https://docs.github.com/ja/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam) から GitHub に知らせる
+- Issue やコメントの問題：そのコメントの「…」メニューの **Report content** から GitHub に知らせる（[Report abuse](https://docs.github.com/ja/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam)）
+- それ以外のこと：同じく GitHub の [Report abuse](https://docs.github.com/ja/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam) から知らせる
 
+メンテナー（[@kom3da](https://github.com/kom3da)）は、この行動規範に反するコメントを隠したり消したりし、必要なら利用者をブロックします。
 知らせてくれた人のプライバシーは守ります。
 
-Report privately to the maintainer ([@kom3da](https://github.com/kom3da)) using
-**Report content → Report to repository admins** on the comment in question, or
-through [GitHub's abuse reporting](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam).
-There is no email contact.
+Report through GitHub: use **Report content** on the comment in question, or
+[GitHub's abuse reporting](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam).
+The maintainer ([@kom3da](https://github.com/kom3da)) hides or removes content that breaks this code
+and blocks users when needed. There is no email contact.
 
 ---
 
