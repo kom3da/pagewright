@@ -1,0 +1,67 @@
+name: 不具合の報告 / Bug report
+description: 思ったとおりに動かないことを知らせる
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        報告ありがとうございます。**脆弱性はここに書かず、[SECURITY.md](https://github.com/kom3da/pagewright/blob/main/SECURITY.md) の方法で非公開で知らせてください。**
+
+        ログや画面のコピーを貼る前に、**秘密の値を消してください。** ログイン用のURL、プレビューのURL（`/p/...`）、セッションのクッキー、APIのトークン、パスワード、`.env` の中身は、それだけでログインや閲覧ができてしまいます。
+  - type: textarea
+    id: what
+    attributes:
+      label: 何が起きたか
+      description: 起きたことと、本当はどうなってほしかったか
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現の手順
+      placeholder: |
+        1. 管理画面で記事の一覧を開く
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: バージョン
+      description: "`pagewright version` の出力（Docker なら `docker compose run --rm cli version`）"
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: 動かし方
+      options:
+        - 同梱の Docker Compose（deploy/compose.yaml）
+        - バイナリを自分で配置
+        - 開発環境（mise run dev）
+        - その他
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 環境
+      description: OS、PostgreSQL のバージョン、ブラウザ（管理画面の不具合のとき）、使っているテーマなど
+      placeholder: |
+        - OS: Ubuntu 24.04
+        - PostgreSQL: 18
+        - ブラウザ: Chrome 140
+        - テーマ: corporate
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログ
+      description: 関係のありそうなログ。**トークンやURLの秘密の部分は消してから**貼ってください
+      render: text
+  - type: textarea
+    id: extra
+    attributes:
+      label: そのほか
+      description: スクリーンショットや、気づいたことがあれば

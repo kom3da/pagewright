@@ -1,0 +1,32 @@
+name: 提案 / Feature request
+description: 新しい機能や改善を提案する
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提案ありがとうございます。設計の方針は [docs/design.md](https://github.com/kom3da/pagewright/blob/main/docs/design.md) にあります（公開サイトは静的、パスワード認証はしない、など）。方針と合わない提案は、理由とあわせて相談させてください。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 困っていること
+      description: 誰が、どんな場面で、何に困っているか
+      placeholder: お知らせを毎月同じ形で書くので、前の記事を下書きとして複製したい
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: こうなるとよい
+      description: どう動いてほしいか。画面の案があれば
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 今はどうしているか・ほかの案
+  - type: textarea
+    id: extra
+    attributes:
+      label: そのほか
+      description: 参考になるほかのCMSの例、スクリーンショットなど
