@@ -64,6 +64,26 @@ test("lists and management screens are accessible", async ({ page }) => {
   }
 });
 
+test("the sidebar's site and account menus are accessible while open", async ({ page }) => {
+  await page.goto("");
+  await expect(page.getByRole("heading", { level: 1, name: /ようこそ/ })).toBeVisible();
+
+  await page.getByRole("button", { name: /サイトを切り替える/ }).click();
+  await expect(page.getByRole("menuitem", { name: "山田カフェ" })).toBeVisible();
+  await expectAccessible(page);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toBeHidden();
+
+  // The items inside the labeled group still work with the arrow keys.
+  await page.getByRole("button", { name: /アカウントのメニュー/ }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menuitem", { name: "ログイン中の端末" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("menuitem", { name: "ログアウト" })).toBeFocused();
+  await expect(page.getByRole("group", { name: "taro@example.jp でログイン中" })).toBeVisible();
+  await expectAccessible(page);
+});
+
 test("home links to filtered lists; the filter follows back and forward", async ({ page }) => {
   await page.goto("");
   await page.getByRole("link", { name: "下書きの記事 1件を見る" }).click();

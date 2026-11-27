@@ -32,7 +32,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 import { api, errorMessage } from "../api/client";
 import { meQuery } from "../api/queries";
 import { useIsAdmin } from "../lib/useIsAdmin";
@@ -198,6 +198,7 @@ function SiteSwitcher() {
   const navigate = useNavigate();
   const site = me.sites.find((s) => s.id === me.currentSiteId);
   const name = site?.name ?? "サイト";
+  const labelId = useId();
 
   const select = useMutation({
     mutationFn: api.selectSite,
@@ -224,7 +225,9 @@ function SiteSwitcher() {
   if (me.sites.length <= 1) return <Box px="xs">{label}</Box>;
 
   return (
-    <Menu position="bottom-start" width="target">
+    // No focus placeholder: a focusable role="presentation" child breaks the menu role's
+    // required children (axe).
+    <Menu position="bottom-start" width="target" withInitialFocusPlaceholder={false}>
       <Menu.Target>
         <UnstyledButton className={classes.siteButton} disabled={select.isPending}>
           <Group gap="xs" wrap="nowrap" justify="space-between">
@@ -235,22 +238,25 @@ function SiteSwitcher() {
         </UnstyledButton>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Label>サイトを切り替える</Menu.Label>
-        {me.sites.map((s) => {
-          const current = s.id === me.currentSiteId;
-          return (
-            <Menu.Item
-              key={s.id}
-              leftSection={
-                current ? <Check aria-hidden="true" size={16} /> : <Box w={16} aria-hidden />
-              }
-              onClick={() => !current && select.mutate(s.id)}
-            >
-              {s.name}
-              {current && <VisuallyHidden>（選択中）</VisuallyHidden>}
-            </Menu.Item>
-          );
-        })}
+        {/* A label directly inside role="menu" is not allowed (axe): label a group instead. */}
+        <div role="group" aria-labelledby={labelId}>
+          <Menu.Label id={labelId}>サイトを切り替える</Menu.Label>
+          {me.sites.map((s) => {
+            const current = s.id === me.currentSiteId;
+            return (
+              <Menu.Item
+                key={s.id}
+                leftSection={
+                  current ? <Check aria-hidden="true" size={16} /> : <Box w={16} aria-hidden />
+                }
+                onClick={() => !current && select.mutate(s.id)}
+              >
+                {s.name}
+                {current && <VisuallyHidden>（選択中）</VisuallyHidden>}
+              </Menu.Item>
+            );
+          })}
+        </div>
       </Menu.Dropdown>
     </Menu>
   );
@@ -261,6 +267,7 @@ function UserMenu() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const name = me.user.displayName || me.user.email;
+  const labelId = useId();
 
   const logout = useMutation({
     mutationFn: api.logout,
@@ -272,7 +279,7 @@ function UserMenu() {
   });
 
   return (
-    <Menu position="top-start" width="target">
+    <Menu position="top-start" width="target" withInitialFocusPlaceholder={false}>
       <Menu.Target>
         {/* Named from its content (not aria-label), so the visible name is part of it. */}
         <Button
@@ -290,21 +297,23 @@ function UserMenu() {
         </Button>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Label>{me.user.email} でログイン中</Menu.Label>
-        <Menu.Item
-          component={Link}
-          to="/account"
-          leftSection={<MonitorSmartphone aria-hidden="true" size={16} />}
-        >
-          ログイン中の端末
-        </Menu.Item>
-        <Menu.Item
-          leftSection={<LogOut aria-hidden="true" size={16} />}
-          onClick={() => logout.mutate()}
-          disabled={logout.isPending}
-        >
-          ログアウト
-        </Menu.Item>
+        <div role="group" aria-labelledby={labelId}>
+          <Menu.Label id={labelId}>{me.user.email} でログイン中</Menu.Label>
+          <Menu.Item
+            component={Link}
+            to="/account"
+            leftSection={<MonitorSmartphone aria-hidden="true" size={16} />}
+          >
+            ログイン中の端末
+          </Menu.Item>
+          <Menu.Item
+            leftSection={<LogOut aria-hidden="true" size={16} />}
+            onClick={() => logout.mutate()}
+            disabled={logout.isPending}
+          >
+            ログアウト
+          </Menu.Item>
+        </div>
       </Menu.Dropdown>
     </Menu>
   );
