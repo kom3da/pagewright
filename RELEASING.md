@@ -38,9 +38,17 @@
    git push origin v0.2.0
    ```
 
-5. Actions の Release が通ったら、リリースのページとイメージ（`docker pull ghcr.io/kom3da/pagewright:0.2.0`）を確かめる
+5. Actions の Release が通ったら、リリースのページを確かめる
+6. **最初のリリースのときだけ：** GHCR のパッケージ `pagewright` の公開範囲を Public にし、リポジトリとつなぐ（Package settings → Change visibility、Manage Actions access）。
+   GHCR のパッケージは最初は Private で作られるので、これをしないと利用者は `docker pull` できない
+7. ログインしていない状態（`docker logout ghcr.io` のあと）で `docker pull ghcr.io/kom3da/pagewright:0.2.0` が通ることを確かめてから、リリースを知らせる
 
-最初のリリースのあとに一度だけ：GHCR のパッケージ `pagewright` の公開範囲を Public にし、リポジトリとつなぐ（Package settings）。
+## リポジトリを公開するとき（一度だけ）
+
+リポジトリを Public にしたら、Settings で次を有効にする。
+
+- **Private vulnerability reporting**（Security → Advisories）：[SECURITY.md](SECURITY.md) の報告の窓口になる
+- **Reported content**（Moderation options）：Issue やコメントの通報を受け付ける（[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)）
 
 ## 試験版（プレリリース）
 
