@@ -60,11 +60,12 @@ description = "Goと管理画面のテスト（GoのテストのDBは compose.de
 run = ["go test ./...", "pnpm --dir web/admin test"]
 
 [tasks.lint]
-description = "Goのlint、マイグレーションの検査、管理画面のlint"
+description = "Goのlint、マイグレーションの検査、管理画面のlint、GitHub Actions の検査"
 run = [
   "golangci-lint run",
   "pnpm --dir web/admin lint",
   "squawk internal/db/migrations/*.sql",
+  "actionlint",
 ]
 
 [tasks.gen]
