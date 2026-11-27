@@ -2,12 +2,16 @@ import "@testing-library/jest-dom/vitest";
 import { File as NodeFile } from "node:buffer";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { getResponse, type RequestHandler } from "msw";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import { forgetShownSite } from "../api/client";
 import { resetDb } from "../mocks/handlers";
 import { server } from "./server";
+
+// The editor loads lazily; under a full parallel run it can take over the default 1s that
+// findBy* waits, so wait up to 3s.
+configure({ asyncUtilTimeout: 3000 });
 
 // jsdom replaces FormData/File with its own classes, which Node's fetch cannot send.
 // Node's FormData class is reachable through Node's Response.
