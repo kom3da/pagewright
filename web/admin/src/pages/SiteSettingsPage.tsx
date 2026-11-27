@@ -368,6 +368,15 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
               onChange={(e) => set("name", e.target.value)}
               error={shown.name}
             />
+            {initial.publicBaseUrl && (
+              <Box>
+                <Text fw={700}>公開サイトのURL</Text>
+                <Input.Description size="sm">
+                  サーバーの管理者が設定します。変えたいときは、サーバーの管理者に相談してください。
+                </Input.Description>
+                <Text mt={4}>{initial.publicBaseUrl}</Text>
+              </Box>
+            )}
             <Stack gap="xs">
               <Box>
                 <Text fw={700}>ロゴ</Text>

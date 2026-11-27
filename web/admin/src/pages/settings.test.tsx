@@ -56,6 +56,14 @@ describe("site settings", () => {
     await expectNoAxeViolations();
   });
 
+  it("shows the public site URL the server names, without a field to change it", async () => {
+    db.site.publicBaseUrl = "https://www.example2.jp";
+    await openSettings();
+    expect(screen.getByText("公開サイトのURL")).toBeInTheDocument();
+    expect(screen.getByText("https://www.example2.jp")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("https://www.example2.jp")).not.toBeInTheDocument();
+  });
+
   it("shows the contrast with white and blocks saving a light color", async () => {
     const requests = recordRequests();
     const { user } = await openSettings();
