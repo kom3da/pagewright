@@ -2,6 +2,7 @@ name: Release
 
 # Push a tag such as v1.2.3 to publish binaries, checksums and the
 # multi-arch image ghcr.io/kom3da/pagewright (see .goreleaser.yaml).
+# The steps before tagging are in RELEASING.md.
 on:
   push:
     tags: ["v*"]
@@ -13,6 +14,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Fails within seconds, before the long checks, when CHANGELOG.md has no
+  # section for the version or deploy/.env.example is not pinned to it.
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: .github/scripts/release-notes.sh "${GITHUB_REF_NAME#v}"
+
   # The same checks as CI (tests, lint, E2E, image build) on the tagged
   # commit; nothing is published unless they pass.
   checks:
@@ -21,7 +35,7 @@ jobs:
       contents: read
 
   release:
-    needs: checks
+    needs: [preflight, checks]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -43,7 +57,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Release notes from CHANGELOG.md
+        run: .github/scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > "$RUNNER_TEMP/release-notes.md"
       - name: GoReleaser
-        run: goreleaser release --clean
+        run: goreleaser release --clean --release-notes "$RUNNER_TEMP/release-notes.md"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

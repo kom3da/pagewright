@@ -33,6 +33,7 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
+      - CHANGELOG.md
       - docs/install/*.md
       - deploy/compose.yaml
       - deploy/.env.example
@@ -69,12 +70,10 @@ dockers_v2:
       org.opencontainers.image.revision: "{{ .FullCommit }}"
       org.opencontainers.image.created: "{{ .Date }}"
 
+# The release notes are the version's section of CHANGELOG.md, passed with
+# --release-notes by release.yaml (.github/scripts/release-notes.sh).
 changelog:
-  use: github
-  sort: asc
-  filters:
-    exclude:
-      - "^Merge "
+  disable: true
 
 release:
   prerelease: auto
