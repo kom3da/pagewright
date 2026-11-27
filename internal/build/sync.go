@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,8 +15,10 @@ import (
 
 // syncDir makes live identical to staging, touching only files whose
 // content differs. Changed files are renamed from staging into live, so a
-// reader never sees a half-written file. Returns the number of files and
-// the changed and removed paths ("/a/index.html").
+// reader never sees a half-written file, and they are placed before stale
+// files are removed, so a URL that exists before and after the sync never
+// stops answering in between. Returns the number of files and the changed
+// and removed paths ("/a/index.html"), sorted.
 func syncDir(staging, live string) (files int, changed, removed []string, err error) {
 	want, err := listFiles(staging)
 	if err != nil {
@@ -26,18 +29,15 @@ func syncDir(staging, live string) (files int, changed, removed []string, err er
 		return 0, nil, nil, err
 	}
 
-	// Remove first: a file may need to become a directory or vice versa.
-	for _, rel := range slices.Sorted(keys(have)) {
-		if _, ok := want[rel]; ok {
-			continue
-		}
+	// remove deletes a stale file of live.
+	remove := func(rel string) error {
 		if err := os.Remove(filepath.Join(live, filepath.FromSlash(rel))); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return 0, nil, nil, err
+			return err
 		}
+		delete(have, rel)
 		removed = append(removed, "/"+rel)
-	}
-	if err := removeEmptyDirs(live); err != nil {
-		return 0, nil, nil, err
+		syncStep()
+		return nil
 	}
 
 	for _, rel := range slices.Sorted(keys(want)) {
@@ -52,6 +52,27 @@ func syncDir(staging, live string) (files int, changed, removed []string, err er
 				continue
 			}
 		}
+		// A stale file where a directory must go (a → a/b), or a stale
+		// directory where a file must go (a/b → a), has to go first.
+		for dir := path.Dir(rel); dir != "."; dir = path.Dir(dir) {
+			if _, ok := have[dir]; ok {
+				if err := remove(dir); err != nil {
+					return 0, nil, nil, err
+				}
+			}
+		}
+		if fi, err := os.Lstat(dst); err == nil && fi.IsDir() {
+			for _, old := range slices.Sorted(keys(have)) {
+				if strings.HasPrefix(old, rel+"/") {
+					if err := remove(old); err != nil {
+						return 0, nil, nil, err
+					}
+				}
+			}
+			if err := os.RemoveAll(dst); err != nil {
+				return 0, nil, nil, err
+			}
+		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return 0, nil, nil, err
 		}
@@ -59,9 +80,26 @@ func syncDir(staging, live string) (files int, changed, removed []string, err er
 			return 0, nil, nil, err
 		}
 		changed = append(changed, "/"+rel)
+		syncStep()
 	}
+
+	for _, rel := range slices.Sorted(keys(have)) {
+		if _, ok := want[rel]; ok {
+			continue
+		}
+		if err := remove(rel); err != nil {
+			return 0, nil, nil, err
+		}
+	}
+	if err := removeEmptyDirs(live); err != nil {
+		return 0, nil, nil, err
+	}
+	slices.Sort(removed)
 	return len(want), changed, removed, nil
 }
+
+// syncStep is called after each change to the live directory (tests).
+var syncStep = func() {}
 
 func keys(m map[string]struct{}) func(func(string) bool) {
 	return func(yield func(string) bool) {
