@@ -146,6 +146,33 @@ jobs:
           path: web/admin/test-results/
           retention-days: 7
 
+  docs:
+    name: Docs site builds (VitePress + Pagefind)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # "最終更新" on each page comes from the git history.
+          fetch-depth: 0
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+        with:
+          install_args: node pnpm github:Pagefind/pagefind
+      - id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-docs-${{ runner.os }}-${{ hashFiles('docs/pnpm-lock.yaml', 'mise.toml') }}
+          restore-keys: pnpm-docs-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+      # Fails on dead links; then indexes the built site with Pagefind.
+      - run: pnpm build
+
   image:
     name: Container image builds
     runs-on: ubuntu-latest
