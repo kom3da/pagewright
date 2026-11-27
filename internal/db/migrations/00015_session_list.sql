@@ -13,7 +13,7 @@
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '60s';
 
--- last_used_at: when the session was last used, to the hour. The app
+-- last_used_at: when the session was last used, to within an hour. The app
 -- records a use only when the recorded one is over an hour old (and the
 -- function below refuses more), so requests do not each write a row. NULL
 -- until the first use is recorded.
@@ -27,8 +27,9 @@ ALTER TABLE sessions
   ADD COLUMN device text NOT NULL DEFAULT '' CHECK (char_length(device) <= 100);
 
 -- auth_session also returns last_used_at, so the app knows from the lookup
--- it makes anyway whether a use is due to be recorded. Dropped and created in this transaction; the
--- new columns come last, so queries of the old ones keep working.
+-- it makes anyway whether a use is due to be recorded. Dropped and created
+-- in this transaction; the new column comes last, so queries of the old
+-- ones keep working.
 -- squawk-ignore ban-drop-function
 DROP FUNCTION auth_session(bytea);
 -- +goose StatementBegin
