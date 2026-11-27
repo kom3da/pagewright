@@ -103,6 +103,7 @@ func urlKey(raw string) string {
 
 type download struct {
 	data          []byte
+	size          int64 // len(data), kept after data is dropped
 	contentType   string
 	width, height *int64
 }
@@ -174,60 +175,111 @@ func writeFile(root, name string, data []byte) error {
 	return os.Rename(tmp.Name(), dst)
 }
 
-// importMedia downloads one attachment and records it.
-func (im *importer) importMedia(ctx context.Context, a model.Attachment) {
-	e := Entry{Kind: KindMedia, SourceID: a.SourceID, Title: a.URL}
+// preparedMedia is an attachment resolved and downloaded, before any
+// transaction: downloads take seconds, and a transaction that has added
+// a row holds the tenant's id counter (tenant_id_counters) until it ends,
+// which would make the admin wait.
+type preparedMedia struct {
+	entry Entry
+	key   string
+	// done means the entry is decided (skipped or failed) without the DB.
+	done bool
+	// meta is the downloaded image (its file already written unless dry
+	// run), nil when media with the key already existed.
+	meta *download
+	err  error // download or write error, reported if nothing exists at key
+}
+
+// prepareMedia resolves an attachment's storage key and, unless media with
+// that key exists, downloads it and (unless dry run) writes the file. It
+// runs outside any transaction, checking for existing media in a short one.
+func (im *importer) prepareMedia(ctx context.Context, a model.Attachment) *preparedMedia {
+	p := &preparedMedia{entry: Entry{Kind: KindMedia, SourceID: a.SourceID, Title: a.URL}}
 	key, err := storageKey(a)
 	switch {
 	case errors.Is(err, errNotImage):
-		e.Outcome, e.Reason = Skipped, "画像以外のファイルは取り込みません。本文からのリンクは元のURLのままです"
-		im.rep.add(e)
-		return
+		p.done, p.entry.Outcome, p.entry.Reason = true, Skipped, "画像以外のファイルは取り込みません。本文からのリンクは元のURLのままです"
+		return p
 	case err != nil:
-		e.Outcome, e.Reason = Failed, "URL を読み取れません: "+err.Error()
-		im.rep.add(e)
-		return
+		p.done, p.entry.Outcome, p.entry.Reason = true, Failed, "URL を読み取れません: "+err.Error()
+		return p
 	}
 	if other, dup := im.keys[key]; dup && other != a.SourceID {
 		key = fmt.Sprintf("wp/%s/%d-%s", path.Dir(strings.TrimPrefix(key, "wp/")), a.SourceID, path.Base(key))
 	}
 	im.keys[key] = a.SourceID
-	e.Path = "/media/" + key
+	p.key = key
+	p.entry.Path = "/media/" + key
 
+	exists := false
+	if err := im.db.InTenant(ctx, func(q *dbgen.Queries) error {
+		_, err := q.GetMediaByStorageKey(ctx, key)
+		exists = err == nil
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return err
+	}); err != nil {
+		p.done, p.entry.Outcome, p.entry.Reason = true, Failed, err.Error()
+		return p
+	}
+	if exists {
+		return p
+	}
+	d, err := fetch(ctx, im.client, a.URL)
+	if err != nil {
+		p.err = err
+		return p
+	}
+	if !im.opts.DryRun {
+		if err := writeFile(filepath.Join(im.opts.MediaRoot, im.tenantID.String()), key, d.data); err != nil {
+			p.err = fmt.Errorf("保存できませんでした: %w", err)
+			return p
+		}
+	}
+	d.size, d.data = int64(len(d.data)), nil
+	p.meta = d
+	return p
+}
+
+// recordMedia adds the media row of a prepared attachment.
+func (im *importer) recordMedia(ctx context.Context, a model.Attachment, p *preparedMedia) {
+	e := p.entry
+	if p.done {
+		im.rep.add(e)
+		return
+	}
 	var ref mediaRef
-	err = im.unit(func(q *dbgen.Queries) error {
-		m, err := q.GetMediaByStorageKey(ctx, key)
+	err := im.unit(func(q *dbgen.Queries) error {
+		m, err := q.GetMediaByStorageKey(ctx, p.key)
 		if err == nil {
-			ref = mediaRef{id: m.ID, key: key, alt: m.AltText}
-			e.Outcome, e.Reason = Existing, "同じ保存先（"+key+"）の画像があります"
+			ref = mediaRef{id: m.ID, key: p.key, alt: m.AltText}
+			e.Outcome, e.Reason = Existing, "同じ保存先（"+p.key+"）の画像があります"
 			return nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		d, err := fetch(ctx, im.client, a.URL)
-		if err != nil {
-			return err
+		if p.err != nil {
+			return p.err
 		}
-		if !im.opts.DryRun {
-			if err := writeFile(filepath.Join(im.opts.MediaRoot, im.tenantID.String()), key, d.data); err != nil {
-				return fmt.Errorf("保存できませんでした: %w", err)
-			}
+		if p.meta == nil {
+			return errors.New("同じ保存先の画像が取り込みの途中で削除されました。もう一度取り込んでください")
 		}
 		m, err = q.CreateMedia(ctx, dbgen.CreateMediaParams{
-			StorageKey:  key,
-			Filename:    path.Base(key),
-			ContentType: d.contentType,
-			SizeBytes:   int64(len(d.data)),
-			Width:       d.width,
-			Height:      d.height,
+			StorageKey:  p.key,
+			Filename:    path.Base(p.key),
+			ContentType: p.meta.contentType,
+			SizeBytes:   p.meta.size,
+			Width:       p.meta.width,
+			Height:      p.meta.height,
 			AltText:     a.Alt,
 			UploadedBy:  &im.opts.AuthorID,
 		})
 		if err != nil {
 			return err
 		}
-		ref = mediaRef{id: m.ID, key: key, alt: a.Alt}
+		ref = mediaRef{id: m.ID, key: p.key, alt: a.Alt}
 		e.Outcome = Created
 		return nil
 	})
@@ -237,7 +289,7 @@ func (im *importer) importMedia(ctx context.Context, a model.Attachment) {
 		return
 	}
 	im.media[urlKey(a.URL)] = ref
-	im.mediaByKey[key] = ref
+	im.mediaByKey[p.key] = ref
 	im.rep.add(e)
 }
 

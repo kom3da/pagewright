@@ -10,7 +10,16 @@
 // idempotent: a post whose number (the WordPress post ID) already exists,
 // a category or tag whose slug exists, and media whose storage key exists
 // are reported as Existing and left untouched. A dry run does all of the
-// work in one transaction (with a savepoint per entry) and rolls it back.
+// database work in one transaction (with a savepoint per entry) and rolls
+// it back, so later entries see the earlier ones as a real import would.
+//
+// Media are downloaded outside any transaction: an attachment's file is
+// fetched (and written) before the short transaction that adds its row,
+// and a dry run downloads every attachment before it opens its
+// transaction. Rows added in a transaction hold the tenant's number and
+// id counters until it ends, so the admin's creates in the tenant wait
+// for it; a dry run still holds them while it converts and writes the
+// posts, but no longer during downloads.
 package wxrimport
 
 import (
@@ -78,6 +87,7 @@ func ImportExport(ctx context.Context, d *db.DB, tenantID uuid.UUID, exp *model.
 	ctx = db.WithTenant(ctx, tenantID)
 	im := &importer{
 		opts:       opts,
+		db:         d,
 		tenantID:   tenantID,
 		exp:        exp,
 		rep:        &Report{DryRun: opts.DryRun, Site: exp.Site.Title, SiteURL: exp.Site.URL},
@@ -122,6 +132,14 @@ func ImportExport(ctx context.Context, d *db.DB, tenantID uuid.UUID, exp *model.
 		im.log(ctx)
 		return *im.rep, err
 	}
+	if opts.DownloadMedia {
+		for _, a := range exp.Attachments {
+			if err := ctx.Err(); err != nil {
+				return *im.rep, err
+			}
+			im.prepared = append(im.prepared, im.prepareMedia(ctx, a))
+		}
+	}
 	err := d.InTenant(ctx, func(q *dbgen.Queries) error {
 		im.unit = func(fn func(*dbgen.Queries) error) error {
 			if err := q.Savepoint(ctx); err != nil {
@@ -149,12 +167,16 @@ func ImportExport(ctx context.Context, d *db.DB, tenantID uuid.UUID, exp *model.
 
 type importer struct {
 	opts     Options
+	db       *db.DB
 	tenantID uuid.UUID
 	exp      *model.Export
 	rep      *Report
 	client   *http.Client
 	// unit runs fn in its own transaction (or savepoint in a dry run).
 	unit func(fn func(*dbgen.Queries) error) error
+	// prepared are the attachments downloaded ahead of a dry run, in the
+	// order of exp.Attachments; nil prepares each one when it is imported.
+	prepared []*preparedMedia
 
 	categories map[string]int64    // slug → id
 	tags       map[string]int64    // slug → id
@@ -190,11 +212,17 @@ func (im *importer) run(ctx context.Context) error {
 		return err
 	}
 	if im.opts.DownloadMedia {
-		for _, a := range im.exp.Attachments {
+		for i, a := range im.exp.Attachments {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			im.importMedia(ctx, a)
+			var p *preparedMedia
+			if im.prepared != nil {
+				p = im.prepared[i]
+			} else {
+				p = im.prepareMedia(ctx, a)
+			}
+			im.recordMedia(ctx, a, p)
 		}
 	} else if len(im.exp.Attachments) > 0 {
 		im.rep.Notes = append(im.rep.Notes, fmt.Sprintf("画像 %d 件はダウンロードしていません。本文の画像は元のURLのままです", len(im.exp.Attachments)))

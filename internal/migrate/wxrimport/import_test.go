@@ -44,6 +44,9 @@ type env struct {
 	mediaRoot        string
 	client           *http.Client
 	downloads        *atomic.Int64
+	// txDuringDownload counts downloads served while the database had a
+	// transaction open: it may hold the tenant's id counters.
+	txDuringDownload *atomic.Int64
 }
 
 func newEnv(t *testing.T) *env {
@@ -118,8 +121,16 @@ func newEnv(t *testing.T) *env {
 	e.exec(t, "INSERT INTO contents (tenant_id, number, type, slug, author_id) VALUES ($1, 1, 'page', 'sale', $2)", e.tenantA, e.alice)
 	e.exec(t, "INSERT INTO routes (tenant_id, path, kind, content_id) SELECT $1, '/2024/07/summer-sale/', 'canonical', id FROM contents WHERE tenant_id = $1", e.tenantA)
 
-	e.downloads = &atomic.Int64{}
+	e.downloads, e.txDuringDownload = &atomic.Int64{}, &atomic.Int64{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var open int
+		if err := admin.QueryRow(context.Background(), `SELECT count(*) FROM pg_stat_activity
+			WHERE datname = current_database() AND xact_start IS NOT NULL AND pid <> pg_backend_pid()`).Scan(&open); err != nil {
+			t.Error(err)
+		}
+		if open > 0 {
+			e.txDuringDownload.Add(1)
+		}
 		if r.URL.Path != "/wp-content/uploads/2024/05/shop.jpg" {
 			http.NotFound(w, r)
 			return
@@ -506,10 +517,16 @@ func TestImportDryRun(t *testing.T) {
 	if !strings.Contains(reportText(t, dry), "ドライラン") {
 		t.Error("report does not say it is a dry run")
 	}
+	if e.downloads.Load() == 0 {
+		t.Error("dry run downloaded nothing")
+	}
 
 	real := e.importFixture(t, e.options(true, false))
 	if diff := cmp.Diff(real, dry, cmpopts.IgnoreFields(wxrimport.Report{}, "DryRun")); diff != "" {
 		t.Errorf("dry run report differs from the real one (-real +dry):\n%s", diff)
+	}
+	if n := e.txDuringDownload.Load(); n != 0 {
+		t.Errorf("%d downloads ran while a transaction was open", n)
 	}
 }
 
