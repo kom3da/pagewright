@@ -14,7 +14,7 @@ import (
 	"github.com/kom3da/pagewright/internal/routing"
 )
 
-const slugMessage = "ページのURLは英小文字・数字・ハイフンで入力してください（数字だけにはできません）"
+const slugMessage = "ページのURLは英小文字・数字・ハイフンで入力してください（数字だけにはできません）。"
 
 var (
 	slugPattern = regexp.MustCompile(`^[a-z0-9-]{1,100}$`)
@@ -51,7 +51,7 @@ func toCategory(c dbgen.Category) categoryJSON {
 func checkName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len([]rune(name)) > 100 || !plainText(name, false) {
-		return "", invalid("invalid_name", "名前を100文字以内で入力してください")
+		return "", invalid("invalid_name", "名前を100文字以内で入力してください。")
 	}
 	return name, nil
 }
@@ -132,7 +132,7 @@ func (s *Server) patchCategory(w http.ResponseWriter, r *http.Request, sess *ses
 	}
 	if len(in.ParentID) > 0 {
 		if err := json.Unmarshal(in.ParentID, &p.ParentID); err != nil {
-			return invalid("invalid_parent", "親カテゴリの指定が正しくありません")
+			return invalid("invalid_parent", "親カテゴリの指定が正しくありません。")
 		}
 		p.SetParent = true
 	}
@@ -156,11 +156,11 @@ func (s *Server) patchCategory(w http.ResponseWriter, r *http.Request, sess *ses
 				return err
 			}
 			if len(chain) == 0 {
-				return invalid("invalid_parent", "親カテゴリが見つかりません")
+				return invalid("invalid_parent", "親カテゴリが見つかりません。")
 			}
 			for _, a := range chain {
 				if a == id {
-					return invalid("invalid_parent", "親カテゴリに、このカテゴリ自身やその下のカテゴリは選べません")
+					return invalid("invalid_parent", "親カテゴリに、このカテゴリ自身やその下のカテゴリは選べません。")
 				}
 			}
 		}

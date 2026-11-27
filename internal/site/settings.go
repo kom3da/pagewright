@@ -76,30 +76,30 @@ func (s Settings) Validate() error {
 			continue
 		}
 		if !hexColor.MatchString(c.value) {
-			return &FieldError{c.field, c.name + "は #1a73e8 のような6桁の色コードで指定してください"}
+			return &FieldError{c.field, c.name + "は #1a73e8 のような6桁の色コードで指定してください。"}
 		}
 		if r := Contrast(c.value, "#ffffff"); r < MinContrast {
 			// Round down so 4.46 never reads as an acceptable 4.5.
 			shown := math.Floor(r*10) / 10
-			return &FieldError{c.field, fmt.Sprintf("%sが明るすぎて、白い文字や背景との差が足りません（コントラスト比 %.1f:1、4.5:1 以上が必要です）。もっと濃い色を選んでください", c.name, shown)}
+			return &FieldError{c.field, fmt.Sprintf("%sが明るすぎて、白い文字や背景との差が足りません（コントラスト比 %.1f:1、4.5:1 以上が必要です）。もっと濃い色を選んでください。", c.name, shown)}
 		}
 	}
 	if s.Font != "" && s.Font != "gothic" && s.Font != "mincho" {
-		return &FieldError{"font", "文字の書体はゴシック体か明朝体から選んでください"}
+		return &FieldError{"font", "文字の書体はゴシック体か明朝体から選んでください。"}
 	}
 	if s.TimeZone != "" {
 		if _, err := time.LoadLocation(s.TimeZone); err != nil {
-			return &FieldError{"timeZone", "タイムゾーンが正しくありません"}
+			return &FieldError{"timeZone", "タイムゾーンが正しくありません。"}
 		}
 	}
 	if s.Theme != "" {
 		if _, ok := themes.Lookup(s.Theme); !ok {
-			return &FieldError{"theme", "そのテーマは入っていません"}
+			return &FieldError{"theme", "そのテーマは入っていません。"}
 		}
 	}
 	if s.ContactEmail != "" {
 		if a, err := mail.ParseAddress(s.ContactEmail); err != nil || a.Address != s.ContactEmail {
-			return &FieldError{"contactEmail", "お問い合わせの送り先メールアドレスの形式が正しくありません"}
+			return &FieldError{"contactEmail", "お問い合わせの送り先メールアドレスの形式が正しくありません。"}
 		}
 	}
 	return nil

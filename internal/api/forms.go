@@ -340,7 +340,7 @@ func toSubmissionJSON(f dbgen.FormSubmission, handledBy string) submissionJSON {
 
 func requireAdmin(sess *session) error {
 	if sess.role != "admin" {
-		return &apiError{http.StatusForbidden, "forbidden", "お問い合わせの内容を見られるのは管理者だけです"}
+		return &apiError{http.StatusForbidden, "forbidden", "お問い合わせの内容を見られるのは管理者だけです。"}
 	}
 	return nil
 }
@@ -353,7 +353,7 @@ func (s *Server) listSubmissions(w http.ResponseWriter, r *http.Request, sess *s
 	if v := r.URL.Query().Get("before"); v != "" {
 		id, err := strconv.ParseInt(v, 10, 64)
 		if err != nil || id <= 0 {
-			return invalid("invalid_before", "ページの指定が正しくありません")
+			return invalid("invalid_before", "ページの指定が正しくありません。")
 		}
 		before = &id
 	}
@@ -364,7 +364,7 @@ func (s *Server) listSubmissions(w http.ResponseWriter, r *http.Request, sess *s
 		b := v == "true"
 		handled = &b
 	default:
-		return invalid("invalid_handled", "対応の状態の指定が正しくありません")
+		return invalid("invalid_handled", "対応の状態の指定が正しくありません。")
 	}
 	out := []submissionJSON{}
 	err := s.DB.InTenant(r.Context(), func(q *dbgen.Queries) error {
@@ -419,7 +419,7 @@ func (s *Server) patchSubmission(w http.ResponseWriter, r *http.Request, sess *s
 		return err
 	}
 	if in.Handled == nil {
-		return invalid("invalid_handled", "対応の状態の指定が正しくありません")
+		return invalid("invalid_handled", "対応の状態の指定が正しくありません。")
 	}
 	var out submissionJSON
 	err = s.DB.InTenant(r.Context(), func(q *dbgen.Queries) error {

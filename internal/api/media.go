@@ -55,7 +55,7 @@ func toMedia(m dbgen.Medium) mediaJSON {
 func checkAlt(alt string) (string, error) {
 	alt = strings.TrimSpace(alt)
 	if alt == "" || len([]rune(alt)) > 500 {
-		return "", invalid("alt_required", "画像の説明（代替テキスト）を500文字以内で入力してください")
+		return "", invalid("alt_required", "画像の説明（代替テキスト）を500文字以内で入力してください。")
 	}
 	return alt, nil
 }
@@ -63,7 +63,7 @@ func checkAlt(alt string) (string, error) {
 func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request, sess *session) error {
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes+1<<20)
 	if err := r.ParseMultipartForm(1 << 20); err != nil {
-		return &apiError{http.StatusRequestEntityTooLarge, "too_large", "画像は10MBまでです"}
+		return &apiError{http.StatusRequestEntityTooLarge, "too_large", "画像は10MBまでです。"}
 	}
 	alt, err := checkAlt(r.FormValue("altText"))
 	if err != nil {
@@ -71,7 +71,7 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request, sess *sessi
 	}
 	f, hdr, err := r.FormFile("file")
 	if err != nil {
-		return invalid("file_required", "画像ファイルを選んでください")
+		return invalid("file_required", "画像ファイルを選んでください。")
 	}
 	defer func() { _ = f.Close() }()
 	data, err := io.ReadAll(io.LimitReader(f, maxUploadBytes+1))
@@ -79,16 +79,16 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request, sess *sessi
 		return fmt.Errorf("read upload: %w", err)
 	}
 	if len(data) > maxUploadBytes {
-		return &apiError{http.StatusRequestEntityTooLarge, "too_large", "画像は10MBまでです"}
+		return &apiError{http.StatusRequestEntityTooLarge, "too_large", "画像は10MBまでです。"}
 	}
 	ctype := http.DetectContentType(data)
 	ext, ok := imageExt[ctype]
 	if !ok {
-		return invalid("unsupported_type", "使える画像の形式は JPEG・PNG・GIF・WebP です")
+		return invalid("unsupported_type", "使える画像の形式は JPEG・PNG・GIF・WebP です。")
 	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return invalid("unsupported_type", "画像を読み取れませんでした。別のファイルでお試しください")
+		return invalid("unsupported_type", "画像を読み取れませんでした。別のファイルでお試しください。")
 	}
 
 	now := time.Now().UTC()
@@ -136,7 +136,7 @@ func (s *Server) checkMediaQuota(ctx context.Context, q *dbgen.Queries, size int
 	}
 	return &apiError{http.StatusUnprocessableEntity, "quota_exceeded", fmt.Sprintf(
 		"画像を保存できる容量（%s）がいっぱいのため、この画像を追加できません（今の使用量：%s）。"+
-			"使っていない古い画像を削除してから、もう一度お試しください。容量を増やしたいときは、サイトの管理者に相談してください",
+			"使っていない古い画像を削除してから、もう一度お試しください。容量を増やしたいときは、サイトの管理者に相談してください。",
 		formatMB(s.MediaQuotaBytes), formatMB(used))}
 }
 
@@ -222,7 +222,7 @@ func (s *Server) deleteMedia(w http.ResponseWriter, r *http.Request, sess *sessi
 			return err
 		}
 		if inUse {
-			return &apiError{Status: http.StatusConflict, Code: "media_in_use", Message: "この画像は記事やページで使われているため削除できません。先に本文から外してください"}
+			return &apiError{Status: http.StatusConflict, Code: "media_in_use", Message: "この画像は記事やページで使われているため削除できません。先に本文から外してください。"}
 		}
 		key, err = q.DeleteMedia(ctx, id)
 		return err

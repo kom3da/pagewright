@@ -43,10 +43,10 @@ func (e *Error) Error() string { return e.Path + ": " + e.Message }
 func Parse(raw []byte) (Node, error) {
 	var doc Node
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		return Node{}, &Error{Path: "", Message: "本文の形式が正しくありません"}
+		return Node{}, &Error{Path: "", Message: "本文の形式が正しくありません。"}
 	}
 	if doc.Type != "doc" {
-		return Node{}, &Error{Path: "", Message: "本文の形式が正しくありません"}
+		return Node{}, &Error{Path: "", Message: "本文の形式が正しくありません。"}
 	}
 	if err := checkChildren(doc, "", blockKind); err != nil {
 		return Node{}, err
@@ -113,7 +113,7 @@ func checkChildren(n Node, path string, k kind) error {
 	for i, c := range n.Content {
 		p := fmt.Sprintf("%scontent[%d]", prefix(path), i)
 		if !kinds[k][c.Type] {
-			return &Error{Path: p, Message: fmt.Sprintf("「%s」はここには置けません", c.Type)}
+			return &Error{Path: p, Message: fmt.Sprintf("「%s」はここには置けません。", c.Type)}
 		}
 		if err := checkNode(c, p); err != nil {
 			return err
@@ -132,12 +132,12 @@ func prefix(path string) string {
 func checkNode(n Node, path string) error {
 	fail := func(msg string) error { return &Error{Path: path, Message: msg} }
 	if n.Type != "text" && (n.Text != nil || len(n.Marks) > 0) {
-		return fail("文字の装飾は文字にだけ付けられます")
+		return fail("文字の装飾は文字にだけ付けられます。")
 	}
 	switch n.Type {
 	case "text":
 		if n.Text == nil || *n.Text == "" {
-			return fail("空の文字は保存できません")
+			return fail("空の文字は保存できません。")
 		}
 		for _, m := range n.Marks {
 			if err := checkMark(m); err != nil {
@@ -147,46 +147,46 @@ func checkNode(n Node, path string) error {
 		return nil
 	case "heading":
 		if l, ok := number(n.Attrs["level"]); !ok || l < 2 || l > 4 {
-			return fail("見出しは大・中・小（h2〜h4）から選んでください")
+			return fail("見出しは大・中・小（h2〜h4）から選んでください。")
 		}
 	case "orderedList":
 		if v, present := n.Attrs["start"]; present && v != nil {
 			if s, ok := number(v); !ok || s < 1 {
-				return fail("番号付きリストの開始番号が正しくありません")
+				return fail("番号付きリストの開始番号が正しくありません。")
 			}
 		}
 	case "image":
 		src, _ := n.Attrs["src"].(string)
 		alt, _ := n.Attrs["alt"].(string)
 		if src == "" {
-			return fail("画像が選ばれていません")
+			return fail("画像が選ばれていません。")
 		}
 		if strings.TrimSpace(alt) == "" {
-			return fail("画像の代替テキスト（画像の説明）を入力してください")
+			return fail("画像の代替テキスト（画像の説明）を入力してください。")
 		}
 		if v, present := n.Attrs["mediaId"]; present && v != nil {
 			if _, ok := number(v); !ok {
-				return fail("画像の指定が正しくありません")
+				return fail("画像の指定が正しくありません。")
 			}
 		}
 	case "embed":
 		p, _ := n.Attrs["provider"].(string)
 		u, _ := n.Attrs["url"].(string)
 		if p != "youtube" && p != "googlemap" {
-			return fail("埋め込めるのはYouTubeとGoogleマップだけです")
+			return fail("埋め込めるのはYouTubeとGoogleマップだけです。")
 		}
 		if !httpsURL(u) {
-			return fail("埋め込みのURLが正しくありません")
+			return fail("埋め込みのURLが正しくありません。")
 		}
 	case "rawHtml":
 		if _, ok := n.Attrs["html"].(string); !ok {
-			return fail("HTMLブロックの中身がありません")
+			return fail("カスタムHTMLの中身がありません。")
 		}
 	case "tableHeader", "tableCell":
 		for _, a := range []string{"colspan", "rowspan"} {
 			if v, present := n.Attrs[a]; present && v != nil {
 				if s, ok := number(v); !ok || s < 1 {
-					return fail("表のセルの結合が正しくありません")
+					return fail("表のセルの結合が正しくありません。")
 				}
 			}
 		}
@@ -194,7 +194,7 @@ func checkNode(n Node, path string) error {
 	k, hasChildren := children[n.Type]
 	if !hasChildren {
 		if len(n.Content) > 0 {
-			return fail(fmt.Sprintf("「%s」の中には何も入れられません", n.Type))
+			return fail(fmt.Sprintf("「%s」の中には何も入れられません。", n.Type))
 		}
 		return nil
 	}
@@ -208,19 +208,19 @@ func checkMark(m Mark) error {
 	case "link":
 		href, _ := m.Attrs["href"].(string)
 		if !safeHref(href) {
-			return errors.New("リンク先のURLが正しくありません")
+			return errors.New("リンク先のURLが正しくありません。")
 		}
 		if t, present := m.Attrs["target"]; present && t != nil && t != "_blank" {
-			return errors.New("リンクの開き方が正しくありません")
+			return errors.New("リンクの開き方が正しくありません。")
 		}
 		return nil
 	case "ruby":
 		if rt, _ := m.Attrs["rt"].(string); strings.TrimSpace(rt) == "" {
-			return errors.New("ルビ（ふりがな）を入力してください")
+			return errors.New("ルビ（ふりがな）を入力してください。")
 		}
 		return nil
 	}
-	return fmt.Errorf("「%s」という装飾は使えません", m.Type)
+	return fmt.Errorf("「%s」という装飾は使えません。", m.Type)
 }
 
 func number(v any) (float64, bool) {

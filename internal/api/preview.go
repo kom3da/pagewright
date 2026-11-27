@@ -48,7 +48,7 @@ func (s *Server) createPreviewLink(w http.ResponseWriter, r *http.Request, sess 
 		days = *in.Days
 	}
 	if days < 1 || days > maxPreviewDays {
-		return invalid("invalid_days", fmt.Sprintf("有効期間は1日から%d日のあいだで指定してください", maxPreviewDays))
+		return invalid("invalid_days", fmt.Sprintf("有効期間は1日から%d日のあいだで指定してください。", maxPreviewDays))
 	}
 	token := newToken()
 	expires := time.Now().Add(time.Duration(days) * 24 * time.Hour).UTC().Truncate(time.Second)
@@ -185,7 +185,7 @@ func (s *Server) adminPreviewURL(id int64) string {
 }
 
 func (s *Server) adminPreviewPage(w http.ResponseWriter, r *http.Request, tenantID uuid.UUID, id int64) {
-	s.renderPreview(w, r, tenantID, id, s.adminPreviewURL(id), "これはプレビューです。公開サイトにはまだ出ていません（管理画面にログインしている人だけが見られます）")
+	s.renderPreview(w, r, tenantID, id, s.adminPreviewURL(id), "これはプレビューです。公開サイトにはまだ出ていません（管理画面にログインしている人だけが見られます）。")
 }
 
 func (s *Server) adminPreviewAsset(w http.ResponseWriter, r *http.Request, tenantID uuid.UUID, _ int64) {
@@ -208,7 +208,7 @@ func (s *Server) previewPage(w http.ResponseWriter, r *http.Request) {
 	}
 	jst := time.FixedZone("JST", 9*60*60)
 	s.renderPreview(w, r, link.TenantID, link.ContentID, s.previewURL(r.PathValue("token")),
-		"これはプレビューです。公開サイトにはまだ出ていません（このリンクは"+link.ExpiresAt.In(jst).Format("2006年1月2日 15:04")+"まで有効）")
+		"これはプレビューです。公開サイトにはまだ出ていません（このリンクは"+link.ExpiresAt.In(jst).Format("2006年1月2日 15:04")+"まで有効）。")
 }
 
 func (s *Server) renderPreview(w http.ResponseWriter, r *http.Request, tenantID uuid.UUID, contentID int64, selfURL, notice string) {

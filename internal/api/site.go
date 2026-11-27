@@ -121,7 +121,7 @@ func (s *Server) getSite(w http.ResponseWriter, r *http.Request, _ *session) err
 
 func (s *Server) putSite(w http.ResponseWriter, r *http.Request, sess *session) error {
 	if sess.role != "admin" {
-		return &apiError{http.StatusForbidden, "forbidden", "サイトの設定を変えられるのは管理者だけです"}
+		return &apiError{http.StatusForbidden, "forbidden", "サイトの設定を変えられるのは管理者だけです。"}
 	}
 	var in siteSettingsInput
 	if err := decode(w, r, &in); err != nil {
@@ -129,27 +129,27 @@ func (s *Server) putSite(w http.ResponseWriter, r *http.Request, sess *session) 
 	}
 	name := strings.TrimSpace(in.Name)
 	if name == "" || len([]rune(name)) > 100 || !plainText(name, false) {
-		return invalid("invalid_name", "サイトの名前を100文字以内で入力してください")
+		return invalid("invalid_name", "サイトの名前を100文字以内で入力してください。")
 	}
 	if err := in.Validate(); err != nil {
 		return err
 	}
 	if len(in.Menu) > maxMenuItems {
-		return invalid("invalid_menu", fmt.Sprintf("メニューは%d項目までです", maxMenuItems))
+		return invalid("invalid_menu", fmt.Sprintf("メニューは%d項目までです。", maxMenuItems))
 	}
 	for i, it := range in.Menu {
 		if (it.ContentID == nil) == (it.URL == nil) {
-			return invalid("invalid_menu", fmt.Sprintf("メニューの%d番目は、ページかURLのどちらか一方を指定してください", i+1))
+			return invalid("invalid_menu", fmt.Sprintf("メニューの%d番目は、ページかURLのどちらか一方を指定してください。", i+1))
 		}
 		if it.Label != nil {
 			l := strings.TrimSpace(*it.Label)
 			if l == "" || len([]rune(l)) > 50 || !plainText(l, false) {
-				return invalid("invalid_menu", fmt.Sprintf("メニューの%d番目の表示名を50文字以内で入力してください", i+1))
+				return invalid("invalid_menu", fmt.Sprintf("メニューの%d番目の表示名を50文字以内で入力してください。", i+1))
 			}
 			in.Menu[i].Label = &l
 		}
 		if it.URL != nil && (!menuURL.MatchString(*it.URL) || it.Label == nil) {
-			return invalid("invalid_menu", fmt.Sprintf("メニューの%d番目のURLは / か https:// で始め、表示名も入れてください", i+1))
+			return invalid("invalid_menu", fmt.Sprintf("メニューの%d番目のURLは / か https:// で始め、表示名も入れてください。", i+1))
 		}
 	}
 
@@ -171,14 +171,14 @@ func (s *Server) putSite(w http.ResponseWriter, r *http.Request, sess *session) 
 			}
 			c, err := q.GetContent(ctx, ref.id)
 			if errors.Is(err, pgx.ErrNoRows) || (err == nil && c.Type != "page") {
-				return invalid(ref.code, ref.what+"には固定ページを選んでください")
+				return invalid(ref.code, ref.what+"には固定ページを選んでください。")
 			} else if err != nil {
 				return err
 			}
 		}
 		if in.LogoMediaID != nil {
 			if _, err := q.GetMedia(ctx, *in.LogoMediaID); errors.Is(err, pgx.ErrNoRows) {
-				return invalid("invalid_logo", "ロゴの画像が見つかりません")
+				return invalid("invalid_logo", "ロゴの画像が見つかりません。")
 			} else if err != nil {
 				return err
 			}
@@ -196,7 +196,7 @@ func (s *Server) putSite(w http.ResponseWriter, r *http.Request, sess *session) 
 		for i, it := range in.Menu {
 			if it.ContentID != nil {
 				if _, err := q.GetContent(ctx, *it.ContentID); errors.Is(err, pgx.ErrNoRows) {
-					return invalid("invalid_menu", fmt.Sprintf("メニューの%d番目のページが見つかりません", i+1))
+					return invalid("invalid_menu", fmt.Sprintf("メニューの%d番目のページが見つかりません。", i+1))
 				} else if err != nil {
 					return err
 				}
@@ -234,7 +234,7 @@ func (s *Server) listBuilds(w http.ResponseWriter, r *http.Request, _ *session) 
 	if v := r.URL.Query().Get("limit"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 32)
 		if err != nil || n < 1 || n > 50 {
-			return invalid("invalid_limit", "件数は1から50で指定してください")
+			return invalid("invalid_limit", "件数は1から50で指定してください。")
 		}
 		limit = int32(n)
 	}
@@ -263,7 +263,7 @@ func checkThemeSettings(ctx context.Context, q *dbgen.Queries, s *site.Settings)
 	for name, values := range s.ThemeSettings {
 		info, err := build.ThemeByName(name)
 		if err != nil {
-			return &site.FieldError{Field: "themeSettings", Message: "入っていないテーマの設定です"}
+			return &site.FieldError{Field: "themeSettings", Message: "入っていないテーマの設定です。"}
 		}
 		clean, err := info.CheckSettings(values)
 		var se *build.SettingError
@@ -280,7 +280,7 @@ func checkThemeSettings(ctx context.Context, q *dbgen.Queries, s *site.Settings)
 			}
 			c, err := q.GetContent(ctx, id)
 			if errors.Is(err, pgx.ErrNoRows) || (err == nil && c.Type != "page") {
-				return &site.FieldError{Field: "themeSettings." + key, Message: "固定ページを選んでください"}
+				return &site.FieldError{Field: "themeSettings." + key, Message: "固定ページを選んでください。"}
 			} else if err != nil {
 				return err
 			}

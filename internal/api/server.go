@@ -207,13 +207,13 @@ func (s *Server) authed(h handler) http.Handler {
 func (s *Server) site(h handler) http.Handler {
 	return s.authed(func(w http.ResponseWriter, r *http.Request, sess *session) error {
 		if sess.tenantID == uuid.Nil {
-			return &apiError{http.StatusForbidden, "no_site", "サイトを選んでください"}
+			return &apiError{http.StatusForbidden, "no_site", "サイトを選んでください。"}
 		}
 		// Ids are per site, so a tab still showing another site (the
 		// session switched in another tab) must not act on this site's
 		// item with the same id. The admin sends the site it shows.
 		if want := r.Header.Get(siteHeader); want != "" && want != sess.tenantID.String() {
-			return &apiError{http.StatusConflict, "site_changed", "別の画面で管理するサイトが切り替えられました。画面を読み込み直してから、もう一度お試しください"}
+			return &apiError{http.StatusConflict, "site_changed", "別の画面で管理するサイトが切り替えられました。画面を読み込み直してから、もう一度お試しください。"}
 		}
 		return h(w, r.WithContext(db.WithTenant(r.Context(), sess.tenantID)), sess)
 	})
@@ -246,7 +246,7 @@ func (s *Server) sessionByHash(ctx context.Context, h []byte) (*session, error) 
 func csrf(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Header.Get("X-Pagewright") != "1" {
-			writeJSON(w, http.StatusForbidden, errorBody("csrf", "画面を再読み込みしてから、もう一度お試しください", ""))
+			writeJSON(w, http.StatusForbidden, errorBody("csrf", "画面を再読み込みしてから、もう一度お試しください。", ""))
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -261,7 +261,7 @@ func (s *Server) recoverer(next http.Handler) http.Handler {
 					panic(v)
 				}
 				s.Logger.Error("panic in handler", "method", r.Method, "path", r.URL.Path, "panic", v)
-				writeJSON(w, http.StatusInternalServerError, errorBody("internal", "サーバーでエラーが起きました", ""))
+				writeJSON(w, http.StatusInternalServerError, errorBody("internal", "サーバーでエラーが起きました。", ""))
 			}
 		}()
 		w.Header().Set("Cache-Control", "no-store")
@@ -279,10 +279,10 @@ type apiError struct {
 func (e *apiError) Error() string { return e.Code + ": " + e.Message }
 
 var (
-	errUnauthenticated = &apiError{http.StatusUnauthorized, "unauthenticated", "ログインしてください"}
-	errNotFound        = &apiError{http.StatusNotFound, "not_found", "見つかりません"}
-	errURLTaken        = &apiError{http.StatusConflict, "conflict", "このURLはすでに使われています。別のURLにしてください"}
-	errConflict        = &apiError{http.StatusConflict, "conflict", "同じ内容のものがすでにあるため、保存できませんでした。画面を読み込み直して確かめてください"}
+	errUnauthenticated = &apiError{http.StatusUnauthorized, "unauthenticated", "ログインしてください。"}
+	errNotFound        = &apiError{http.StatusNotFound, "not_found", "見つかりません。"}
+	errURLTaken        = &apiError{http.StatusConflict, "conflict", "このURLはすでに使われています。別のURLにしてください。"}
+	errConflict        = &apiError{http.StatusConflict, "conflict", "同じ内容のものがすでにあるため、保存できませんでした。画面を読み込み直して確かめてください。"}
 )
 
 // uniqueErrors maps a unique constraint (or unique index) to the error it
@@ -295,9 +295,9 @@ var uniqueErrors = map[string]struct {
 	"contents_slug_key":         {errURLTaken, "slug"},
 	"routes_tenant_id_path_key": {errURLTaken, "slug"},
 	"categories_tenant_id_slug_key": {&apiError{http.StatusConflict, "conflict",
-		"このURL（英数字）は、ほかのカテゴリーですでに使われています。別のURLにしてください"}, "slug"},
+		"このURL（英数字）は、ほかのカテゴリですでに使われています。別のURLにしてください。"}, "slug"},
 	"tags_tenant_id_slug_key": {&apiError{http.StatusConflict, "conflict",
-		"このURL（英数字）は、ほかのタグですでに使われています。別のURLにしてください"}, "slug"},
+		"このURL（英数字）は、ほかのタグですでに使われています。別のURLにしてください。"}, "slug"},
 }
 
 func invalid(code, msg string) *apiError {
@@ -319,9 +319,9 @@ func (s *Server) finish(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, routing.ErrURLTaken):
 		ae, field = errURLTaken, "slug"
 	case errors.Is(err, routing.ErrReservedPath):
-		ae = invalid("reserved_slug", "「posts」「media」「search」「pagefind」はサイトの仕組みで使っているため、いちばん上の固定ページのURLには使えません")
+		ae = invalid("reserved_slug", "「posts」「media」「search」「pagefind」はサイトの仕組みで使っているため、いちばん上の固定ページのURLには使えません。")
 	case errors.Is(err, content.ErrParentLoop):
-		ae = invalid("invalid_parent", "親ページに、このページ自身やその下のページは選べません")
+		ae = invalid("invalid_parent", "親ページに、このページ自身やその下のページは選べません。")
 	case errors.As(err, &be):
 		ae = invalid("invalid_body", be.Message)
 	case errors.As(err, &se):
@@ -336,12 +336,12 @@ func (s *Server) finish(w http.ResponseWriter, r *http.Request, err error) {
 			s.Logger.Warn("unexpected unique violation", "method", r.Method, "path", r.URL.Path, "constraint", pe.ConstraintName)
 		}
 	case errors.As(err, &pe) && pe.Code == "23503":
-		ae = invalid("invalid_reference", "指定したものが見つかりません")
+		ae = invalid("invalid_reference", "指定したものが見つかりません。")
 	case errors.As(err, &pe) && pe.Code == "23514":
-		ae = invalid("invalid_value", "入力された値が正しくありません")
+		ae = invalid("invalid_value", "入力された値が正しくありません。")
 	default:
 		s.Logger.Error("api error", "method", r.Method, "path", r.URL.Path, "err", err)
-		ae = &apiError{http.StatusInternalServerError, "internal", "サーバーでエラーが起きました。時間をおいてもう一度お試しください"}
+		ae = &apiError{http.StatusInternalServerError, "internal", "サーバーでエラーが起きました。時間をおいてもう一度お試しください。"}
 	}
 	if field == "" {
 		field = errorFields[ae.Code]
@@ -395,10 +395,10 @@ func decode(w http.ResponseWriter, r *http.Request, v any) error {
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBytes))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
-		return invalid("invalid_json", "送信された内容を読み取れませんでした")
+		return invalid("invalid_json", "送信された内容を読み取れませんでした。")
 	}
 	if _, err := dec.Token(); err != io.EOF {
-		return invalid("invalid_json", "送信された内容を読み取れませんでした")
+		return invalid("invalid_json", "送信された内容を読み取れませんでした。")
 	}
 	return nil
 }
@@ -407,7 +407,7 @@ func decode(w http.ResponseWriter, r *http.Request, v any) error {
 func decodeOptional(w http.ResponseWriter, r *http.Request, v any) error {
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxJSONBytes))
 	if err != nil {
-		return invalid("invalid_json", "送信された内容を読み取れませんでした")
+		return invalid("invalid_json", "送信された内容を読み取れませんでした。")
 	}
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return nil
@@ -415,17 +415,17 @@ func decodeOptional(w http.ResponseWriter, r *http.Request, v any) error {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
-		return invalid("invalid_json", "送信された内容を読み取れませんでした")
+		return invalid("invalid_json", "送信された内容を読み取れませんでした。")
 	}
 	if _, err := dec.Token(); err != io.EOF {
-		return invalid("invalid_json", "送信された内容を読み取れませんでした")
+		return invalid("invalid_json", "送信された内容を読み取れませんでした。")
 	}
 	return nil
 }
 
 // errEditConflict answers a change based on a revision that is no longer
 // the latest.
-var errEditConflict = &apiError{http.StatusConflict, "edit_conflict", "ほかの人がこの内容を先に保存しました"}
+var errEditConflict = &apiError{http.StatusConflict, "edit_conflict", "ほかの人がこの内容を先に保存しました。"}
 
 func pathID(r *http.Request) (int64, error) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)

@@ -83,7 +83,7 @@ var likeEscaper = strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`)
 
 func contentType(t string) error {
 	if t != "post" && t != "page" {
-		return invalid("invalid_type", "種類は記事か固定ページを選んでください")
+		return invalid("invalid_type", "種類は記事か固定ページを選んでください。")
 	}
 	return nil
 }
@@ -101,27 +101,27 @@ func (s *Server) listContents(w http.ResponseWriter, r *http.Request, _ *session
 	if v := query.Get("before"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)
 		if err != nil || n <= 0 {
-			return invalid("invalid_before", "ページの指定が正しくありません")
+			return invalid("invalid_before", "ページの指定が正しくありません。")
 		}
 		params.Before = &n
 	}
 	if v := query.Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > maxListRows {
-			return invalid("invalid_limit", fmt.Sprintf("件数は1から%dのあいだで指定してください", maxListRows))
+			return invalid("invalid_limit", fmt.Sprintf("件数は1から%dのあいだで指定してください。", maxListRows))
 		}
 		params.MaxRows = int32(n)
 	}
 	if q := strings.TrimSpace(query.Get("q")); q != "" {
 		if len([]rune(q)) > 100 || !plainText(q, false) {
-			return invalid("invalid_q", "検索する言葉は100文字以内で入力してください")
+			return invalid("invalid_q", "検索する言葉は100文字以内で入力してください。")
 		}
 		pattern := "%" + likeEscaper.Replace(q) + "%"
 		params.Q = &pattern
 	}
 	if st := query.Get("status"); st != "" {
 		if st != "draft" && st != "scheduled" && st != "published" && st != "changed" {
-			return invalid("invalid_status", "状態の指定が正しくありません")
+			return invalid("invalid_status", "状態の指定が正しくありません。")
 		}
 		params.Status = &st
 	}
@@ -129,7 +129,7 @@ func (s *Server) listContents(w http.ResponseWriter, r *http.Request, _ *session
 	// takes no filters or paging.
 	sort := query.Get("sort")
 	if sort != "" && sort != "updated" || sort == "updated" && (params.Q != nil || params.Status != nil || params.Before != nil) {
-		return invalid("invalid_sort", "並べ替えの指定が正しくありません")
+		return invalid("invalid_sort", "並べ替えの指定が正しくありません。")
 	}
 	out := []contentSummary{}
 	err := s.DB.InTenant(r.Context(), func(q *dbgen.Queries) error {
@@ -316,7 +316,7 @@ func (s *Server) saveDraft(w http.ResponseWriter, r *http.Request, sess *session
 	}
 	title := strings.TrimSpace(in.Title)
 	if len([]rune(title)) > 200 {
-		return invalid("invalid_title", "タイトルは200文字以内で入力してください")
+		return invalid("invalid_title", "タイトルは200文字以内で入力してください。")
 	}
 	doc, err := body.Parse(in.Body)
 	if err != nil {
@@ -325,7 +325,7 @@ func (s *Server) saveDraft(w http.ResponseWriter, r *http.Request, sess *session
 	if len(in.Fields) > 0 {
 		var f map[string]any
 		if err := json.Unmarshal(in.Fields, &f); err != nil || f == nil {
-			return invalid("invalid_fields", "追加項目の形式が正しくありません")
+			return invalid("invalid_fields", "追加項目の形式が正しくありません。")
 		}
 	}
 
@@ -348,7 +348,7 @@ func (s *Server) saveDraft(w http.ResponseWriter, r *http.Request, sess *session
 				prevDoc = body.Node{}
 			}
 			if !rawHTMLUnchanged(body.RawHTML(prevDoc), body.RawHTML(doc)) {
-				return &apiError{http.StatusForbidden, "forbidden", "HTMLブロックを追加・変更できるのは管理者だけです"}
+				return &apiError{http.StatusForbidden, "forbidden", "カスタムHTMLを追加・変更できるのは管理者だけです。"}
 			}
 		}
 		fields := in.Fields
@@ -427,14 +427,14 @@ func (s *Server) patchContent(w http.ResponseWriter, r *http.Request, _ *session
 	}
 	if len(in.ParentID) > 0 {
 		if err := json.Unmarshal(in.ParentID, &set.ParentID); err != nil {
-			return invalid("invalid_parent", "親ページの指定が正しくありません")
+			return invalid("invalid_parent", "親ページの指定が正しくありません。")
 		}
 		set.ParentSet = true
 	}
 	if in.PublishedAt != nil {
 		at := in.PublishedAt.UTC().Truncate(time.Second)
 		if at.Year() < 1900 || at.After(time.Now().Add(time.Minute)) {
-			return invalid("invalid_published_at", "公開日は今より前の日時にしてください。先の日時に公開するときは「日時を指定して公開」を使ってください")
+			return invalid("invalid_published_at", "公開日は今より前の日時にしてください。先の日時に変更を公開するときは「変更の公開を予約する」を使ってください。")
 		}
 		set.PublishedAt = &at
 	}
@@ -510,7 +510,7 @@ func checkSettings(ctx context.Context, q *dbgen.Queries, c dbgen.Content, set c
 			return err
 		}
 	}
-	missing := invalid("invalid_reference", "指定したものが見つかりません")
+	missing := invalid("invalid_reference", "指定したものが見つかりません。")
 	if set.CategoryIDs != nil {
 		ids, err := q.ListCategoryIDsIn(ctx, *set.CategoryIDs)
 		if err != nil {
@@ -537,17 +537,17 @@ func checkParent(ctx context.Context, q *dbgen.Queries, c dbgen.Content, parent 
 		return nil
 	}
 	if c.Type != "page" {
-		return invalid("invalid_parent", "親ページを選べるのは固定ページだけです")
+		return invalid("invalid_parent", "親ページを選べるのは固定ページだけです。")
 	}
 	p, err := q.GetContent(ctx, *parent)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return invalid("invalid_parent", "親ページが見つかりません")
+		return invalid("invalid_parent", "親ページが見つかりません。")
 	}
 	if err != nil {
 		return err
 	}
 	if p.Type != "page" {
-		return invalid("invalid_parent", "親には固定ページを選んでください")
+		return invalid("invalid_parent", "親には固定ページを選んでください。")
 	}
 	chain, err := q.ContentAncestry(ctx, *parent)
 	if err != nil {
@@ -555,7 +555,7 @@ func checkParent(ctx context.Context, q *dbgen.Queries, c dbgen.Content, parent 
 	}
 	for _, a := range chain {
 		if a.ID == c.ID {
-			return invalid("invalid_parent", "親ページに、このページ自身やその下のページは選べません")
+			return invalid("invalid_parent", "親ページに、このページ自身やその下のページは選べません。")
 		}
 	}
 	return nil
@@ -658,7 +658,7 @@ func (s *Server) deleteContent(w http.ResponseWriter, r *http.Request, sess *ses
 			return err
 		}
 		if len(children) > 0 {
-			return invalid("has_children", "下に固定ページがあるため削除できません。先に下のページを別の場所へ移すか、削除してください")
+			return invalid("has_children", "下に固定ページがあるため削除できません。先に下のページを別の場所へ移すか、削除してください。")
 		}
 		n, err := q.DeleteContent(ctx, id)
 		if err != nil {
@@ -706,7 +706,7 @@ func (s *Server) schedule(w http.ResponseWriter, r *http.Request, sess *session)
 		return err
 	}
 	if in.PublishAt.Before(time.Now().Add(minScheduleLead)) {
-		return invalid("invalid_publish_at", "公開する日時は、今から1分以上あとにしてください")
+		return invalid("invalid_publish_at", "公開する日時は、今から1分以上あとにしてください。")
 	}
 	at := in.PublishAt.UTC().Truncate(time.Second)
 	ctx := r.Context()

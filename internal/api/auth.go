@@ -45,11 +45,11 @@ func (s *Server) loginLink(w http.ResponseWriter, r *http.Request, _ *session) e
 	}
 	email := strings.TrimSpace(in.Email)
 	if a, err := mail.ParseAddress(email); err != nil || a.Address != email || len(email) > 254 {
-		return invalid("invalid_email", "メールアドレスの形式が正しくありません")
+		return invalid("invalid_email", "メールアドレスの形式が正しくありません。")
 	}
 
 	if !s.allowByIP(s.loginByIP, r) {
-		return &apiError{http.StatusTooManyRequests, "too_many_requests", "ログイン用のリンクの送信が続いています。しばらく待ってからお試しください"}
+		return &apiError{http.StatusTooManyRequests, "too_many_requests", "ログイン用のリンクの送信が続いています。しばらく待ってからお試しください。"}
 	}
 	// Past the per-address limit, answer as usual but send nothing: the
 	// limit must not reveal registration, nor let others lock someone out
@@ -126,7 +126,7 @@ func (s *Server) verify(w http.ResponseWriter, r *http.Request, _ *session) erro
 		return fmt.Errorf("login: %w", err)
 	}
 	if user == uuid.Nil {
-		return &apiError{http.StatusBadRequest, "invalid_token", "ログイン用のリンクが無効か、有効期限が切れています。もう一度ログイン用のリンクを送ってください"}
+		return &apiError{http.StatusBadRequest, "invalid_token", "ログイン用のリンクが無効か、有効期限が切れています。もう一度ログイン用のリンクを送ってください。"}
 	}
 	http.SetCookie(w, s.cookie(sessionToken, int(sessionTTL.Seconds())))
 	sess, err := s.sessionByHash(r.Context(), hashToken(sessionToken))
@@ -159,14 +159,14 @@ func (s *Server) selectSite(w http.ResponseWriter, r *http.Request, sess *sessio
 	}
 	id, err := uuid.Parse(in.SiteID)
 	if err != nil {
-		return &apiError{http.StatusForbidden, "forbidden", "このサイトは選べません"}
+		return &apiError{http.StatusForbidden, "forbidden", "このサイトは選べません。"}
 	}
 	ok, err := s.DB.Queries().AuthSelectSite(r.Context(), dbgen.AuthSelectSiteParams{TokenHash: sess.tokenHash, TenantID: id})
 	if err != nil {
 		return fmt.Errorf("select site: %w", err)
 	}
 	if !ok {
-		return &apiError{http.StatusForbidden, "forbidden", "このサイトは選べません"}
+		return &apiError{http.StatusForbidden, "forbidden", "このサイトは選べません。"}
 	}
 	sess.tenantID = id
 	return s.writeMe(w, r, sess)

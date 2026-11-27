@@ -1087,7 +1087,7 @@ func TestTaxonomySlugConflict(t *testing.T) {
 		in                 map[string]any
 		word               string
 	}{
-		{"new category", http.MethodPost, "/api/categories", map[string]any{"name": "別", "slug": "news"}, "カテゴリー"},
+		{"new category", http.MethodPost, "/api/categories", map[string]any{"name": "別", "slug": "news"}, "カテゴリで"},
 		{"new tag", http.MethodPost, "/api/tags", map[string]any{"name": "別", "slug": "event"}, "タグ"},
 		{"renamed tag", http.MethodPatch, fmt.Sprintf("/api/tags/%d", other.ID), map[string]any{"slug": "event"}, "タグ"},
 	}
