@@ -111,12 +111,12 @@ func (s SMTP) Send(ctx context.Context, m Message) error {
 	return c.Quit()
 }
 
-// Build renders the message as RFC 5322 bytes: UTF-8 headers and a base64
-// body, so long Japanese lines stay within SMTP's line limit.
+// Build renders the message as RFC 5322 bytes: RFC 2047-encoded headers and
+// a base64 body, so long Japanese lines stay within SMTP's line limit.
 func Build(from string, m Message, now time.Time) []byte {
 	var b bytes.Buffer
-	fmt.Fprintf(&b, "From: %s\r\n", from)
-	fmt.Fprintf(&b, "To: %s\r\n", m.To)
+	fmt.Fprintf(&b, "From: %s\r\n", addressHeader(from))
+	fmt.Fprintf(&b, "To: %s\r\n", addressHeader(m.To))
 	fmt.Fprintf(&b, "Subject: %s\r\n", mime.BEncoding.Encode("UTF-8", m.Subject))
 	fmt.Fprintf(&b, "Date: %s\r\n", now.Format(time.RFC1123Z))
 	b.WriteString("MIME-Version: 1.0\r\n")
@@ -129,4 +129,15 @@ func Build(from string, m Message, now time.Time) []byte {
 	}
 	b.WriteString(enc + "\r\n")
 	return b.Bytes()
+}
+
+// addressHeader formats an address for a header, encoding a non-ASCII
+// display name (e.g. "ウェブサイト管理 <no-reply@example.jp>") per RFC 2047.
+func addressHeader(s string) string {
+	a, err := mail.ParseAddress(s)
+	if err != nil {
+		// Send parses both addresses first; never let CR/LF into a header.
+		return strings.NewReplacer("\r", "", "\n", "").Replace(s)
+	}
+	return a.String()
 }

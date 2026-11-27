@@ -7,10 +7,40 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
+	"net/mail"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
 )
+
+func TestBuildEncodesAddresses(t *testing.T) {
+	raw := Build("ウェブサイト管理 <no-reply@example.jp>", Message{To: "山田 太郎 <taro@example.jp>", Subject: "件名", Body: "本文"}, time.Unix(0, 0))
+	msg, err := mail.ReadMessage(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ key, name, addr string }{
+		{"From", "ウェブサイト管理", "no-reply@example.jp"},
+		{"To", "山田 太郎", "taro@example.jp"},
+	} {
+		v := msg.Header.Get(tc.key)
+		for _, r := range v {
+			if r > 0x7e {
+				t.Errorf("%s header is not ASCII: %q", tc.key, v)
+				break
+			}
+		}
+		got, err := mail.ParseAddress(v)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.key, err)
+		}
+		if diff := cmp.Diff(&mail.Address{Name: tc.name, Address: tc.addr}, got); diff != "" {
+			t.Errorf("%s (-want +got):\n%s", tc.key, diff)
+		}
+	}
+}
 
 func TestBuildKeepsLinesShort(t *testing.T) {
 	body := strings.Repeat("長い日本語の行", 1000)
