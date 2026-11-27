@@ -9,7 +9,7 @@
 # リダイレクトなしで起動する（ファイル自体は /data に残るので調べられる）。
 set -eu
 
-files="/data/site/*/_redirects*.nginx"
+files="/data/site/*/_redirects.nginx"
 confd=/etc/nginx/conf.d
 # conf.d のもとの設定（リダイレクトの include つき）
 full=/tmp/pagewright-conf.d
@@ -29,7 +29,7 @@ restore() {
 
 disable_redirects() {
   for f in "$full"/*.conf; do
-    sed 's|^\([[:space:]]*include /data/site/.*/_redirects\*\.nginx;\)|# disabled by pagewright: \1|' "$f" >"$confd/${f##*/}"
+    sed 's|^\([[:space:]]*include /data/site/.*/_redirects[^;]*;\)|# disabled by pagewright: \1|' "$f" >"$confd/${f##*/}"
   done
 }
 

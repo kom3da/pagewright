@@ -54,7 +54,7 @@
        gzip on;
        gzip_types text/css application/javascript application/json application/xml application/rss+xml application/atom+xml image/svg+xml text/plain;
 
-       include /data/site/<2つ目のサイトのID>/_redirects*.nginx;
+       include /data/site/<2つ目のサイトのID>/_redirects.ngin[x];
 
        location ^~ /_redirects { return 404; }
        location ~ /\. { return 404; }

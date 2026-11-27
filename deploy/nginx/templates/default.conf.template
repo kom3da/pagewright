@@ -59,8 +59,9 @@ server {
 
     # 旧URLからのリダイレクト。サイトを書き出すたびに作り直され、
     # 90-pagewright-reload.sh が変更を見つけて nginx を読み込み直す。
-    # まだ書き出していないとき（ファイルがないとき）は何もしない。
-    include /data/site/${PAGEWRIGHT_SITE_ID}/_redirects*.nginx;
+    # まだ書き出していないとき（ファイルがないとき）は何もしない（[x] はそのためのワイルドカード。
+    # _redirects.nginx の1つだけに当たる）。
+    include /data/site/${PAGEWRIGHT_SITE_ID}/_redirects.ngin[x];
 
     # nginx 用の設定ファイルや隠しファイルは見せない。
     location ^~ /_redirects { return 404; }
