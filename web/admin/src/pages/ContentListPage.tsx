@@ -7,7 +7,6 @@ import {
   Stack,
   Text,
   TextInput,
-  VisuallyHidden,
 } from "@mantine/core";
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -109,6 +108,9 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
   // 「もっと見る」: the first newly loaded row gets the focus, and the count is announced.
   const listRef = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState("");
+  // A new search starts a new list.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the search changes
+  useEffect(() => setLoaded(""), [search.q, search.status]);
   const loadMore = async () => {
     const before = rows.length;
     setLoaded("");
@@ -138,8 +140,8 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
           {filtered && !isPending && !error
             ? isPlaceholderData
               ? "探しています…"
-              : `${conditions}の${label.title}：${rows.length}件${more ? "（続きがあります）" : ""}`
-            : ""}
+              : `${loaded}${conditions}の${label.title}：${rows.length}件${more ? "（続きがあります）" : ""}`
+            : loaded}
         </Text>
         {isPending ? (
           <Loading />
@@ -236,7 +238,6 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
             />
           </Box>
         )}
-        <VisuallyHidden role="status">{loaded}</VisuallyHidden>
         {more && !isPending && (
           <Stack gap={4} align="flex-start">
             <Button onClick={loadMore} loading={postList.isFetchingNextPage}>
