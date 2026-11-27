@@ -26,10 +26,16 @@
    docker compose run --rm cli site clear-url <2つ目のサイトのID>
    ```
 
-4. **HTTPS の証明書を取る。** `.env` にドメインを書きます（複数あるときは `,` で区切る）。Caddy がこのドメインの証明書も取得します
+4. **HTTPS の証明書を取る。** `.env` にドメインを書きます。Caddy がこのドメインの証明書も取得します
 
    ```sh
    PAGEWRIGHT_EXTRA_SITE_DOMAINS=www.example2.co.jp
+   ```
+
+   複数あるときは半角スペースで区切り、全体を `"` で囲みます（`,` で区切ると Caddy が起動しません）
+
+   ```sh
+   PAGEWRIGHT_EXTRA_SITE_DOMAINS="www.example2.co.jp www.example3.co.jp"
    ```
 
 5. **nginx に配信の設定を足す。** `nginx/templates/` に、たとえば `site-example2.conf.template` という名前で次のファイルを作ります。
