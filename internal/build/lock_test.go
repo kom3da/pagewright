@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/kom3da/pagewright/internal/db/dbtest"
 )
 
@@ -16,17 +18,13 @@ import (
 func TestBuildWaitsForOtherProcess(t *testing.T) {
 	env := dbtest.New(t)
 	tenant := env.CreateTenant(t, "ロック")
-	ctx := context.Background()
+	// Cleanups run last-in first-out: on failure the waiting build is
+	// cancelled and the lock's session closed before the pools close.
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 	out := t.TempDir()
 
-	other, err := env.Admin.Acquire(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer other.Release()
-	if _, err := other.Exec(ctx, "SELECT pg_advisory_lock($1, $2)", buildLockNamespace, buildLockKey(tenant)); err != nil {
-		t.Fatal(err)
-	}
+	other := holdLock(t, env.Admin, buildLockKey(tenant))
 
 	done := make(chan error, 1)
 	go func() {
@@ -39,8 +37,8 @@ func TestBuildWaitsForOtherProcess(t *testing.T) {
 	for {
 		var waiting bool
 		err := env.Admin.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_locks
-			WHERE locktype = 'advisory' AND NOT granted AND classid = $1::int::oid AND objid = $2::int::oid AND objsubid = 2)`,
-			uint32(buildLockNamespace), uint32(buildLockKey(tenant))).Scan(&waiting)
+			WHERE locktype = 'advisory' AND NOT granted AND classid = $1::bigint::oid AND objid = $2::bigint::oid AND objsubid = 2)`,
+			int64(uint32(buildLockNamespace)), int64(uint32(buildLockKey(tenant)))).Scan(&waiting)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -95,14 +93,7 @@ func TestBuildLockCancel(t *testing.T) {
 	env := dbtest.New(t)
 	tenant := env.CreateTenant(t, "ロック")
 	ctx := context.Background()
-	other, err := env.Admin.Acquire(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer other.Release()
-	if _, err := other.Exec(ctx, "SELECT pg_advisory_lock($1, $2)", buildLockNamespace, buildLockKey(tenant)); err != nil {
-		t.Fatal(err)
-	}
+	other := holdLock(t, env.Admin, buildLockKey(tenant))
 	cctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
 	if _, err := Build(cctx, env.DB, tenant, Options{OutDir: t.TempDir()}); err == nil {
@@ -115,4 +106,24 @@ func TestBuildLockCancel(t *testing.T) {
 	if _, err := Build(ctx, env.DB, tenant, Options{OutDir: t.TempDir()}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// holdLock takes the build lock of key on a session of its own, as another
+// app process would. The session is closed (releasing any lock it still
+// holds) when the test ends, so a failing test never leaves a build waiting.
+func holdLock(t *testing.T, pool *pgxpool.Pool, key int32) *pgxpool.Conn {
+	t.Helper()
+	ctx := context.Background()
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = conn.Conn().Close(ctx)
+		conn.Release()
+	})
+	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1, $2)", buildLockNamespace, key); err != nil {
+		t.Fatal(err)
+	}
+	return conn
 }
