@@ -7,12 +7,14 @@ package dbgen
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 const createFormSubmission = `-- name: CreateFormSubmission :one
 INSERT INTO form_submissions (name, kana, email, phone, message, page_path)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING tenant_id, id, name, kana, email, phone, message, page_path, created_at
+RETURNING tenant_id, id, name, kana, email, phone, message, page_path, created_at, handled_at, handled_by
 `
 
 type CreateFormSubmissionParams struct {
@@ -44,6 +46,8 @@ func (q *Queries) CreateFormSubmission(ctx context.Context, arg CreateFormSubmis
 		&i.Message,
 		&i.PagePath,
 		&i.CreatedAt,
+		&i.HandledAt,
+		&i.HandledBy,
 	)
 	return i, err
 }
@@ -61,7 +65,7 @@ func (q *Queries) DeleteFormSubmission(ctx context.Context, id int64) (int64, er
 }
 
 const getFormSubmission = `-- name: GetFormSubmission :one
-SELECT tenant_id, id, name, kana, email, phone, message, page_path, created_at FROM form_submissions WHERE id = $1
+SELECT tenant_id, id, name, kana, email, phone, message, page_path, created_at, handled_at, handled_by FROM form_submissions WHERE id = $1
 `
 
 func (q *Queries) GetFormSubmission(ctx context.Context, id int64) (FormSubmission, error) {
@@ -77,6 +81,39 @@ func (q *Queries) GetFormSubmission(ctx context.Context, id int64) (FormSubmissi
 		&i.Message,
 		&i.PagePath,
 		&i.CreatedAt,
+		&i.HandledAt,
+		&i.HandledBy,
+	)
+	return i, err
+}
+
+const getFormSubmissionWithHandler = `-- name: GetFormSubmissionWithHandler :one
+SELECT f.tenant_id, f.id, f.name, f.kana, f.email, f.phone, f.message, f.page_path, f.created_at, f.handled_at, f.handled_by, coalesce(nullif(u.display_name, ''), u.email, '')::text AS handled_by_name
+FROM form_submissions f LEFT JOIN users u ON u.id = f.handled_by
+WHERE f.id = $1
+`
+
+type GetFormSubmissionWithHandlerRow struct {
+	FormSubmission FormSubmission
+	HandledByName  string
+}
+
+func (q *Queries) GetFormSubmissionWithHandler(ctx context.Context, id int64) (GetFormSubmissionWithHandlerRow, error) {
+	row := q.db.QueryRow(ctx, getFormSubmissionWithHandler, id)
+	var i GetFormSubmissionWithHandlerRow
+	err := row.Scan(
+		&i.FormSubmission.TenantID,
+		&i.FormSubmission.ID,
+		&i.FormSubmission.Name,
+		&i.FormSubmission.Kana,
+		&i.FormSubmission.Email,
+		&i.FormSubmission.Phone,
+		&i.FormSubmission.Message,
+		&i.FormSubmission.PagePath,
+		&i.FormSubmission.CreatedAt,
+		&i.FormSubmission.HandledAt,
+		&i.FormSubmission.HandledBy,
+		&i.HandledByName,
 	)
 	return i, err
 }
@@ -108,32 +145,49 @@ func (q *Queries) ListAdminEmails(ctx context.Context) ([]string, error) {
 }
 
 const listFormSubmissions = `-- name: ListFormSubmissions :many
-SELECT tenant_id, id, name, kana, email, phone, message, page_path, created_at FROM form_submissions
-WHERE $1::bigint IS NULL OR id < $1::bigint
-ORDER BY id DESC
+SELECT f.tenant_id, f.id, f.name, f.kana, f.email, f.phone, f.message, f.page_path, f.created_at, f.handled_at, f.handled_by, coalesce(nullif(u.display_name, ''), u.email, '')::text AS handled_by_name
+FROM form_submissions f LEFT JOIN users u ON u.id = f.handled_by
+WHERE ($1::bigint IS NULL OR f.id < $1::bigint)
+  AND ($2::boolean IS NULL OR (f.handled_at IS NOT NULL) = $2::boolean)
+ORDER BY f.id DESC
 LIMIT 100
 `
 
+type ListFormSubmissionsParams struct {
+	Before  *int64
+	Handled *bool
+}
+
+type ListFormSubmissionsRow struct {
+	FormSubmission FormSubmission
+	HandledByName  string
+}
+
 // Newest first, a page at a time: pass the last id seen as before.
-func (q *Queries) ListFormSubmissions(ctx context.Context, before *int64) ([]FormSubmission, error) {
-	rows, err := q.db.Query(ctx, listFormSubmissions, before)
+// handled (optional) keeps only handled or only unhandled messages.
+// handled_by_name is the member who marked it handled (” when unknown).
+func (q *Queries) ListFormSubmissions(ctx context.Context, arg ListFormSubmissionsParams) ([]ListFormSubmissionsRow, error) {
+	rows, err := q.db.Query(ctx, listFormSubmissions, arg.Before, arg.Handled)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []FormSubmission
+	var items []ListFormSubmissionsRow
 	for rows.Next() {
-		var i FormSubmission
+		var i ListFormSubmissionsRow
 		if err := rows.Scan(
-			&i.TenantID,
-			&i.ID,
-			&i.Name,
-			&i.Kana,
-			&i.Email,
-			&i.Phone,
-			&i.Message,
-			&i.PagePath,
-			&i.CreatedAt,
+			&i.FormSubmission.TenantID,
+			&i.FormSubmission.ID,
+			&i.FormSubmission.Name,
+			&i.FormSubmission.Kana,
+			&i.FormSubmission.Email,
+			&i.FormSubmission.Phone,
+			&i.FormSubmission.Message,
+			&i.FormSubmission.PagePath,
+			&i.FormSubmission.CreatedAt,
+			&i.FormSubmission.HandledAt,
+			&i.FormSubmission.HandledBy,
+			&i.HandledByName,
 		); err != nil {
 			return nil, err
 		}
@@ -143,4 +197,27 @@ func (q *Queries) ListFormSubmissions(ctx context.Context, before *int64) ([]For
 		return nil, err
 	}
 	return items, nil
+}
+
+const setFormSubmissionHandled = `-- name: SetFormSubmissionHandled :execrows
+UPDATE form_submissions SET
+  handled_at = CASE WHEN $1::boolean THEN coalesce(handled_at, now()) END,
+  handled_by = CASE WHEN $1::boolean THEN
+    CASE WHEN handled_at IS NULL THEN $2::uuid ELSE handled_by END END
+WHERE id = $3
+`
+
+type SetFormSubmissionHandledParams struct {
+	Handled bool
+	UserID  uuid.UUID
+	ID      int64
+}
+
+// Marking a handled message handled again keeps who did it first, and when.
+func (q *Queries) SetFormSubmissionHandled(ctx context.Context, arg SetFormSubmissionHandledParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setFormSubmissionHandled, arg.Handled, arg.UserID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

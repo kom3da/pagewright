@@ -240,14 +240,27 @@ func (s *Server) formPage(w http.ResponseWriter, status int, siteName, title str
 }
 
 type submissionJSON struct {
-	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
-	Kana      string    `json:"kana"`
-	Email     string    `json:"email"`
-	Phone     string    `json:"phone"`
-	Message   string    `json:"message"`
-	PagePath  string    `json:"pagePath"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID        int64      `json:"id"`
+	Name      string     `json:"name"`
+	Kana      string     `json:"kana"`
+	Email     string     `json:"email"`
+	Phone     string     `json:"phone"`
+	Message   string     `json:"message"`
+	PagePath  string     `json:"pagePath"`
+	CreatedAt time.Time  `json:"createdAt"`
+	HandledAt *time.Time `json:"handledAt"`
+	// HandledBy is the name of the member who marked it handled; null when
+	// unhandled or when that member has left the site.
+	HandledBy *string `json:"handledBy"`
+}
+
+func toSubmissionJSON(f dbgen.FormSubmission, handledBy string) submissionJSON {
+	out := submissionJSON{ID: f.ID, Name: f.Name, Kana: f.Kana, Email: f.Email, Phone: f.Phone,
+		Message: f.Message, PagePath: f.PagePath, CreatedAt: f.CreatedAt, HandledAt: f.HandledAt}
+	if f.HandledAt != nil && handledBy != "" {
+		out.HandledBy = &handledBy
+	}
+	return out
 }
 
 func requireAdmin(sess *session) error {
@@ -269,12 +282,20 @@ func (s *Server) listSubmissions(w http.ResponseWriter, r *http.Request, sess *s
 		}
 		before = &id
 	}
+	var handled *bool
+	switch v := r.URL.Query().Get("handled"); v {
+	case "":
+	case "true", "false":
+		b := v == "true"
+		handled = &b
+	default:
+		return invalid("invalid_handled", "対応の状態の指定が正しくありません")
+	}
 	out := []submissionJSON{}
 	err := s.DB.InTenant(r.Context(), func(q *dbgen.Queries) error {
-		rows, err := q.ListFormSubmissions(r.Context(), before)
-		for _, f := range rows {
-			out = append(out, submissionJSON{ID: f.ID, Name: f.Name, Kana: f.Kana, Email: f.Email, Phone: f.Phone,
-				Message: f.Message, PagePath: f.PagePath, CreatedAt: f.CreatedAt})
+		rows, err := q.ListFormSubmissions(r.Context(), dbgen.ListFormSubmissionsParams{Before: before, Handled: handled})
+		for _, row := range rows {
+			out = append(out, toSubmissionJSON(row.FormSubmission, row.HandledByName))
 		}
 		return err
 	})
@@ -304,5 +325,45 @@ func (s *Server) deleteSubmission(w http.ResponseWriter, r *http.Request, sess *
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+// patchSubmission marks a message handled (対応済み) or unhandled (未対応).
+func (s *Server) patchSubmission(w http.ResponseWriter, r *http.Request, sess *session) error {
+	if err := requireAdmin(sess); err != nil {
+		return err
+	}
+	id, err := pathID(r)
+	if err != nil {
+		return err
+	}
+	var in struct {
+		Handled *bool `json:"handled"`
+	}
+	if err := decode(w, r, &in); err != nil {
+		return err
+	}
+	if in.Handled == nil {
+		return invalid("invalid_handled", "対応の状態の指定が正しくありません")
+	}
+	var out submissionJSON
+	err = s.DB.InTenant(r.Context(), func(q *dbgen.Queries) error {
+		n, err := q.SetFormSubmissionHandled(r.Context(), dbgen.SetFormSubmissionHandledParams{
+			Handled: *in.Handled, UserID: sess.userID, ID: id,
+		})
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return errNotFound
+		}
+		row, err := q.GetFormSubmissionWithHandler(r.Context(), id)
+		out = toSubmissionJSON(row.FormSubmission, row.HandledByName)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, out)
 	return nil
 }

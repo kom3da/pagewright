@@ -73,6 +73,8 @@ type FormSubmission struct {
 	Message   string
 	PagePath  string
 	CreatedAt time.Time
+	HandledAt *time.Time
+	HandledBy *uuid.UUID
 }
 
 type LoginToken struct {

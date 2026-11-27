@@ -230,10 +230,13 @@ type Build = {
 type Submission = {
   id: number; name: string; kana: string; email: string; phone: string;
   message: string; pagePath: string; createdAt: string;
+  handledAt: string | null;  // 対応済みにした日時。未対応なら null
+  handledBy: string | null;  // 対応済みにした人の名前（表示名、なければメールアドレス）。未対応か、その人がサイトのメンバーでなくなったら null
 };
 ```
 
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
-| `GET /api/forms/submissions?before={id}` | `before` は省略可 | 200 `Submission[]`（`id` の降順＝受け付けた順の新しい順に 100 件まで）。続きは、受け取った最後の `id` を `before` に入れて取る。`before` が正の整数でなければ 422 `invalid_before`。管理者だけ（編集者は 403） |
+| `GET /api/forms/submissions?handled=...&before={id}` | `handled`（省略可）：`false`（未対応だけ）／`true`（対応済みだけ）。`before` は省略可 | 200 `Submission[]`（`id` の降順＝受け付けた順の新しい順に 100 件まで）。続きは、受け取った最後の `id` を `before` に入れて取る（`handled` はそのまま付ける）。`before` が正の整数でなければ 422 `invalid_before`、`handled` がそれ以外なら 422 `invalid_handled`。管理者だけ（編集者は 403） |
+| `PATCH /api/forms/submissions/{id}` | `{"handled": true \| false}` | 200 `Submission`。`true` で対応済み（すでに対応済みなら、最初に対応済みにした日時と人のまま）、`false` で未対応に戻す。お問い合わせの内容は変えられない（ほかの項目を送ると 422 `invalid_json`）。`handled` がなければ 422 `invalid_handled`。管理者だけ |
 | `DELETE /api/forms/submissions/{id}` | | 204。管理者だけ |

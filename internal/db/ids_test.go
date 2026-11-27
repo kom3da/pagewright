@@ -144,7 +144,7 @@ func TestPerTenantIDs(t *testing.T) {
 			if err != nil || len(routes) != 1 || routes[0].Path != "/"+x.name+"/" {
 				t.Errorf("%s: routes = %+v (%v)", x.name, routes, err)
 			}
-			subs, err := q.ListFormSubmissions(ctx, nil)
+			subs, err := q.ListFormSubmissions(ctx, dbgen.ListFormSubmissionsParams{})
 			if err != nil || len(subs) != 1 {
 				t.Errorf("%s: %d submissions (%v), want 1", x.name, len(subs), err)
 			}

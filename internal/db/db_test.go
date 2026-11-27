@@ -848,6 +848,33 @@ func pgCode(err error) string {
 	return ""
 }
 
+// A contact message stays as sent: the app may change only whether it is
+// handled, and only by a member of the same site.
+func TestSubmissionOnlyHandledChanges(t *testing.T) {
+	e := newTestEnv(t)
+	var sub dbgen.FormSubmission
+	e.inA(t, func(q *dbgen.Queries) error {
+		var err error
+		sub, err = q.CreateFormSubmission(e.ctxA, dbgen.CreateFormSubmissionParams{Name: "n", Email: "n@example.com", Message: "m"})
+		return err
+	})
+	for _, q := range []string{
+		"UPDATE form_submissions SET message = 'changed'",
+		"UPDATE form_submissions SET email = 'x@example.com'",
+	} {
+		if err := e.execInTenant(e.tenantA, q); pgCode(err) != "42501" {
+			t.Errorf("%q: err = %v, want SQLSTATE 42501 (permission denied)", q, err)
+		}
+	}
+	if err := e.execInTenant(e.tenantA, "UPDATE form_submissions SET handled_at = now(), handled_by = $1 WHERE id = $2", e.alice, sub.ID); err != nil {
+		t.Errorf("mark handled by alice: %v", err)
+	}
+	// bob is a member of B only.
+	if err := e.execInTenant(e.tenantA, "UPDATE form_submissions SET handled_by = $1 WHERE id = $2", e.bob, sub.ID); pgCode(err) != "23503" {
+		t.Errorf("mark handled by another site's member: err = %v, want SQLSTATE 23503", err)
+	}
+}
+
 func ids[T any](rows []T, id func(T) int64) []int64 {
 	out := make([]int64, 0, len(rows))
 	for _, r := range rows {

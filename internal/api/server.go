@@ -149,6 +149,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/site/builds", s.site(s.listBuilds))
 	mux.Handle("PUT /api/site", s.site(s.putSite))
 	mux.Handle("GET /api/forms/submissions", s.site(s.listSubmissions))
+	mux.Handle("PATCH /api/forms/submissions/{id}", s.site(s.patchSubmission))
 	mux.Handle("DELETE /api/forms/submissions/{id}", s.site(s.deleteSubmission))
 
 	mux.Handle("/api/", s.public(func(http.ResponseWriter, *http.Request, *session) error {
@@ -360,6 +361,7 @@ var errorFields = map[string]string{
 	"invalid_menu":         "menu",
 	"invalid_logo":         "logoMediaId",
 	"invalid_days":         "days",
+	"invalid_handled":      "handled",
 	"invalid_front_page":   "frontPageId",
 	"invalid_privacy_page": "privacyPageId",
 	"alt_required":         "altText",

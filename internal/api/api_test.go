@@ -1270,6 +1270,120 @@ func TestContactForm(t *testing.T) {
 	alice.mustDo(http.MethodDelete, fmt.Sprintf("/api/forms/submissions/%d", subs[0].ID), nil, nil, http.StatusNoContent)
 }
 
+type submissionOut struct {
+	ID        int64
+	Name      string
+	HandledAt *time.Time
+	HandledBy *string
+}
+
+func TestSubmissionHandled(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	bob := e.login("bob@example.com")
+	dave := e.login("dave@example.com")
+	for range 2 {
+		if status, _ := e.postContact(e.tenantA, contactForm()); status != http.StatusOK {
+			t.Fatalf("post to A = %d", status)
+		}
+	}
+	if status, _ := e.postContact(e.tenantB, contactForm()); status != http.StatusOK {
+		t.Fatalf("post to B = %d", status)
+	}
+	var subs, bSubs []submissionOut
+	alice.mustDo(http.MethodGet, "/api/forms/submissions", nil, &subs, http.StatusOK)
+	bob.mustDo(http.MethodGet, "/api/forms/submissions", nil, &bSubs, http.StatusOK)
+	if len(subs) != 2 || len(bSubs) != 1 || subs[0].HandledAt != nil || subs[0].HandledBy != nil {
+		t.Fatalf("A's = %+v, B's = %+v; want 2 and 1, unhandled", subs, bSubs)
+	}
+	newer, older := subs[0], subs[1]
+
+	var got submissionOut
+	path := fmt.Sprintf("/api/forms/submissions/%d", older.ID)
+	alice.mustDo(http.MethodPatch, path, map[string]any{"handled": true}, &got, http.StatusOK)
+	if got.ID != older.ID || got.HandledAt == nil || got.HandledBy == nil || *got.HandledBy != "alice@example.com" {
+		t.Fatalf("after handling = %+v, want handled by alice", got)
+	}
+	// Marking it again keeps the first time.
+	first := *got.HandledAt
+	alice.mustDo(http.MethodPatch, path, map[string]any{"handled": true}, &got, http.StatusOK)
+	if got.HandledAt == nil || !got.HandledAt.Equal(first) {
+		t.Errorf("handled again at %v, want kept %v", got.HandledAt, first)
+	}
+
+	filters := map[string][]int64{
+		"":               {newer.ID, older.ID},
+		"?handled=false": {newer.ID},
+		"?handled=true":  {older.ID},
+		fmt.Sprintf("?handled=false&before=%d", newer.ID): {},
+	}
+	for q, want := range filters {
+		var list []submissionOut
+		alice.mustDo(http.MethodGet, "/api/forms/submissions"+q, nil, &list, http.StatusOK)
+		ids := []int64{}
+		for _, s := range list {
+			ids = append(ids, s.ID)
+		}
+		if diff := cmp.Diff(want, ids); diff != "" {
+			t.Errorf("GET %s (-want +got):\n%s", q, diff)
+		}
+	}
+	if got, code := alice.errorCode(http.MethodGet, "/api/forms/submissions?handled=yes", nil); got != http.StatusUnprocessableEntity || code != "invalid_handled" {
+		t.Errorf("handled=yes = %d %s, want 422 invalid_handled", got, code)
+	}
+	if got, code := alice.errorCode(http.MethodPatch, path, map[string]any{}); got != http.StatusUnprocessableEntity || code != "invalid_handled" {
+		t.Errorf("PATCH without handled = %d %s, want 422 invalid_handled", got, code)
+	}
+	// The message itself cannot be changed.
+	if got, code := alice.errorCode(http.MethodPatch, path, map[string]any{"handled": true, "message": "x"}); got != http.StatusUnprocessableEntity || code != "invalid_json" {
+		t.Errorf("PATCH with message = %d %s, want 422 invalid_json", got, code)
+	}
+
+	// Admins of the same site only: another site's message is not found,
+	// in either direction, and editors are refused.
+	if got, _ := bob.errorCode(http.MethodPatch, path, map[string]any{"handled": false}); got != http.StatusNotFound {
+		t.Errorf("B marking A's message = %d, want 404", got)
+	}
+	if got, _ := alice.errorCode(http.MethodPatch, fmt.Sprintf("/api/forms/submissions/%d", bSubs[0].ID), map[string]any{"handled": true}); got != http.StatusNotFound {
+		t.Errorf("A marking B's message = %d, want 404", got)
+	}
+	if got, _ := dave.errorCode(http.MethodPatch, path, map[string]any{"handled": false}); got != http.StatusForbidden {
+		t.Errorf("editor marking a message = %d, want 403", got)
+	}
+	bob.mustDo(http.MethodGet, "/api/forms/submissions?handled=true", nil, &bSubs, http.StatusOK)
+	if len(bSubs) != 0 {
+		t.Errorf("B sees %d handled messages, want 0", len(bSubs))
+	}
+	ctx := context.Background()
+	var bHandled *time.Time
+	if err := e.db.Admin.QueryRow(ctx, "SELECT handled_at FROM form_submissions WHERE tenant_id = $1", e.tenantB).Scan(&bHandled); err != nil || bHandled != nil {
+		t.Errorf("B's message handled_at = %v (%v), want untouched", bHandled, err)
+	}
+	alice.mustDo(http.MethodGet, "/api/forms/submissions?handled=true", nil, &subs, http.StatusOK)
+	if len(subs) != 1 || subs[0].ID != older.ID {
+		t.Errorf("A's handled after B's attempts = %+v, want only %d", subs, older.ID)
+	}
+
+	alice.mustDo(http.MethodPatch, path, map[string]any{"handled": false}, &got, http.StatusOK)
+	if got.HandledAt != nil || got.HandledBy != nil {
+		t.Errorf("after unhandling = %+v, want unhandled", got)
+	}
+
+	// When the member who handled it leaves, it stays handled, by nobody.
+	alice.mustDo(http.MethodPatch, path, map[string]any{"handled": true}, nil, http.StatusOK)
+	if _, err := e.db.Admin.Exec(ctx, "DELETE FROM memberships WHERE tenant_id = $1 AND user_id = (SELECT id FROM users WHERE email = 'alice@example.com')", e.tenantA); err != nil {
+		t.Fatal(err)
+	}
+	var handledAt *time.Time
+	var handledBy *uuid.UUID
+	if err := e.db.Admin.QueryRow(ctx, "SELECT handled_at, handled_by FROM form_submissions WHERE tenant_id = $1 AND id = $2", e.tenantA, older.ID).Scan(&handledAt, &handledBy); err != nil {
+		t.Fatal(err)
+	}
+	if handledAt == nil || handledBy != nil {
+		t.Errorf("after alice left: handled_at=%v handled_by=%v, want still handled, by nobody", handledAt, handledBy)
+	}
+}
+
 func TestContactFormRateLimit(t *testing.T) {
 	e := newEnv(t)
 	for i := range 10 {
