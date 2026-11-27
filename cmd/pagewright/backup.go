@@ -51,6 +51,7 @@ func writeBackup(ctx context.Context, cfg config.Config, out string) error {
 	if err := os.MkdirAll(out, 0o700); err != nil {
 		return fmt.Errorf("%s を作れません（書き込める場所か確認してください）: %w", out, err)
 	}
+	removeStaleTemp(out, time.Now().Add(-staleTempAge))
 
 	name := "pagewright-" + time.Now().UTC().Format("20060102T150405Z") + ".tar.gz"
 	final := filepath.Join(out, name)
@@ -89,6 +90,33 @@ func writeBackup(ctx context.Context, cfg config.Config, out string) error {
 	}
 	fmt.Printf("バックアップを作りました: %s（データ %d 行、ファイル %d 個）\n", final, rows, len(m.Files)-len(m.Tables))
 	return nil
+}
+
+// staleTempAge is how long a backup's temporary file goes unwritten before
+// it counts as left behind by a crash (a running backup writes all along).
+const staleTempAge = 12 * time.Hour
+
+// tempRe matches the temporary files of writeBackup and backup.Write.
+var tempRe = regexp.MustCompile(`^\.pagewright-(table-)?[0-9]+(\.partial)?$`)
+
+// removeStaleTemp removes temporary files in dir last written before
+// cutoff: a killed backup (OOM, reboot) cannot remove its own.
+func removeStaleTemp(dir string, cutoff time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.Type().IsRegular() || !tempRe.MatchString(e.Name()) {
+			continue
+		}
+		if info, err := e.Info(); err != nil || !info.ModTime().Before(cutoff) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, e.Name())); err == nil {
+			fmt.Printf("途中で止まったバックアップの一時ファイルを消しました: %s\n", e.Name())
+		}
+	}
 }
 
 // pruneBackups removes all but the newest keep archives in dir.

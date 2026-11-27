@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
@@ -608,6 +609,42 @@ func TestPruneBackups(t *testing.T) {
 		got = append(got, e.Name())
 	}
 	want := []string{"notes.txt", "pagewright-20261103T030000Z.tar.gz", "pagewright-20261104T030000Z.tar.gz", "pagewright-latest.tar.gz"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("left (-want +got):\n%s", diff)
+	}
+}
+
+func TestRemoveStaleTemp(t *testing.T) {
+	dir := t.TempDir()
+	old := time.Now().Add(-13 * time.Hour)
+	files := map[string]bool{ // name: old
+		".pagewright-123.partial":            true,
+		".pagewright-table-456":              true,
+		".pagewright-789.partial":            false, // a backup still running
+		"pagewright-20261101T030000Z.tar.gz": true,
+		".pagewright-notes":                  true,
+	}
+	for name, isOld := range files {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if isOld {
+			if err := os.Chtimes(p, old, old); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	removeStaleTemp(dir, time.Now().Add(-staleTempAge))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, e := range entries {
+		got = append(got, e.Name())
+	}
+	want := []string{".pagewright-789.partial", ".pagewright-notes", "pagewright-20261101T030000Z.tar.gz"}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("left (-want +got):\n%s", diff)
 	}
