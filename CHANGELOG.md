@@ -8,8 +8,6 @@ GitHub のリリースノートは、この中のその版の節から作りま�
 
 ## [Unreleased]
 
-最初の公開版（0.1.0）になる予定の内容です。
-
 ### 追加
 
 #### 記事と固定ページ
@@ -44,11 +42,13 @@ GitHub のリリースノートは、この中のその版の節から作りま�
 #### WordPress からの移行
 
 - `pagewright import-wxr` で WordPress の書き出しファイル（WXR）を取り込みます。記事・固定ページ・カテゴリ・タグ・画像を移し、記事の番号とURLを引き継ぎます。`--dry-run` で、変換できないものを先に確かめられます
+- 変換できない部分（ショートコードなど）は「カスタムHTML」のブロックとして残します。公開サイトへは安全なタグだけにして（サニタイズして）出力します。管理画面では編集できず、API で追加・変更できるのも管理者だけです
 
 #### 導入と運用
 
 - Docker イメージ `ghcr.io/kom3da/pagewright`（amd64・arm64）と、PostgreSQL 18・nginx・Caddy（HTTPS の証明書の自動取得）をまとめた Docker Compose の構成（`deploy/`）
-- コマンド：`serve`・`migrate`・`init`（最初のサイトと管理者を作る）・`login-url`（メールが届かないときのログイン用URL）・`site set-url`／`site clear-url`・`import-wxr`・`version`
+- コマンド：`serve`・`migrate`・`init`（最初のサイトと管理者を作る）・`login-url`（メールが届かないときのログイン用URL）・`site set-url`／`site clear-url`・`import-wxr`・`backup`・`restore`・`version`
+- バックアップと復元（`pagewright backup`・`pagewright restore`）。すべてのサイトのデータベースの中身と画像を1つのファイルにまとめ、サービスを止めずに取れます。`--keep` で古いものを消せます（docs/install/backup.md）
 - 起動のたびにデータベースを自動で最新の形にします（マイグレーション）
 - SMTP の暗号化の設定（`PAGEWRIGHT_SMTP_TLS`。`starttls` で暗号化できないサーバーには送らない）と、信頼するプロキシの設定（`PAGEWRIGHT_TRUSTED_PROXIES`）
 - ヘルスチェック（`/healthz`）
