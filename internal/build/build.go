@@ -66,7 +66,8 @@ type Result struct {
 }
 
 // Build renders the tenant's site and updates OutDir/<tenantID>/. Builds
-// of the same tenant in this process run one at a time.
+// of the same tenant run one at a time, also across processes sharing the
+// database (see lockTenant).
 func Build(ctx context.Context, d *db.DB, tenantID uuid.UUID, opts Options) (Result, error) {
 	start := time.Now()
 	if tenantID == uuid.Nil {
@@ -85,7 +86,11 @@ func Build(ctx context.Context, d *db.DB, tenantID uuid.UUID, opts Options) (Res
 	}
 	log = log.With("tenant_id", tenantID)
 
-	unlock := sync.OnceFunc(lockTenant(tenantID))
+	release, err := lockTenant(ctx, d, tenantID)
+	if err != nil {
+		return Result{}, fmt.Errorf("build: %w", err)
+	}
+	unlock := sync.OnceFunc(release)
 	defer unlock()
 
 	snap, err := load(db.WithTenant(ctx, tenantID), d)
@@ -151,15 +156,6 @@ func Build(ctx context.Context, d *db.DB, tenantID uuid.UUID, opts Options) (Res
 	log.Info("site built", "files", res.Files, "changed", len(res.Changed),
 		"removed", len(res.Removed), "warnings", len(res.Warnings), "duration", res.Duration)
 	return res, nil
-}
-
-var tenantLocks sync.Map // uuid.UUID → *sync.Mutex
-
-func lockTenant(id uuid.UUID) func() {
-	m, _ := tenantLocks.LoadOrStore(id, &sync.Mutex{})
-	mu := m.(*sync.Mutex)
-	mu.Lock()
-	return mu.Unlock
 }
 
 func randomSuffix() string {
