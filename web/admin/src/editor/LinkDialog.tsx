@@ -10,7 +10,7 @@ export function linkProblem(href: string): string | null {
   if (!href) return "リンク先のURLを入力してください。";
   if (/^(https?:\/\/[^\s]+|mailto:[^\s]+|tel:[0-9+\-()]+|\/[^\s]*|#[^\s]*)$/i.test(href))
     return null;
-  return "「https://」で始まるURL、または「/」で始まるサイト内のパスを入力してください。";
+  return "「https://」で始まるURL、「/」で始まるサイト内のパス、電話（tel:）かメール（mailto:）のリンクを入力してください。";
 }
 
 export function LinkDialog({ editor, open, onClose }: Props) {
@@ -76,7 +76,7 @@ function LinkForm({ editor, onClose }: { editor: Editor; onClose: () => void }) 
       )}
       <TextInput
         label="リンク先のURL"
-        description="例：https://example.jp/ 、サイト内なら /company/"
+        description="例：https://example.jp/ 、サイト内なら /company/ 、電話なら tel:03-1234-5678 、メールなら mailto:info@example.jp"
         required
         type="url"
         inputMode="url"

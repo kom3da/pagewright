@@ -52,6 +52,10 @@ describe("verify", () => {
     const { user } = renderApp("/login/verify?token=old");
     await user.click(await screen.findByRole("button", { name: "ログイン" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/期限が切れています/);
+    // Pressing ログイン again cannot help: sending a new link is the one action left.
+    expect(screen.queryByRole("button", { name: "ログイン" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "ログイン用のリンクを送り直す" }));
+    expect(await screen.findByLabelText(/メールアドレス/)).toBeInTheDocument();
   });
 });
 
