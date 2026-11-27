@@ -96,7 +96,7 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 	}
 	// Checked before reading the site, so no back link yet: the browser's
 	// back button still works.
-	if !s.formByIP.allow(s.clientKey(r)) {
+	if !s.allowByIP(s.formByIP, r) {
 		s.formPage(w, http.StatusTooManyRequests, "", "送信できませんでした", []string{"短い時間に多くの送信がありました。しばらく待ってからお試しください。"}, "")
 		return
 	}

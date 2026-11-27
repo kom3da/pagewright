@@ -197,7 +197,7 @@ func (s *Server) adminPreviewMedia(w http.ResponseWriter, r *http.Request, tenan
 }
 
 func (s *Server) previewPage(w http.ResponseWriter, r *http.Request) {
-	if !s.previewByIP.allow(s.clientKey(r)) {
+	if !s.allowByIP(s.previewByIP, r) {
 		s.formPage(w, http.StatusTooManyRequests, "", "しばらく待ってからお試しください", []string{"短い時間に多くの表示がありました。"}, "")
 		return
 	}

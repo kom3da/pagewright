@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+	"net/netip"
 	"sync"
 	"time"
 )
@@ -50,4 +52,43 @@ func (l *limiter) allow(key string) bool {
 	}
 	c.n++
 	return c.n <= l.n
+}
+
+// privateWarnEvery is how often allowByIP may warn about private addresses.
+const privateWarnEvery = time.Hour
+
+// allowByIP counts r against the per-address limiter l. When a private or
+// loopback address hits the limit, the server likely sees a proxy or the
+// Docker gateway instead of the visitor (e.g. IPv6 through docker-proxy),
+// so every visitor shares one budget: say so, at most once an hour.
+func (s *Server) allowByIP(l *limiter, r *http.Request) bool {
+	key := s.clientKey(r)
+	if l.allow(key) {
+		return true
+	}
+	if !privateKey(key) {
+		return false
+	}
+	now := time.Now().UnixNano()
+	last := s.privateWarnedAt.Load()
+	if last != 0 && time.Duration(now-last) < privateWarnEvery {
+		return false
+	}
+	if s.privateWarnedAt.CompareAndSwap(last, now) {
+		s.Logger.Warn("回数制限のかかった要求の多くが、プライベートなアドレスから届いています。閲覧者のIPアドレスが見えておらず、閲覧者全員にまとめて制限がかかっているかもしれません（docs/install/https.md）",
+			"client", key)
+	}
+	return false
+}
+
+// privateKey reports whether a clientKey (an address or an IPv6 /64) is a
+// private or loopback address.
+func privateKey(key string) bool {
+	var a netip.Addr
+	if p, err := netip.ParsePrefix(key); err == nil {
+		a = p.Addr()
+	} else if a, err = netip.ParseAddr(key); err != nil {
+		return false
+	}
+	return a.IsPrivate() || a.IsLoopback()
 }

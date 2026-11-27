@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -74,6 +75,8 @@ type Server struct {
 	formBySite   *limiter
 	autoReplyTo  *limiter
 	previewByIP  *limiter
+	// privateWarnedAt is when allowByIP last warned (Unix nanoseconds).
+	privateWarnedAt atomic.Int64
 }
 
 const (

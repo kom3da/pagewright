@@ -43,7 +43,7 @@ func (s *Server) loginLink(w http.ResponseWriter, r *http.Request, _ *session) e
 		return invalid("invalid_email", "メールアドレスの形式が正しくありません")
 	}
 
-	if !s.loginByIP.allow(s.clientKey(r)) {
+	if !s.allowByIP(s.loginByIP, r) {
 		return &apiError{http.StatusTooManyRequests, "too_many_requests", "ログイン用のリンクの送信が続いています。しばらく待ってからお試しください"}
 	}
 	// Past the per-address limit, answer as usual but send nothing: the
