@@ -374,6 +374,10 @@ describe("editor", () => {
         .getAllByRole("button")
         .every((b) => b.tabIndex === -1),
     ).toBe(true);
+    // A disabled button says how to make it usable.
+    expect(
+      within(toolbar).getByRole("button", { name: "ルビ（ふりがな）" }),
+    ).toHaveAccessibleDescription("文字を選んでから押します");
 
     await user.click(screen.getByLabelText("タイトル"));
     await user.tab();

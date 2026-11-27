@@ -26,7 +26,14 @@ import {
   Table,
   Undo2,
 } from "lucide-react";
-import { type KeyboardEvent, type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { DESKTOP_QUERY } from "../theme";
 import { LinkDialog } from "./LinkDialog";
 import { MediaDialog } from "./MediaDialog";
@@ -39,6 +46,8 @@ type ButtonProps = {
   text?: string;
   pressed?: boolean;
   disabled?: boolean;
+  /** Says how to make a disabled button usable (tooltip and description). */
+  disabledHint?: string;
   onClick: () => void;
 };
 
@@ -47,13 +56,24 @@ type ButtonProps = {
  * optional icon). Uses aria-disabled (with Mantine's data-disabled look) instead of disabled
  * so that it stays reachable with the arrow keys (WAI-ARIA toolbar pattern).
  */
-function ToolButton({ label, icon: Icon, text, pressed, disabled, onClick }: ButtonProps) {
+function ToolButton({
+  label,
+  icon: Icon,
+  text,
+  pressed,
+  disabled,
+  disabledHint,
+  onClick,
+}: ButtonProps) {
+  const hintId = useId();
+  const hint = disabled ? disabledHint : undefined;
   const common = {
     variant: pressed ? "light" : "subtle",
     color: pressed ? "brand" : "gray",
     "aria-pressed": pressed,
     "aria-disabled": disabled || undefined,
     "data-disabled": disabled || undefined,
+    "aria-describedby": hint ? hintId : undefined,
     onClick: () => {
       if (!disabled) onClick();
     },
@@ -62,15 +82,20 @@ function ToolButton({ label, icon: Icon, text, pressed, disabled, onClick }: But
   if (text) {
     // The visible text starts the accessible name (「画像」→「画像を入れる」).
     return (
-      <Button
-        {...common}
-        size="sm"
-        px={6}
-        aria-label={text === label ? undefined : label}
-        leftSection={Icon && <Icon aria-hidden="true" size={18} />}
-      >
-        {text}
-      </Button>
+      <>
+        <Tooltip label={hint} disabled={!hint}>
+          <Button
+            {...common}
+            size="sm"
+            px={6}
+            aria-label={text === label ? undefined : label}
+            leftSection={Icon && <Icon aria-hidden="true" size={18} />}
+          >
+            {text}
+          </Button>
+        </Tooltip>
+        {hint && <VisuallyHidden id={hintId}>{hint}</VisuallyHidden>}
+      </>
     );
   }
   return (
@@ -209,6 +234,7 @@ export function Toolbar({ editor }: { editor: Editor }) {
       text: "ルビ",
       pressed: s.ruby,
       disabled: s.emptySelection && !s.ruby,
+      disabledHint: "文字を選んでから押します",
       onClick: () => {
         if (s.ruby) editor.commands.extendMarkRange("ruby");
         setDialog("ruby");
@@ -366,7 +392,14 @@ export function Toolbar({ editor }: { editor: Editor }) {
 }
 
 /** An item of the phone's 「ほか」 menu. Pressed formats get a check mark. */
-function MoreItem({ label, icon: Icon, pressed, disabled, onClick }: ButtonProps): ReactNode {
+function MoreItem({
+  label,
+  icon: Icon,
+  pressed,
+  disabled,
+  disabledHint,
+  onClick,
+}: ButtonProps): ReactNode {
   return (
     <Menu.Item
       leftSection={Icon ? <Icon aria-hidden="true" size={16} /> : <span aria-hidden="true" />}
@@ -375,6 +408,7 @@ function MoreItem({ label, icon: Icon, pressed, disabled, onClick }: ButtonProps
       onClick={onClick}
     >
       {label}
+      {disabled && disabledHint && `（${disabledHint}）`}
       {pressed && <VisuallyHidden>（適用中）</VisuallyHidden>}
     </Menu.Item>
   );
