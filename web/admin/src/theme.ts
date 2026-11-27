@@ -187,7 +187,8 @@ export const theme = createTheme({
         // Fade only: a transform would make the modal the containing block of nested
         // confirmations (see components/ui/confirm.tsx).
         transitionProps: { transition: "fade", duration: 150 },
-        closeButtonProps: { "aria-label": "閉じる" },
+        // 44px to press, like the rows and the phone's buttons.
+        closeButtonProps: { "aria-label": "閉じる", size: "xl" },
       },
       styles: {
         title: { fontSize: "var(--mantine-font-size-lg)", fontWeight: 700, lineHeight: 1.5 },

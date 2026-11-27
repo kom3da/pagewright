@@ -697,7 +697,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
           <>
             <ContentStatusBadges {...content} revisionId={content.revision.id} />
             {content.url && (
-              <ExternalLink href={publicUrl(content.url)} size="sm">
+              <ExternalLink href={publicUrl(content.url)} size="sm" className="pw-hit-target">
                 公開中のページを見る
               </ExternalLink>
             )}

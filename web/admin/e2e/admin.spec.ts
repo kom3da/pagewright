@@ -292,6 +292,21 @@ test("scheduling a post is accessible and keyboard operable", async ({ page }) =
   await expect(page.getByText(/予約：/)).toBeHidden();
 });
 
+test("links and buttons that stand alone are at least 36px tall", async ({ page }) => {
+  const tall = async (target: ReturnType<Page["getByRole"]>, min = 36) => {
+    const box = await target.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(min);
+  };
+  await page.goto("posts/3");
+  await tall(page.getByRole("link", { name: "記事の一覧" }));
+  await tall(page.getByRole("link", { name: /公開中のページを見る/ }));
+  await page.getByRole("button", { name: "確認用のリンクを作る" }).click();
+  await tall(page.getByRole("dialog").getByRole("button", { name: "閉じる" }), 44);
+
+  await page.goto("inquiries");
+  await tall(page.getByRole("button", { name: /さんからのお問い合わせを開く/ }).first(), 44);
+});
+
 test("preview links are accessible and keyboard operable", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("posts/1");

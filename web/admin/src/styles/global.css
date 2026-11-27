@@ -113,3 +113,12 @@ label[data-required] > span[aria-hidden="true"]:last-child::after {
 .pw-skip-link:focus {
   transform: none;
 }
+
+/* Links and link-like buttons that stand on their own (breadcrumbs, a row's name,
+   「公開中のページを見る」) are at least 36px tall to press, like the smallest buttons.
+   Links inside sentences stay as they are. */
+.pw-hit-target {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+}

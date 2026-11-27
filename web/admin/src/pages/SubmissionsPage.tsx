@@ -167,7 +167,7 @@ function Submissions({ show }: { show: Show }) {
       />
       <Stack gap="lg">
         <Notice kind="warning">
-          お名前やメールアドレスなどの個人情報が含まれます。取り扱いに注意し、対応が済んで不要になったものは削除してください。
+          お名前やメールアドレスなどの個人情報が含まれます。取り扱いに注意し、対応が済んで不要になったものは削除してください（お名前を押して開いた画面の「削除する」で削除できます）。
         </Notice>
         <NativeSelect
           id={FILTER_ID}
@@ -209,6 +209,10 @@ function Submissions({ show }: { show: Show }) {
                     type="button"
                     id={openButtonId(s.id)}
                     fw={700}
+                    // A 44px row, like the 対応済み button next to it.
+                    className="pw-hit-target"
+                    mih="2.75rem"
+                    ta="start"
                     onClick={() => openMessage(s)}
                     aria-label={`${s.name} さんからのお問い合わせを開く`}
                   >

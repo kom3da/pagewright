@@ -81,6 +81,7 @@ export function PageHeader({
                   size="sm"
                   c="dimmed"
                   underline="hover"
+                  className="pw-hit-target"
                 >
                   {c.label}
                 </AnchorLink>
