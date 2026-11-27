@@ -17,6 +17,8 @@
 
 ## ドキュメント
 
+これからの予定は[ロードマップ](https://github.com/users/kom3da/projects/3)にあります（時期は目安）。
+
 ドキュメントは https://kom3da.github.io/pagewright/ で読めます（中身は `docs/` にあり、手元では `mise run docs:dev` で開けます）。
 
 - [使い方](docs/guide/index.md)：管理画面で記事やページを書いて公開する（ふだん管理画面を使う人向け）
