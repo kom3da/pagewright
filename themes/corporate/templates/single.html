@@ -2,7 +2,7 @@
 <article class="entry" data-pagefind-body>
   <header class="entry-header">
     {{- if eq .Content.Type "post"}}
-    <p class="entry-meta">
+    <p class="entry-meta" data-pagefind-ignore>
       <time datetime="{{isoDate .Content.PublishedAt}}">{{date .Content.PublishedAt}}</time>
       {{- range .Content.Categories}}
       <a class="badge" href="{{.URL}}">{{.Title}}</a>

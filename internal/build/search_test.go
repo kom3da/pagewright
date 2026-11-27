@@ -40,6 +40,10 @@ func TestSearchIndex(t *testing.T) {
 	if !strings.Contains(files["/posts/search/index.html"], "data-pagefind-body") {
 		t.Error("post page is not marked for indexing")
 	}
+	// The date and categories are not part of what search results quote.
+	if !strings.Contains(files["/posts/search/index.html"], `class="entry-meta" data-pagefind-ignore`) {
+		t.Error("post date row is indexed")
+	}
 	// A rebuild without changes changes nothing, index included.
 	res, err = build.Build(context.Background(), env.DB, s.tenant(), opts)
 	if err != nil {
