@@ -453,7 +453,9 @@ WHERE c.type = $1
   AND ($3::text IS NULL OR $3::text = CASE
         WHEN c.published_revision_id IS NOT NULL THEN 'published'
         WHEN c.scheduled_revision_id IS NOT NULL THEN 'scheduled'
-        ELSE 'draft' END)
+        ELSE 'draft' END
+      OR $3::text = 'changed' AND c.published_revision_id IS NOT NULL
+        AND (lr.id <> c.published_revision_id OR c.pending_settings IS NOT NULL))
   AND ($4::bigint IS NULL OR c.number < $4::bigint)
 ORDER BY c.number DESC
 LIMIT $5
@@ -491,7 +493,8 @@ type ListContentsRow struct {
 
 // Contents of a type, newest number first, with the title and id of their
 // latest revision and their canonical URL. q (an ILIKE pattern, already
-// escaped) matches the title or slug; status filters by derived status.
+// escaped) matches the title or slug; status filters by derived status,
+// or 'changed' for published contents with changes not yet published.
 // before continues after the last number received.
 func (q *Queries) ListContents(ctx context.Context, arg ListContentsParams) ([]ListContentsRow, error) {
 	rows, err := q.db.Query(ctx, listContents,

@@ -574,7 +574,7 @@ export const handlers = [
     if (q && [...q].length > 100) {
       return error(422, "invalid_q", "検索する言葉は100文字以内で入力してください");
     }
-    if (status && !["draft", "scheduled", "published"].includes(status)) {
+    if (status && !["draft", "scheduled", "published", "changed"].includes(status)) {
       return error(422, "invalid_status", "状態の指定が正しくありません");
     }
     const before = params.has("before") ? Number(params.get("before")) : undefined;
@@ -602,7 +602,11 @@ export const handlers = [
           (c) =>
             !q || c.title.toLowerCase().includes(q) || (c.slug ?? "").toLowerCase().includes(q),
         )
-        .filter((c) => !status || c.status === status)
+        .filter((c) =>
+          status === "changed"
+            ? c.status === "published" && c.hasUnpublishedChanges
+            : !status || c.status === status,
+        )
         .sort(order)
         .slice(0, limit)
         .map(summary),

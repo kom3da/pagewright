@@ -71,7 +71,7 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
   const filtered = Boolean(search.q || search.status);
   const apiFilter: ContentFilter = {
     q: search.q,
-    status: search.status === "changed" ? "published" : search.status,
+    status: search.status,
   };
   // Pages are drawn as a tree, so they come all at once; posts come a page at a time.
   // Both keep showing the previous results while the next search loads (no flashing).
@@ -94,7 +94,7 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
   // Search results lose their parents; the whole list (usually cached) supplies them.
   const all = useQuery({ ...contentsQuery("page"), enabled: type === "page" && filtered });
 
-  const found = (data ?? []).filter((c) => search.status !== "changed" || c.hasUnpublishedChanges);
+  const found = data ?? [];
   // Pages are shown as a tree (parents first) unless searching; posts keep the API order.
   const rows: PageRow[] =
     type !== "page"

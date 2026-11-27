@@ -120,7 +120,7 @@ func (s *Server) listContents(w http.ResponseWriter, r *http.Request, _ *session
 		params.Q = &pattern
 	}
 	if st := query.Get("status"); st != "" {
-		if st != "draft" && st != "scheduled" && st != "published" {
+		if st != "draft" && st != "scheduled" && st != "published" && st != "changed" {
 			return invalid("invalid_status", "状態の指定が正しくありません")
 		}
 		params.Status = &st

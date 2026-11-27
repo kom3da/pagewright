@@ -1416,6 +1416,33 @@ func TestListContentsPaging(t *testing.T) {
 	}
 }
 
+func TestListChangedContents(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	bob := e.login("bob@example.com")
+	alice.newContent("post", "そのまま", true)
+	alice.newContent("post", "下書き", false)
+	edited := alice.newContent("post", "書き直し前", true)
+	alice.mustDo(http.MethodPut, fmt.Sprintf("/api/contents/%d/draft", edited.ID), map[string]any{"title": "書き直した", "body": json.RawMessage(paragraph)}, nil, http.StatusOK)
+	slugged := alice.newContent("post", "URLだけ", true)
+	alice.mustDo(http.MethodPatch, fmt.Sprintf("/api/contents/%d", slugged.ID), map[string]any{"slug": "only-url"}, nil, http.StatusOK)
+	bEdited := bob.newContent("post", "B", true)
+	bob.mustDo(http.MethodPut, fmt.Sprintf("/api/contents/%d/draft", bEdited.ID), map[string]any{"title": "Bの書き直し", "body": json.RawMessage(paragraph)}, nil, http.StatusOK)
+
+	var got []detail
+	alice.mustDo(http.MethodGet, "/api/contents?type=post&status=changed", nil, &got, http.StatusOK)
+	var titles []string
+	for _, d := range got {
+		titles = append(titles, d.Title)
+		if !d.HasUnpublishedChanges {
+			t.Errorf("%s: hasUnpublishedChanges = false", d.Title)
+		}
+	}
+	if diff := cmp.Diff([]string{"URLだけ", "書き直した"}, titles); diff != "" {
+		t.Errorf("changed (-want +got):\n%s", diff)
+	}
+}
+
 func TestContentSearchAndBuilds(t *testing.T) {
 	e := newEnv(t)
 	alice := e.login("alice@example.com")

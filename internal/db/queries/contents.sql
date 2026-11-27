@@ -14,7 +14,8 @@ SELECT * FROM contents WHERE number = $1;
 -- name: ListContents :many
 -- Contents of a type, newest number first, with the title and id of their
 -- latest revision and their canonical URL. q (an ILIKE pattern, already
--- escaped) matches the title or slug; status filters by derived status.
+-- escaped) matches the title or slug; status filters by derived status,
+-- or 'changed' for published contents with changes not yet published.
 -- before continues after the last number received.
 SELECT c.*, coalesce(lr.title, '')::text AS title, coalesce(lr.id, 0)::bigint AS latest_revision_id,
   r.path AS url
@@ -29,7 +30,9 @@ WHERE c.type = @type
   AND (sqlc.narg(status)::text IS NULL OR sqlc.narg(status)::text = CASE
         WHEN c.published_revision_id IS NOT NULL THEN 'published'
         WHEN c.scheduled_revision_id IS NOT NULL THEN 'scheduled'
-        ELSE 'draft' END)
+        ELSE 'draft' END
+      OR sqlc.narg(status)::text = 'changed' AND c.published_revision_id IS NOT NULL
+        AND (lr.id <> c.published_revision_id OR c.pending_settings IS NOT NULL))
   AND (sqlc.narg(before)::bigint IS NULL OR c.number < sqlc.narg(before)::bigint)
 ORDER BY c.number DESC
 LIMIT @max_rows;

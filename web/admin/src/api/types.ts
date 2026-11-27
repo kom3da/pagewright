@@ -191,7 +191,8 @@ export type ContentCounts = {
 };
 
 /** Filters of GET /api/contents. `q` matches the title or the URL (英数字). */
-export type ContentFilter = { q?: string; status?: ContentStatus };
+/** `changed`: published, with changes not yet published (「未公開の変更あり」). */
+export type ContentFilter = { q?: string; status?: ContentStatus | "changed" };
 
 /** One export of the public site (GET /api/site/builds). */
 export type Build = {
