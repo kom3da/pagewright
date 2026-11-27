@@ -11,6 +11,7 @@
 #   docker compose up -d                       起動（毎回 DB の更新（migrate）を先に行う）
 #   docker compose run --rm cli init ...       最初のサイトと管理者を作る
 #   docker compose run --rm cli login-url ...  ログイン用URLを出す（メールが届かないとき）
+#   docker compose run --rm cli site list      サイトのIDの一覧を出す
 #   docker compose run --rm cli site set-url ...  2つ目以降のサイトの公開URLを設定する
 #   docker compose run --rm cli backup --keep 14  バックアップを取る（backups/ に保存）
 #   docker compose logs -f app                 ログを見る
@@ -88,9 +89,9 @@ services:
       PAGEWRIGHT_SMTP_TLS: ${PAGEWRIGHT_SMTP_TLS:-}
       # app はホストに公開せず、Caddy と nginx を通してだけ届く。その2つの
       # 送る X-Forwarded-For を信じて、回数制限を閲覧者ごとにかける。
-      # Caddy もロードバランサーも置かずに nginx を直接公開するなら、ここを
-      # nginx のIPだけにする（Docker のゲートウェイも信じてしまい、閲覧者が
-      # X-Forwarded-For を偽れるため）。docs/install/https.md を参照。
+      # Caddy もロードバランサーも置かずに nginx を直接公開するなら、
+      # compose.override.yaml でここを nginx のIPだけにする（Docker のゲートウェイ
+      # も信じてしまい、閲覧者が X-Forwarded-For を偽れるため）。docs/install/https.md を参照。
       # fc00::/7 は下の networks の IPv6（Caddy から nginx へは IPv6 で届くことがある）。
       PAGEWRIGHT_TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
       PAGEWRIGHT_MAIL_FROM: ${PAGEWRIGHT_MAIL_FROM:?.env に PAGEWRIGHT_MAIL_FROM を書いてください}
@@ -126,9 +127,10 @@ services:
       - ./nginx/90-pagewright-reload.sh:/docker-entrypoint.d/90-pagewright-reload.sh:ro
 
   # HTTPS（証明書の自動取得）。クラウドのロードバランサーでHTTPSを終端するなら、
-  # このサービスを消し、nginx に ports: ["80:8080"] を付けてそちらへ向ける。
+  # このサービスを止め、nginx に ports: ["80:8080"] を付けてそちらへ向ける。
   # ロードバランサーなしで nginx を直接公開するときは、app の
-  # PAGEWRIGHT_TRUSTED_PROXIES も変える（docs/install/https.md）。
+  # PAGEWRIGHT_TRUSTED_PROXIES も変える。どちらも、このファイルは書き換えずに
+  # compose.override.yaml に書く（アップデートでぶつからないように。docs/install/https.md）。
   caddy:
     image: caddy:2
     restart: unless-stopped
