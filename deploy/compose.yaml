@@ -16,7 +16,8 @@
 
 name: pagewright
 
-x-image: &image ${PAGEWRIGHT_IMAGE:-ghcr.io/kom3da/pagewright:latest}
+# 使う版は .env の PAGEWRIGHT_IMAGE で固定する（latest は使わない。docs/install/versioning.md）
+x-image: &image ${PAGEWRIGHT_IMAGE:?.env に PAGEWRIGHT_IMAGE を書いてください（例 ghcr.io/kom3da/pagewright:0.1.0）}
 
 services:
   # データベース。データは db-data ボリュームに残る。

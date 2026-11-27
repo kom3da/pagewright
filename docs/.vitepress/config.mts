@@ -13,6 +13,7 @@ const install: DefaultTheme.SidebarItem[] = [
       { text: "画像の容量・DBパスワード", link: "/install/settings" },
       { text: "バックアップと復元", link: "/install/backup" },
       { text: "アップデート", link: "/install/update" },
+      { text: "版の付け方と互換性", link: "/install/versioning" },
       { text: "WordPress からの移行", link: "/install/wordpress" },
       { text: "2つ目のサイト", link: "/install/second-site" },
       { text: "困ったとき", link: "/install/troubleshooting" },

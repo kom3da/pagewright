@@ -1,6 +1,6 @@
 # リリースの手順（メンテナー向け）
 
-版の付け方と「互換性を壊す変更」の決まりは [docs/versioning.md](docs/versioning.md)。
+版の付け方と「互換性を壊す変更」の決まりは [docs/install/versioning.md](docs/install/versioning.md)。
 タグ `v*` を push すると `.github/workflows/release.yaml` が動き、CI と同じ検査が通ったら GoReleaser がバイナリ・チェックサム・Docker イメージ（`ghcr.io/kom3da/pagewright`）を公開します。
 
 ## ふだん

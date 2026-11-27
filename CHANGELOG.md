@@ -1,7 +1,7 @@
 # 変更履歴
 
 Pagewright の利用者に関わる変更を、版ごとに書きます。
-書き方は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に、版の付け方は [Semantic Versioning](https://semver.org/lang/ja/) にならいます（1.0 までの決まりは [docs/versioning.md](docs/versioning.md)）。
+書き方は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に、版の付け方は [Semantic Versioning](https://semver.org/lang/ja/) にならいます（1.0 までの決まりは [docs/install/versioning.md](docs/install/versioning.md)）。
 
 各版の「注意」には、アップデートの前に読んでほしいこと（設定の追加、元に戻せないDBの変更など）を書きます。
 GitHub のリリースノートは、この中のその版の節から作ります。

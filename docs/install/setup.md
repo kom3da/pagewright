@@ -3,11 +3,11 @@
 ## 1. ファイルを取得する
 
 ```sh
-sudo git clone --branch v1.0.0 https://github.com/kom3da/pagewright.git /opt/pagewright
+sudo git clone --branch v0.1.0 https://github.com/kom3da/pagewright.git /opt/pagewright
 cd /opt/pagewright/deploy
 ```
 
-`v1.0.0` は [リリース一覧](https://github.com/kom3da/pagewright/releases) にある最新の版に置き換えてください。以降のコマンドはすべて `deploy/` で実行します。
+`v0.1.0` は [リリース一覧](https://github.com/kom3da/pagewright/releases) にある最新の版に置き換えてください。以降のコマンドはすべて `deploy/` で実行します。
 
 ## 2. 設定ファイル（.env）を作る
 
@@ -27,7 +27,7 @@ openssl rand -hex 32   # パスワードを作る。2回実行して、それぞ
 | `PAGEWRIGHT_APP_DB_PASSWORD` | アプリがDBに接続するときのパスワード（もう1つ作ったもの） |
 | `PAGEWRIGHT_SMTP_ADDR` | メールを送る SMTP サーバー（`ホスト名:ポート`） |
 | `PAGEWRIGHT_MAIL_FROM` | メールの差出人 |
-| `PAGEWRIGHT_IMAGE` | 使う版。`ghcr.io/kom3da/pagewright:1.0.0` のように、手順1と同じ版に固定する |
+| `PAGEWRIGHT_IMAGE` | 使う版。手順1で取得した版（`ghcr.io/kom3da/pagewright:0.1.0` など）が入っているので、そのままにする |
 
 `PAGEWRIGHT_SITE_ID` は手順5で書くので、いまは空のままにします。
 パスワードは英数字だけにしてください（記号が入ると接続できないことがあります）。
