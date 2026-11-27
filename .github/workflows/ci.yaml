@@ -61,6 +61,9 @@ jobs:
           restore-keys: |
             go-${{ runner.os }}-${{ hashFiles('go.sum', 'mise.toml') }}-
             go-${{ runner.os }}-
+      # Includes internal/db/migrations: every migration is applied (and
+      # rolled back and applied again) on a database with data, then the
+      # app builds a site from it; out-of-order versions are refused.
       - name: go test -race
         run: go test -race ./...
       - name: golangci-lint
@@ -78,6 +81,33 @@ jobs:
             ~/go/pkg/mod
             ~/.cache/go-build
           key: ${{ steps.go-cache.outputs.cache-primary-key }}
+
+  # goose records only the version of an applied migration, so editing a
+  # released file never reaches databases that already ran it. Change
+  # released schema with a new migration instead.
+  released-migrations:
+    name: Released migrations are unchanged
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the tags
+          persist-credentials: false
+      - name: Compare with the previous release tag
+        run: |
+          # HEAD^ so that a tag build compares with the release before it.
+          if ! last=$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD^ 2>/dev/null); then
+            echo "No release yet."
+            exit 0
+          fi
+          changed=$(git diff --name-only --diff-filter=DMR "$last" HEAD -- ':(glob)internal/db/migrations/*.sql')
+          if [ -n "$changed" ]; then
+            echo "::error::Migrations released in $last were changed or removed. Add a new migration instead:"
+            echo "$changed"
+            exit 1
+          fi
+          echo "Migrations released in $last are unchanged."
 
   admin:
     name: Admin UI (lint, test, build)
