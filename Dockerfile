@@ -76,9 +76,9 @@ COPY --from=pagefind /out/pagefind_extended /usr/local/bin/pagefind_extended
 ENV PAGEWRIGHT_DATA_DIR=/data \
     PAGEWRIGHT_ADDR=:8080 \
     PAGEWRIGHT_PAGEFIND=/usr/local/bin/pagefind_extended \
-    # nginx serves the public site in production. The app treats an empty
-    # value as unset (and would listen on :8081), so keep the preview on
-    # loopback where nothing outside the container can reach it.
+    # nginx serves the public site in production. An empty value turns the
+    # app's site preview off; keep it on loopback (also the app's default)
+    # where nothing outside the container can reach it.
     PAGEWRIGHT_SITE_ADDR=127.0.0.1:8081
 # `import-wxr` defaults to --media-root ./data/media, which is /data/media from here.
 # `backup` writes to ./backups, i.e. /backups (bind-mounted by compose.yaml).
