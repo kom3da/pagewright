@@ -262,7 +262,23 @@ var (
 	errUnauthenticated = &apiError{http.StatusUnauthorized, "unauthenticated", "ログインしてください"}
 	errNotFound        = &apiError{http.StatusNotFound, "not_found", "見つかりません"}
 	errURLTaken        = &apiError{http.StatusConflict, "conflict", "このURLはすでに使われています。別のURLにしてください"}
+	errConflict        = &apiError{http.StatusConflict, "conflict", "同じ内容のものがすでにあるため、保存できませんでした。画面を読み込み直して確かめてください"}
 )
+
+// uniqueErrors maps a unique constraint (or unique index) to the error it
+// means for the admin, with the field it is about. Constraints not listed
+// get errConflict, which names no field.
+var uniqueErrors = map[string]struct {
+	err   *apiError
+	field string
+}{
+	"contents_slug_key":         {errURLTaken, "slug"},
+	"routes_tenant_id_path_key": {errURLTaken, "slug"},
+	"categories_tenant_id_slug_key": {&apiError{http.StatusConflict, "conflict",
+		"このURL（英数字）は、ほかのカテゴリーですでに使われています。別のURLにしてください"}, "slug"},
+	"tags_tenant_id_slug_key": {&apiError{http.StatusConflict, "conflict",
+		"このURL（英数字）は、ほかのタグですでに使われています。別のURLにしてください"}, "slug"},
+}
 
 func invalid(code, msg string) *apiError {
 	return &apiError{http.StatusUnprocessableEntity, code, msg}
@@ -281,7 +297,7 @@ func (s *Server) finish(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.As(err, &ae):
 	case errors.Is(err, routing.ErrURLTaken):
-		ae = errURLTaken
+		ae, field = errURLTaken, "slug"
 	case errors.Is(err, routing.ErrReservedPath):
 		ae = invalid("reserved_slug", "「posts」「media」「search」「pagefind」はサイトの仕組みで使っているため、いちばん上の固定ページのURLには使えません")
 	case errors.Is(err, content.ErrParentLoop):
@@ -293,7 +309,12 @@ func (s *Server) finish(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, pgx.ErrNoRows):
 		ae = errNotFound
 	case errors.As(err, &pe) && pe.Code == "23505":
-		ae = errURLTaken
+		ae = errConflict
+		if u, ok := uniqueErrors[pe.ConstraintName]; ok {
+			ae, field = u.err, u.field
+		} else {
+			s.Logger.Warn("unexpected unique violation", "method", r.Method, "path", r.URL.Path, "constraint", pe.ConstraintName)
+		}
 	case errors.As(err, &pe) && pe.Code == "23503":
 		ae = invalid("invalid_reference", "指定したものが見つかりません")
 	case errors.As(err, &pe) && pe.Code == "23514":
@@ -326,7 +347,6 @@ var errorFields = map[string]string{
 	"invalid_fields":       "fields",
 	"invalid_slug":         "slug",
 	"reserved_slug":        "slug",
-	"conflict":             "slug",
 	"invalid_parent":       "parentId",
 	"invalid_name":         "name",
 	"invalid_publish_at":   "publishAt",

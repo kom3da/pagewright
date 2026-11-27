@@ -912,6 +912,37 @@ func TestDeleteParentCategory(t *testing.T) {
 	}
 }
 
+func TestTaxonomySlugConflict(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	bob := e.login("bob@example.com")
+	alice.mustDo(http.MethodPost, "/api/categories", map[string]any{"name": "お知らせ", "slug": "news"}, nil, http.StatusCreated)
+	alice.mustDo(http.MethodPost, "/api/tags", map[string]any{"name": "イベント", "slug": "event"}, nil, http.StatusCreated)
+	var other struct{ ID int64 }
+	alice.mustDo(http.MethodPost, "/api/tags", map[string]any{"name": "その他", "slug": "other"}, &other, http.StatusCreated)
+
+	tests := []struct {
+		name, method, path string
+		in                 map[string]any
+		word               string
+	}{
+		{"new category", http.MethodPost, "/api/categories", map[string]any{"name": "別", "slug": "news"}, "カテゴリー"},
+		{"new tag", http.MethodPost, "/api/tags", map[string]any{"name": "別", "slug": "event"}, "タグ"},
+		{"renamed tag", http.MethodPatch, fmt.Sprintf("/api/tags/%d", other.ID), map[string]any{"slug": "event"}, "タグ"},
+	}
+	for _, tt := range tests {
+		var out struct {
+			Error struct{ Code, Message, Field string } `json:"error"`
+		}
+		if got := alice.do(tt.method, tt.path, tt.in, &out); got != http.StatusConflict || out.Error.Code != "conflict" || out.Error.Field != "slug" || !strings.Contains(out.Error.Message, tt.word) {
+			t.Errorf("%s = %d %+v, want 409 conflict on slug naming %s", tt.name, got, out.Error, tt.word)
+		}
+	}
+	// Another site may use the same slugs.
+	bob.mustDo(http.MethodPost, "/api/categories", map[string]any{"name": "お知らせ", "slug": "news"}, nil, http.StatusCreated)
+	bob.mustDo(http.MethodPost, "/api/tags", map[string]any{"name": "イベント", "slug": "event"}, nil, http.StatusCreated)
+}
+
 func TestLoginLinkRateLimit(t *testing.T) {
 	e := newEnv(t)
 	c := e.anon()
