@@ -450,6 +450,34 @@ describe("editor", () => {
     expect(db.contents.find((c) => c.id === 2)?.slug).toBe("works-2026");
   });
 
+  it("keeps the URL of a published page until its changes are published", async () => {
+    const { user } = await openEditor("/pages/4");
+    const slug = screen.getByLabelText("ページのURL（英数字）");
+    expect(screen.getByText(/古いURLは新しいURLへ自動で転送されます/)).toHaveTextContent(
+      "「変更を公開する」を押したときに新しいURLになり",
+    );
+    await user.clear(slug);
+    await user.type(slug, "about");
+    await user.click(screen.getByRole("button", { name: "保存（まだ公開しない）" }));
+    expect(await screen.findByText(/公開サイトは変わりません/)).toBeInTheDocument();
+    expect(await screen.findByText("未公開の変更あり")).toBeInTheDocument();
+    expect(slug).toHaveValue("about");
+    expect(db.contents.find((c) => c.id === 4)).toMatchObject({
+      slug: "about",
+      url: "/company/",
+      pendingSettings: true,
+      hasUnpublishedChanges: true,
+    });
+
+    await user.click(screen.getByRole("button", { name: "変更を公開する" }));
+    expect(await screen.findByText(/^公開しました。/)).toBeInTheDocument();
+    expect(db.contents.find((c) => c.id === 4)).toMatchObject({
+      url: "/about/",
+      pendingSettings: false,
+      hasUnpublishedChanges: false,
+    });
+  });
+
   it("shows server errors at the field named by error.field", async () => {
     failWith(
       "put",
@@ -666,12 +694,29 @@ describe("publication date", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("保存していない変更があります")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "保存（まだ公開しない）" }));
-    // Settings of a published post are live at once; the notice says so.
-    expect(await screen.findByText(/もう公開サイトに反映されています/)).toBeInTheDocument();
+    // Settings of a published post wait for 「変更を公開する」, like the title and body.
+    expect(
+      await screen.findByText(
+        "保存しました。「変更を公開する」を押すまで、公開サイトは変わりません。",
+      ),
+    ).toBeInTheDocument();
     expect(requests.find((r) => r.method === "PATCH")?.body).toMatchObject({
       publishedAt: "2026-01-15T01:00:00Z",
     });
-    expect(db.contents.find((c) => c.id === 3)?.publishedAt).toBe("2026-01-15T01:00:00Z");
+    expect(db.contents.find((c) => c.id === 3)).toMatchObject({
+      publishedAt: "2026-01-15T01:00:00Z",
+      pendingSettings: true,
+    });
+    expect(db.liveSettings[3]?.publishedAt).toBe("2026-11-20T01:00:00Z");
+    // The saved date stays in the fields, and the live date is not claimed as published.
+    expect(within(group()).getByLabelText("日付")).toHaveValue("2026-01-15");
+    const card = screen.getByRole("region", { name: "公開" });
+    expect(card).not.toHaveTextContent("に公開しました。");
+
+    await user.click(screen.getByRole("button", { name: "変更を公開する" }));
+    expect(await screen.findByText(/^公開しました。/)).toBeInTheDocument();
+    expect(db.liveSettings[3]).toBeUndefined();
+    expect(db.contents.find((c) => c.id === 3)?.pendingSettings).toBe(false);
   });
 
   it("does not send publishedAt when it was not changed", async () => {

@@ -337,19 +337,14 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         notify("変更はありません。");
         return;
       }
-      const settingsChanged = settingsDirty;
       if (!(await persist())) return;
       if (!isPublic) {
         notify("下書きを保存しました。");
         return;
       }
-      // Only the title and body wait for 「変更を公開する」; the settings are live at once
-      // (PATCH /api/contents rebuilds the site for published contents).
-      notify(
-        settingsChanged
-          ? "保存しました。公開日・URL・カテゴリとタグの変更は、もう公開サイトに反映されています。タイトルと本文の変更は「変更を公開する」を押すまで公開されません。"
-          : "保存しました。「変更を公開する」を押すまで、公開サイトは変わりません。",
-      );
+      // Title, body and settings all wait for 「変更を公開する」 (PATCH /api/contents keeps
+      // the settings of a published content pending).
+      notify("保存しました。「変更を公開する」を押すまで、公開サイトは変わりません。");
     });
 
   const publish = () =>
@@ -755,9 +750,11 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
             {isPublic ? (
               <>
                 <Text size="sm">
+                  {/* With pending settings, publishedAt is the saved date, not the live one. */}
                   {content.publishedAt &&
+                    !content.pendingSettings &&
                     `${formatJapanDateTime(content.publishedAt)} に公開しました。`}
-                  直したタイトルと本文は、「変更を公開する」を押すまで公開サイトに出ません。
+                  直したタイトル・本文と、公開日やURLなどの設定は、「変更を公開する」を押すまで公開サイトに出ません。
                 </Text>
                 <Controller
                   control={form.control}
@@ -765,7 +762,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
                   render={({ field, fieldState }) => (
                     <DateTimeFields
                       legend="公開日（日本時間）"
-                      hint="サイトに表示される公開日です。今より前の日時に変えられます。保存するとすぐ公開サイトに反映されます（「保存（まだ公開しない）」でも反映されます）。"
+                      hint="サイトに表示される公開日です。今より前の日時に変えられます。変えた公開日は、「変更を公開する」を押すと公開サイトに出ます。"
                       value={field.value}
                       onChange={field.onChange}
                       error={fieldState.error?.message}
@@ -834,7 +831,7 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
             />
             {isPublic && (
               <Text size="sm" c="dimmed">
-                公開中にURLを変えると、古いURLは新しいURLへ自動で転送されます。
+                公開中にURLを変えると、「変更を公開する」を押したときに新しいURLになり、古いURLは新しいURLへ自動で転送されます。
               </Text>
             )}
             {type === "page" && (

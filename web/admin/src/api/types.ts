@@ -50,6 +50,11 @@ export type ContentDetail = ContentSummary & {
   revision: Revision;
   publishedRevisionId: number | null;
   scheduledRevisionId: number | null;
+  /**
+   * The settings shown (slug, parentId, categoryIds, tagIds, publishedAt) were saved on a live
+   * content and wait for 「変更を公開する」; `url` is still the live one.
+   */
+  pendingSettings: boolean;
 };
 
 export type DraftInput = {

@@ -35,7 +35,25 @@ type Db = {
   /** Finished builds, newest first (GET /api/site/builds). */
   buildLog: Build[];
   nextId: number;
+  /** Live settings of contents whose saved settings wait for publishing, by content id. */
+  liveSettings: Record<number, LiveSettings>;
 };
+
+type LiveSettings = Pick<
+  ContentDetail,
+  "slug" | "parentId" | "categoryIds" | "tagIds" | "publishedAt"
+>;
+
+const settingsOf = (c: ContentDetail): LiveSettings => ({
+  slug: c.slug,
+  parentId: c.parentId,
+  categoryIds: [...c.categoryIds],
+  tagIds: [...c.tagIds],
+  publishedAt: c.publishedAt,
+});
+
+/** The settings of a content as the public site has them. */
+const live = (c: ContentDetail): ContentDetail => ({ ...c, ...db.liveSettings[c.id] });
 
 const now = () => new Date().toISOString();
 
@@ -80,6 +98,7 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
     },
     publishedRevisionId: null,
     scheduledRevisionId: null,
+    pendingSettings: false,
     ...extra,
   });
   return {
@@ -183,6 +202,7 @@ export function seedDb(overrides: Partial<Db> = {}): Db {
       },
     ],
     nextId: 100,
+    liveSettings: {},
     ...overrides,
   };
 }
@@ -278,17 +298,30 @@ const error = (status: number, code: string, message: string) =>
     { status },
   );
 
+/** Lists show the live settings, as the server does. */
 const summary = (c: ContentDetail): ContentSummary => {
-  const { categoryIds, tagIds, revision, publishedRevisionId, scheduledRevisionId, ...s } = c;
+  const {
+    categoryIds,
+    tagIds,
+    revision,
+    publishedRevisionId,
+    scheduledRevisionId,
+    pendingSettings,
+    ...s
+  } = live(c);
   return s;
 };
 
 /** Recomputes the derived fields after a change, as the server does. */
 function refresh(c: ContentDetail) {
   c.status = c.publishedRevisionId ? "published" : c.scheduledRevisionId ? "scheduled" : "draft";
+  // Saved settings wait only while the content is live.
+  if (!c.publishedRevisionId) delete db.liveSettings[c.id];
+  c.pendingSettings = c.id in db.liveSettings;
   c.hasUnpublishedChanges =
-    c.publishedRevisionId !== null && c.publishedRevisionId !== c.revision.id;
-  c.url = c.publishedRevisionId ? contentUrl(c) : null;
+    c.publishedRevisionId !== null &&
+    (c.publishedRevisionId !== c.revision.id || c.pendingSettings);
+  c.url = c.publishedRevisionId ? contentUrl(live(c)) : null;
   c.updatedAt = now();
 }
 
@@ -589,6 +622,7 @@ export const handlers = [
       },
       publishedRevisionId: null,
       scheduledRevisionId: null,
+      pendingSettings: false,
     };
     db.contents.push(c);
     return HttpResponse.json(c, { status: 201 });
@@ -634,7 +668,8 @@ export const handlers = [
     const input = (await request.json()) as Partial<ContentDetail>;
     if (input.slug !== undefined && input.slug !== null) {
       if (slugProblem(input.slug)) return invalidSlug();
-      if (db.contents.some((o) => o.id !== c.id && o.type === c.type && o.slug === input.slug)) {
+      const taken = (o: ContentDetail) => o.slug === input.slug || live(o).slug === input.slug;
+      if (db.contents.some((o) => o.id !== c.id && o.type === c.type && taken(o))) {
         return error(409, "conflict", "このURLはすでに使われています。別のURLにしてください。");
       }
     }
@@ -647,7 +682,11 @@ export const handlers = [
           "公開日は今より前の日時にしてください。先の日時に公開するときは「日時を指定して公開」を使ってください",
         );
       }
-      c.publishedAt = at.toISOString().replace(".000Z", "Z");
+    }
+    // A live content keeps its live settings until 「変更を公開する」.
+    const before = db.liveSettings[c.id] ?? settingsOf(c);
+    if (input.publishedAt !== undefined && input.publishedAt !== null) {
+      c.publishedAt = new Date(input.publishedAt).toISOString().replace(".000Z", "Z");
     }
     Object.assign(c, {
       ...("slug" in input && { slug: input.slug }),
@@ -655,6 +694,11 @@ export const handlers = [
       ...(input.categoryIds && { categoryIds: input.categoryIds }),
       ...(input.tagIds && { tagIds: input.tagIds }),
     });
+    if (c.publishedRevisionId) {
+      const same = JSON.stringify(settingsOf(c)) === JSON.stringify(before);
+      if (same) delete db.liveSettings[c.id];
+      else db.liveSettings[c.id] = before;
+    }
     refresh(c);
     return HttpResponse.json(c);
   }),
@@ -667,7 +711,8 @@ export const handlers = [
     const text = await request.text();
     const input = (text ? JSON.parse(text) : {}) as { baseRevisionId?: number };
     if (staleBase(c, input.baseRevisionId)) return editConflict();
-    // Like the server, publishing now cancels a pending schedule.
+    // Like the server, publishing now cancels a pending schedule and applies saved settings.
+    delete db.liveSettings[c.id];
     Object.assign(c, {
       publishedRevisionId: c.revision.id,
       publishedAt: c.publishedAt ?? now(),
@@ -684,7 +729,8 @@ export const handlers = [
     if (denied) return denied;
     const c = findContent(params.id);
     if (!c) return error(404, "not_found", "見つかりません。");
-    // Unpublishing also cancels a pending schedule.
+    // Unpublishing also cancels a pending schedule; saved settings are kept as the draft's.
+    delete db.liveSettings[c.id];
     Object.assign(c, { publishedRevisionId: null, scheduledAt: null, scheduledRevisionId: null });
     refresh(c);
     db.builds++;
@@ -1065,6 +1111,7 @@ function usesMedia(c: ContentDetail, mediaId: number) {
 function contentUrl(c: ContentDetail) {
   const last = c.slug ?? String(c.number);
   if (c.type === "post") return `/posts/${last}/`;
-  const parent = db.contents.find((p) => p.id === c.parentId);
+  const found = db.contents.find((p) => p.id === c.parentId);
+  const parent = found && live(found);
   return parent ? `/${parent.slug ?? parent.number}/${last}/` : `/${last}/`;
 }
