@@ -2,8 +2,10 @@
 
 WordPress の「ツール → エクスポート」で書き出したファイル（WXR）を取り込めます。
 まず `--dry-run` で、変換できないものの一覧を確認します。
+ファイルは `deploy/` に置き、`cli`（ユーザーID 10001）が読めるようにしておきます。
 
 ```sh
+chmod 644 export.xml
 docker compose run --rm -v "$PWD/export.xml:/import/export.xml:ro" cli \
   import-wxr --site <サイトのID> --author-email you@example.co.jp --media-root /data/media --dry-run /import/export.xml
 ```
