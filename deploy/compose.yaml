@@ -1,4 +1,4 @@
-# Pagewright 本番用の構成（サーバー1台で、1つのサイトを公開する）
+# Pagewright 本番用の構成（サーバー1台。2つ目以降のサイトの公開は docs/install.md）
 #
 # 使い方は docs/install.md を参照。設定はこのファイルと同じ場所の .env に書く
 # （.env.example をコピーして作る）。
@@ -11,6 +11,7 @@
 #   docker compose up -d                       起動（毎回 DB の更新（migrate）を先に行う）
 #   docker compose run --rm cli init ...       最初のサイトと管理者を作る
 #   docker compose run --rm cli login-url ...  ログイン用URLを出す（メールが届かないとき）
+#   docker compose run --rm cli site set-url ...  2つ目以降のサイトの公開URLを設定する
 #   docker compose logs -f app                 ログを見る
 
 name: pagewright
@@ -39,13 +40,13 @@ services:
       retries: 30
 
   # 管理用のコマンド。`up` のたびに migrate（DBを最新の形にする）を実行して終わる。
-  # init・login-url・import-wxr もこのサービスで実行する。
+  # init・login-url・site・import-wxr もこのサービスで実行する。
   cli:
     image: *image
     command: ["migrate"]
     restart: "no"
     environment:
-      # テーブルの所有者として接続する（migrate・init・login-url）
+      # テーブルの所有者として接続する（migrate・init・login-url・site）
       PAGEWRIGHT_MIGRATE_DATABASE_URL: postgres://pagewright:${POSTGRES_PASSWORD}@db:5432/pagewright?sslmode=disable
       # import-wxr はアプリ用ユーザーで接続する
       PAGEWRIGHT_DATABASE_URL: postgres://pagewright_app:${PAGEWRIGHT_APP_DB_PASSWORD}@db:5432/pagewright?sslmode=disable
@@ -121,6 +122,7 @@ services:
       - "${PAGEWRIGHT_HTTPS_PORT:-443}:443/udp"
     environment:
       PAGEWRIGHT_SITE_DOMAIN: ${PAGEWRIGHT_SITE_DOMAIN}
+      PAGEWRIGHT_EXTRA_SITE_DOMAINS: ${PAGEWRIGHT_EXTRA_SITE_DOMAINS:-}
       PAGEWRIGHT_ADMIN_DOMAIN: ${PAGEWRIGHT_ADMIN_DOMAIN}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
