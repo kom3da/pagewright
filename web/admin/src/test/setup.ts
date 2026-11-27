@@ -5,6 +5,7 @@ import { notifications } from "@mantine/notifications";
 import { cleanup } from "@testing-library/react";
 import { getResponse, type RequestHandler } from "msw";
 import { afterAll, afterEach, beforeAll } from "vitest";
+import { forgetShownSite } from "../api/client";
 import { resetDb } from "../mocks/handlers";
 import { server } from "./server";
 
@@ -107,5 +108,6 @@ afterEach(() => {
   server.resetHandlers();
   server.events.removeAllListeners();
   resetDb();
+  forgetShownSite();
 });
 afterAll(() => server.close());

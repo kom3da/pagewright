@@ -68,10 +68,28 @@ export const errorMessage = (e: unknown): string =>
 
 type Body = FormData | object | undefined;
 
+/**
+ * The site this tab shows, from the last `Me`. Sent with every request: ids are per site, so
+ * after the site is switched in another tab the server refuses this tab's requests (409
+ * site_changed) instead of acting on the other site's item with the same id.
+ */
+let shownSiteId: string | null = null;
+
+const rememberSite = (me: Me) => {
+  shownSiteId = me.currentSiteId;
+  return me;
+};
+
+/** Forgets the shown site (after logout; tests call it between cases). */
+export const forgetShownSite = () => {
+  shownSiteId = null;
+};
+
 async function request<T>(method: string, path: string, body?: Body): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   // Required by the API for CSRF protection on every non-GET request.
   if (method !== "GET") headers["X-Pagewright"] = "1";
+  if (shownSiteId) headers["X-Pagewright-Site"] = shownSiteId;
   let payload: BodyInit | undefined;
   if (body instanceof FormData) {
     payload = body;
@@ -119,10 +137,10 @@ const del = (path: string) => request<void>("DELETE", path);
 
 export const api = {
   requestLoginLink: (email: string) => post<void>("/auth/login-link", { email }),
-  verify: (token: string) => post<Me>("/auth/verify", { token }),
-  logout: () => post<void>("/auth/logout"),
-  me: () => get<Me>("/me"),
-  selectSite: (siteId: string) => post<Me>("/me/site", { siteId }),
+  verify: (token: string) => post<Me>("/auth/verify", { token }).then(rememberSite),
+  logout: () => post<void>("/auth/logout").then(forgetShownSite),
+  me: () => get<Me>("/me").then(rememberSite),
+  selectSite: (siteId: string) => post<Me>("/me/site", { siteId }).then(rememberSite),
 
   /** Newest number first; `page` continues below the last number received (`before`). */
   listContents: (

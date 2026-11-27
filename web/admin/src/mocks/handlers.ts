@@ -332,6 +332,10 @@ function guard(request: Request, { site = true } = {}) {
   }
   if (!db.loggedIn) return error(401, "unauthenticated", "ログインしてください。");
   if (site && !db.me.currentSiteId) return error(403, "no_site", "サイトを選んでください。");
+  const shown = request.headers.get("X-Pagewright-Site");
+  if (site && shown && shown !== db.me.currentSiteId) {
+    return error(409, "site_changed", "別の画面で管理するサイトが切り替えられました。");
+  }
   return null;
 }
 

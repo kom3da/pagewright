@@ -73,9 +73,11 @@ type Server struct {
 
 const (
 	sessionCookie = "pw_session"
-	loginTTL      = 15 * time.Minute
-	sessionTTL    = 30 * 24 * time.Hour
-	maxJSONBytes  = 4 << 20
+	// siteHeader carries the site (tenant id) the admin screen shows.
+	siteHeader   = "X-Pagewright-Site"
+	loginTTL     = 15 * time.Minute
+	sessionTTL   = 30 * 24 * time.Hour
+	maxJSONBytes = 4 << 20
 )
 
 // New returns a Server.
@@ -186,6 +188,12 @@ func (s *Server) site(h handler) http.Handler {
 	return s.authed(func(w http.ResponseWriter, r *http.Request, sess *session) error {
 		if sess.tenantID == uuid.Nil {
 			return &apiError{http.StatusForbidden, "no_site", "サイトを選んでください"}
+		}
+		// Ids are per site, so a tab still showing another site (the
+		// session switched in another tab) must not act on this site's
+		// item with the same id. The admin sends the site it shows.
+		if want := r.Header.Get(siteHeader); want != "" && want != sess.tenantID.String() {
+			return &apiError{http.StatusConflict, "site_changed", "別の画面で管理するサイトが切り替えられました。画面を読み込み直してから、もう一度お試しください"}
 		}
 		return h(w, r.WithContext(db.WithTenant(r.Context(), sess.tenantID)), sess)
 	})

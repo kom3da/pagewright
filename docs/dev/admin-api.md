@@ -8,10 +8,11 @@
 - キーは camelCase。日時は RFC 3339（UTC）。ID は数値、ユーザーとテナントの ID は UUID 文字列。数値の ID はサイトごとの連番で、別のサイトにも同じ ID がある（ID が指すのは、いま選んでいるサイトのもの）
 - 認証：HTTP-only の Cookie `pw_session`（SameSite=Lax、本番は Secure）
 - CSRF 対策：GET 以外は、ヘッダー `X-Pagewright: 1` を必ず付ける。付いていなければ 403
+- 表示中のサイト：管理画面は、いま表示しているサイトの ID（`Me.currentSiteId`）をヘッダー `X-Pagewright-Site` に付けて送る。サイトを選んで使う API（`/api/auth/*`・`/api/me` 以外）は、セッションで選んでいるサイトと違えば 409 `site_changed` で何もしない。ID はサイトごとの連番なので、別のタブでサイトを切り替えたあとに古いタブが、同じ ID の別のサイトのものを変えてしまわないため。ヘッダーがなければ確かめない
 - エラー：`{"error": {"code": "invalid_slug", "message": "ページのURLは英小文字・数字・ハイフンで入力してください", "field": "slug"}}`。`message` は管理画面にそのまま出せる日本語。`field` は入力欄に関係するエラーのときだけ付き、リクエストの項目名（`slug`、`title`、`parentId`、`name`、`altText`、`file`、`publishAt` など）が入る
   - 401 `unauthenticated`：ログインしていない
   - 403 `no_site`：サイトを選んでいない／`forbidden`：権限がない／`csrf`
-  - 404 `not_found`、409 `conflict`（URL の重複など）、422 入力エラー（`code` は項目ごと）
+  - 404 `not_found`、409 `conflict`（URL の重複など）／`site_changed`（上の「表示中のサイト」）、422 入力エラー（`code` は項目ごと）
   - どの API でも起こりうる 422：`invalid_reference`（存在しないものを指している。DB の外部キー違反）、`invalid_value`（値が DB の制約に合わない。DB の CHECK 違反）。どちらも `field` なし。管理画面の検査をすり抜けた入力や、ほかの人が同時に消したものを指したときに出る
 - テナントは画面上「サイト」と呼ぶ
 

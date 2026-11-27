@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { db } from "../mocks/handlers";
 import { failWith, recordRequests } from "../test/utils";
 import { ApiError, api, errorField } from "./client";
 
@@ -14,6 +15,28 @@ describe("api client", () => {
     ]);
     for (const [, init] of fetchSpy.mock.calls) expect(init?.credentials).toBe("same-origin");
     fetchSpy.mockRestore();
+  });
+
+  it("sends the site it shows, so a tab left on another site is refused", async () => {
+    const requests = recordRequests();
+    const me = await api.me();
+    await api.listTags();
+    const other = me.sites[1].id;
+    // Another tab switches the session's site.
+    db.me.currentSiteId = other;
+    expect(await api.deleteTag(1).catch((e) => e)).toMatchObject({
+      status: 409,
+      code: "site_changed",
+    });
+    await api.selectSite(other);
+    await api.listTags();
+    expect(requests.map((r) => [r.method, r.path, r.headers.get("X-Pagewright-Site")])).toEqual([
+      ["GET", "/api/me", null],
+      ["GET", "/api/tags", me.currentSiteId],
+      ["DELETE", "/api/tags/1", me.currentSiteId],
+      ["POST", "/api/me/site", me.currentSiteId],
+      ["GET", "/api/tags", other],
+    ]);
   });
 
   it("throws ApiError with the server's code and Japanese message", async () => {

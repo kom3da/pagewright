@@ -146,3 +146,49 @@ func TestOverlappingIDs(t *testing.T) {
 		t.Errorf("A's next content id = %d, want %d", next.ID, a.post.ID+1)
 	}
 }
+
+// A tab left on site A after the session switched to B (in another tab)
+// must not act on B's item that has the same id. The admin sends the site
+// it shows in X-Pagewright-Site; a mismatch is 409 site_changed.
+func TestStaleSiteIsRefused(t *testing.T) {
+	e := newEnvOverlappingIDs(t)
+	alice := e.login("alice@example.com")
+	bob := e.login("bob@example.com")
+	aPost := alice.newContent("post", "Aの記事", true)
+	bPost := bob.newContent("post", "Bの記事", true)
+	if aPost.ID != bPost.ID {
+		t.Fatalf("ids differ (%d, %d), so this test checks nothing", aPost.ID, bPost.ID)
+	}
+
+	carol := e.login("carol@example.com") // editor of both sites
+	carol.mustDo(http.MethodPost, "/api/me/site", map[string]string{"siteId": e.tenantB.String()}, nil, http.StatusOK)
+	withSite := func(method, path string, site string) (int, string) {
+		t.Helper()
+		req, _ := http.NewRequest(method, e.srv.URL+path, nil)
+		req.Header.Set("X-Pagewright", "1")
+		req.Header.Set("X-Pagewright-Site", site)
+		var out struct {
+			Error struct{ Code string } `json:"error"`
+		}
+		status := carol.send(req, &out)
+		return status, out.Error.Code
+	}
+	path := fmt.Sprintf("/api/contents/%d", bPost.ID)
+	for _, m := range []string{http.MethodGet, http.MethodDelete} {
+		if status, code := withSite(m, path, e.tenantA.String()); status != http.StatusConflict || code != "site_changed" {
+			t.Errorf("%s %s from a tab on A = %d %s, want 409 site_changed", m, path, status, code)
+		}
+	}
+	if status, _ := withSite(http.MethodGet, path, e.tenantB.String()); status != http.StatusOK {
+		t.Errorf("GET from a tab on B = %d, want 200", status)
+	}
+	// The session endpoints answer whatever the tab shows, so it can catch up.
+	if status, _ := withSite(http.MethodGet, "/api/me", e.tenantA.String()); status != http.StatusOK {
+		t.Errorf("GET /api/me from a tab on A = %d, want 200", status)
+	}
+	var got detail
+	bob.mustDo(http.MethodGet, path, nil, &got, http.StatusOK)
+	if got.Title != "Bの記事" {
+		t.Errorf("B's content = %+v", got)
+	}
+}
