@@ -37,16 +37,27 @@ func runBackup(ctx context.Context, cfg config.Config, args []string) error {
 	if fs.NArg() > 0 || *keep < 0 {
 		return errors.New("使い方: pagewright backup [--out ディレクトリ] [--keep 残す数]")
 	}
-	if err := os.MkdirAll(*out, 0o700); err != nil {
-		return fmt.Errorf("%s を作れません（書き込める場所か確認してください）: %w", *out, err)
+	if err := writeBackup(ctx, cfg, *out); err != nil {
+		return err
+	}
+	if *keep > 0 {
+		return pruneBackups(*out, *keep)
+	}
+	return nil
+}
+
+// writeBackup writes one archive to out and prints its name.
+func writeBackup(ctx context.Context, cfg config.Config, out string) error {
+	if err := os.MkdirAll(out, 0o700); err != nil {
+		return fmt.Errorf("%s を作れません（書き込める場所か確認してください）: %w", out, err)
 	}
 
 	name := "pagewright-" + time.Now().UTC().Format("20060102T150405Z") + ".tar.gz"
-	final := filepath.Join(*out, name)
+	final := filepath.Join(out, name)
 	// Personal data (inquiries): readable by the owner only.
-	f, err := os.CreateTemp(*out, ".pagewright-*.partial")
+	f, err := os.CreateTemp(out, ".pagewright-*.partial")
 	if err != nil {
-		return fmt.Errorf("%s に書き込めません（Docker では、ホストのディレクトリの持ち主をユーザーID 10001 にしてください）: %w", *out, err)
+		return fmt.Errorf("%s に書き込めません（Docker では、ホストのディレクトリの持ち主をユーザーID 10001 にしてください）: %w", out, err)
 	}
 	tmp := f.Name()
 	defer func() { _ = os.Remove(tmp) }() // after a failure; gone once renamed
@@ -55,7 +66,7 @@ func runBackup(ctx context.Context, cfg config.Config, args []string) error {
 		return err
 	}
 	m, err := backup.Write(ctx, backup.Options{
-		DatabaseURL: cfg.MigrateDatabaseURL, MediaDir: cfg.MediaDir(), TempDir: *out, Version: version,
+		DatabaseURL: cfg.MigrateDatabaseURL, MediaDir: cfg.MediaDir(), TempDir: out, Version: version,
 	}, f)
 	if err == nil {
 		err = f.Sync()
@@ -77,10 +88,6 @@ func runBackup(ctx context.Context, cfg config.Config, args []string) error {
 		rows += t.Rows
 	}
 	fmt.Printf("バックアップを作りました: %s（データ %d 行、ファイル %d 個）\n", final, rows, len(m.Files)-len(m.Tables))
-
-	if *keep > 0 {
-		return pruneBackups(*out, *keep)
-	}
 	return nil
 }
 
@@ -111,16 +118,26 @@ func pruneBackups(dir string, keep int) error {
 // run again: a build of every site and the scheduled publishing.
 func runRestore(ctx context.Context, cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("restore", flag.ContinueOnError)
-	force := fs.Bool("force", false, "データベースと画像に今あるものを消して上書きする")
+	force := fs.Bool("force", false, "データベースと画像に今あるものを消して上書きする（先に今の状態を --out にバックアップする）")
+	out := fs.String("out", "backups", "--force のとき、上書きする前の状態のバックアップを保存するディレクトリ")
+	noBackup := fs.Bool("no-backup", false, "--force のとき、上書きする前のバックアップを取らない")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("使い方: pagewright restore [--force] バックアップのファイル")
+		return errors.New("使い方: pagewright restore [--force [--out ディレクトリ] [--no-backup]] バックアップのファイル")
 	}
-	m, err := backup.Restore(ctx, backup.RestoreOptions{
-		DatabaseURL: cfg.MigrateDatabaseURL, MediaDir: cfg.MediaDir(), Force: *force,
-	}, fs.Arg(0))
+	opts := backup.RestoreOptions{DatabaseURL: cfg.MigrateDatabaseURL, MediaDir: cfg.MediaDir(), Force: *force}
+	if !*noBackup {
+		opts.BeforeOverwrite = func(ctx context.Context) error {
+			fmt.Println("上書きする前に、今の状態をバックアップします。")
+			if err := writeBackup(ctx, cfg, *out); err != nil {
+				return fmt.Errorf("上書きする前のバックアップを取れませんでした（取らずに進めるなら --no-backup）: %w", err)
+			}
+			return nil
+		}
+	}
+	m, err := backup.Restore(ctx, opts, fs.Arg(0))
 	if errors.Is(err, backup.ErrNotEmpty) {
 		return fmt.Errorf("%w。消して上書きするなら --force を付けてください", err)
 	}

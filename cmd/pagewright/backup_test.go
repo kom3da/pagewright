@@ -5,10 +5,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -329,7 +332,8 @@ func TestBackupRestore(t *testing.T) {
 	if err := runRestore(ctx, dstCfg, []string{archive}); err == nil || !strings.Contains(err.Error(), "--force") {
 		t.Fatalf("restore over data: err = %v, want a hint at --force", err)
 	}
-	if err := runRestore(ctx, dstCfg, []string{"--force", archive}); err != nil {
+	before := t.TempDir()
+	if err := runRestore(ctx, dstCfg, []string{"--force", "--out", before, archive}); err != nil {
 		t.Fatal(err)
 	}
 	if diff := cmp.Diff(want, tableRows(t, dst)); diff != "" {
@@ -337,6 +341,125 @@ func TestBackupRestore(t *testing.T) {
 	}
 	if diff := cmp.Diff(readFiles(t, srcCfg.MediaDir()), readFiles(t, dstCfg.MediaDir())); diff != "" {
 		t.Errorf("media after --force differ (-backed up +restored):\n%s", diff)
+	}
+	// --force first backed up what it replaced, stray file included.
+	m, err := backup.Verify(onlyArchive(t, before))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(m.Files, func(f backup.File) bool { return strings.HasSuffix(f.Path, "/stray.png") }) {
+		t.Errorf("backup before --force lacks the stray file: %+v", m.Files)
+	}
+}
+
+// forgeArchive rewrites src with its manifest and entries changed by edit,
+// with the manifest's file list recomputed to match (as a crafted archive
+// would have).
+func forgeArchive(t *testing.T, src string, edit func(m *backup.Manifest, entries map[string][]byte)) string {
+	t.Helper()
+	m, err := backup.Verify(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := map[string][]byte{}
+	rewriteArchive(t, src, func(name string, b []byte) []byte {
+		if name != backup.ManifestName {
+			entries[name] = b
+		}
+		return b
+	})
+	edit(&m, entries)
+	m.Files = nil
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
+		sum := sha256.Sum256(entries[name])
+		m.Files = append(m.Files, backup.File{Path: name, Size: int64(len(entries[name])), SHA256: hex.EncodeToString(sum[:])})
+	}
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+	write := func(name string, b []byte) {
+		if err := tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: name, Size: int64(len(b)), Mode: 0o600}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write(b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range m.Files {
+		write(f.Path, entries[f.Path])
+	}
+	mb, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(backup.ManifestName, mb)
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(t.TempDir(), "forged.tar.gz")
+	if err := os.WriteFile(dst, buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dst
+}
+
+// Restore refuses crafted archives, and --force checks what it can
+// before it drops anything: a refused restore leaves the data as it was,
+// and takes no backup.
+func TestRestoreForceChecksFirst(t *testing.T) {
+	ctx := context.Background()
+	src := dbtest.New(t)
+	cfg := config.Config{MigrateDatabaseURL: src.URL, DataDir: t.TempDir()}
+	if err := runMigrate(ctx, cfg); err != nil {
+		t.Fatal(err)
+	}
+	seedSite(t, src.Admin, cfg.MediaDir(), src.CreateTenant(t, "サイト"), "a@example.jp")
+	out := t.TempDir()
+	if err := runBackup(ctx, cfg, []string{"--out", out}); err != nil {
+		t.Fatal(err)
+	}
+	archive := onlyArchive(t, out)
+	addTable := func(name string) func(*backup.Manifest, map[string][]byte) {
+		return func(m *backup.Manifest, entries map[string][]byte) {
+			m.Tables = append(m.Tables, backup.Table{Name: name, Columns: []string{"tenant_id"}})
+			entries["db/"+name+".copy"] = nil
+		}
+	}
+	tests := []struct {
+		name string
+		edit func(*backup.Manifest, map[string][]byte)
+		want string
+	}{
+		{"sessions", addTable("sessions"), "must not be in a backup"},
+		{"login tokens", addTable("login_tokens"), "must not be in a backup"},
+		{"goose version", addTable("goose_db_version"), "must not be in a backup"},
+		{"stray table entry", func(_ *backup.Manifest, entries map[string][]byte) { entries["db/extra.copy"] = []byte("x") }, "unexpected entry"},
+		{"missing column", func(m *backup.Manifest, _ map[string][]byte) {
+			m.Tables[0].Columns = append(m.Tables[0].Columns, "no_such_column")
+		}, "no_such_column"},
+	}
+	rows := tableRows(t, src.Admin)
+	media := readFiles(t, cfg.MediaDir())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			before := t.TempDir()
+			err := runRestore(ctx, cfg, []string{"--force", "--out", before, forgeArchive(t, archive, tt.edit)})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want it to mention %q", err, tt.want)
+			}
+			if diff := cmp.Diff(rows, tableRows(t, src.Admin)); diff != "" {
+				t.Errorf("rows changed by a refused restore (-before +after):\n%s", diff)
+			}
+			if diff := cmp.Diff(media, readFiles(t, cfg.MediaDir())); diff != "" {
+				t.Errorf("media changed by a refused restore (-before +after):\n%s", diff)
+			}
+			if entries, _ := os.ReadDir(before); len(entries) != 0 {
+				t.Errorf("a refused restore took a backup: %v", entries)
+			}
+		})
 	}
 }
 

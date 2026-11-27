@@ -66,15 +66,18 @@ docker compose run --rm cli login-url --email you@example.co.jp
 `restore` に渡すのは、`cli` の中から見たパス（`/backups/ファイル名`）です。
 
 同じサーバーで、今のデータを消して前の状態に戻すときは、`app` を止めてから `--force` を付けます。
-**今のデータベースの中身と画像は消えます。** 念のため、先にバックアップを取っておいてください。
+**今のデータベースの中身と画像は消えます。** そのため `--force` は、消す前に今の状態を `backups/` にバックアップし、そのファイル名を表示します（保存先は `--out` で変えられます）。
+バックアップのファイルの確認やデータベースの形の確認で問題が見つかったときは、何も消さずに止まります。
 
 ```sh
-docker compose run --rm cli backup             # 今の状態も残しておく
 docker compose stop app
 docker compose run --rm cli restore --force /backups/pagewright-20261127T180000Z.tar.gz
 docker compose up -d
 ```
 
 ログインの状態は戻らないので、全員ログインし直します（メールが届かないときは `login-url`）。
+
+**復元するのは、自分（またはこのサーバーの管理者）が取ったバックアップだけにしてください。** 復元はデータベースの中身をそのまま入れるので、
+人から受け取ったファイルや出どころのわからないファイルを復元すると、知らない管理者のアカウントやサイトが入ることがあります。
 
 Docker を使わずに `pagewright` を動かしているときも同じコマンドです。`PAGEWRIGHT_MIGRATE_DATABASE_URL`（テーブルの持ち主）と `PAGEWRIGHT_DATA_DIR` を設定して `pagewright backup --out /var/backups/pagewright --keep 14`、`pagewright restore ファイル` を実行します。PostgreSQL の `pg_dump` は使わないので、入れる必要はありません。

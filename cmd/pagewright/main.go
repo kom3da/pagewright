@@ -22,7 +22,9 @@ const usage = `使い方: pagewright <サブコマンド>
   site clear-url サイトのID        サイトの公開URLを外す（PAGEWRIGHT_PUBLIC_BASE_URL を使う）
   backup [--out ディレクトリ] [--keep 残す数]
                                  データベースと画像を1つのファイルにバックアップする
-  restore [--force] ファイル        バックアップから復元する（空のデータベースへ）
+  restore [--force [--out ディレクトリ] [--no-backup]] ファイル
+                                 バックアップから復元する（空のデータベースへ。--force は
+                                 今の状態を --out にバックアップしてから上書きする）
   version                        版とコミットを表示する
   import-wxr --site ID --author-email メール [--dry-run] ファイル
                                  WordPressの書き出しファイル（WXR）を取り込む

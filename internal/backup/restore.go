@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -30,6 +31,10 @@ type RestoreOptions struct {
 	// Force overwrites a database with data and existing media. Built
 	// sites are left alone: the rebuild after restore replaces them.
 	Force bool
+	// BeforeOverwrite, if set, runs when Force is about to replace data,
+	// after every check that can be made before anything is dropped
+	// (e.g. to back up the current state). An error stops the restore.
+	BeforeOverwrite func(ctx context.Context) error
 }
 
 // ErrNotEmpty is returned when the target has data and Force is not set.
@@ -81,10 +86,20 @@ func Verify(archive string) (Manifest, error) {
 			return m, fmt.Errorf("%s: checksum or size does not match the manifest (damaged archive)", f.Path)
 		}
 	}
+	tables := map[string]bool{}
 	for _, t := range m.Tables {
 		if !identRe.MatchString(t.Name) {
 			return m, fmt.Errorf("bad table name %q", t.Name)
 		}
+		// A backup never has these; loading them would plant login
+		// secrets or a wrong migration history.
+		if t.Name == "goose_db_version" || slices.Contains(ExcludedTables, t.Name) {
+			return m, fmt.Errorf("table %s must not be in a backup", t.Name)
+		}
+		if tables[tableEntry(t.Name)] {
+			return m, fmt.Errorf("duplicate table %s", t.Name)
+		}
+		tables[tableEntry(t.Name)] = true
 		if _, ok := seen[tableEntry(t.Name)]; !ok {
 			return m, fmt.Errorf("no rows for table %s", t.Name)
 		}
@@ -94,7 +109,30 @@ func Verify(archive string) (Manifest, error) {
 			}
 		}
 	}
+	for name := range seen {
+		if strings.HasPrefix(name, "db/") && !tables[name] {
+			return m, fmt.Errorf("unexpected entry %q", name)
+		}
+	}
 	return m, nil
+}
+
+// entrySizes maps each archive entry to its size in the manifest.
+func entrySizes(m Manifest) map[string]int64 {
+	sizes := make(map[string]int64, len(m.Files))
+	for _, f := range m.Files {
+		sizes[f.Path] = f.Size
+	}
+	return sizes
+}
+
+// checkSize refuses an entry that is not in the manifest or is larger than
+// it says, so an archive changed after Verify cannot fill the disk.
+func checkSize(sizes map[string]int64, hdr *tar.Header) error {
+	if want, ok := sizes[hdr.Name]; !ok || hdr.Size != want {
+		return fmt.Errorf("%s: not as in the manifest (archive changed during the restore?)", hdr.Name)
+	}
+	return nil
 }
 
 func checkEntryName(name string) error {
@@ -160,11 +198,24 @@ func Restore(ctx context.Context, opts RestoreOptions, archive string) (Manifest
 	if !empty && !opts.Force {
 		return m, fmt.Errorf("データベース: %w", ErrNotEmpty)
 	}
-	if !opts.Force {
-		if empty, err := dirEmpty(opts.MediaDir); err != nil {
+	mediaEmpty, err := dirEmpty(opts.MediaDir)
+	if err != nil {
+		return m, err
+	}
+	if !mediaEmpty && !opts.Force {
+		return m, fmt.Errorf("%s: %w", opts.MediaDir, ErrNotEmpty)
+	}
+
+	// Check what can be checked before anything is dropped.
+	if err := checkWritable(opts.MediaDir); err != nil {
+		return m, err
+	}
+	if err := checkColumnsNow(ctx, conn, m); err != nil {
+		return m, err
+	}
+	if (!empty || !mediaEmpty) && opts.BeforeOverwrite != nil {
+		if err := opts.BeforeOverwrite(ctx); err != nil {
 			return m, err
-		} else if !empty {
-			return m, fmt.Errorf("%s: %w", opts.MediaDir, ErrNotEmpty)
 		}
 	}
 
@@ -179,7 +230,7 @@ func Restore(ctx context.Context, opts RestoreOptions, archive string) (Manifest
 			return m, err
 		}
 	}
-	if err := extractMedia(archive, opts.MediaDir); err != nil {
+	if err := extractMedia(m, archive, opts.MediaDir); err != nil {
 		return m, err
 	}
 	return m, nil
@@ -239,6 +290,45 @@ func dirEmpty(dir string) (bool, error) {
 		return nil
 	})
 	return empty, err
+}
+
+// checkWritable makes sure the media can be put in dir.
+func checkWritable(dir string) error {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, ".pagewright-restore-*")
+	if err != nil {
+		return fmt.Errorf("%s に書き込めません: %w", dir, err)
+	}
+	_ = f.Close()
+	return os.Remove(f.Name())
+}
+
+// checkColumnsNow checks the archive's tables and columns against the
+// database before it is emptied, when the database is already at the
+// archive's migration version (the usual restore --force on the same
+// version). At other versions the check runs after the reset, in loadRows.
+func checkColumnsNow(ctx context.Context, conn *pgx.Conn, m Manifest) error {
+	var migrated bool
+	if err := conn.QueryRow(ctx, `SELECT to_regclass('public.goose_db_version') IS NOT NULL`).Scan(&migrated); err != nil || !migrated {
+		return err
+	}
+	var current *int64
+	if err := conn.QueryRow(ctx, `SELECT max(version_id) FROM public.goose_db_version WHERE is_applied`).Scan(&current); err != nil {
+		return err
+	}
+	if current == nil || *current != m.MigrationVersion {
+		return nil
+	}
+	return pgx.BeginTxFunc(ctx, conn, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		for _, t := range m.Tables {
+			if err := checkColumns(ctx, tx, t); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // dropAll removes what the migrations created, so they can run again.
@@ -346,10 +436,14 @@ func loadRows(ctx context.Context, conn *pgx.Conn, m Manifest, archive string) e
 			}
 			tables[tableEntry(t.Name)] = t
 		}
+		sizes := entrySizes(m)
 		err = walkArchive(archive, func(hdr *tar.Header, r io.Reader) error {
 			t, ok := tables[hdr.Name]
 			if !ok {
 				return nil
+			}
+			if err := checkSize(sizes, hdr); err != nil {
+				return err
 			}
 			if _, err := tx.Conn().PgConn().CopyFrom(ctx, r, copySQL(t, "FROM STDIN")); err != nil {
 				return fmt.Errorf("load %s: %w", t.Name, err)
@@ -439,11 +533,18 @@ func collect(ctx context.Context, tx pgx.Tx, query string) ([][]string, error) {
 
 // extractMedia writes the media entries under dir, with the modes the
 // media store uses.
-func extractMedia(archive, dir string) error {
+func extractMedia(m Manifest, archive, dir string) error {
+	sizes := entrySizes(m)
 	return walkArchive(archive, func(hdr *tar.Header, r io.Reader) error {
 		rel, ok := strings.CutPrefix(hdr.Name, "media/")
 		if !ok {
 			return nil
+		}
+		if err := checkEntryName(hdr.Name); err != nil {
+			return err
+		}
+		if err := checkSize(sizes, hdr); err != nil {
+			return err
 		}
 		p := filepath.Join(dir, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
