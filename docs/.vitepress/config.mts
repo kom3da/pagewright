@@ -16,6 +16,7 @@ const guide: DefaultTheme.SidebarItem[] = [
       { text: "画像", link: "/guide/images" },
       { text: "サイトの設定", link: "/guide/settings" },
       { text: "お問い合わせ", link: "/guide/inquiries" },
+      { text: "メンバーと招待", link: "/guide/members" },
       { text: "サイトを更新する", link: "/guide/site-update" },
       { text: "困ったとき", link: "/guide/troubleshooting" },
     ],
