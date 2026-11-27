@@ -8,3 +8,5 @@ web/admin/dist/
 .DS_Store
 coverage/
 /data/
+# go build ./cmd/pagewright without -o
+/pagewright
