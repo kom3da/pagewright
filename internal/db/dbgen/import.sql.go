@@ -39,7 +39,7 @@ const createImportedContent = `-- name: CreateImportedContent :one
 
 INSERT INTO contents (number, type, slug, parent_id, author_id, source_format, source_body)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING tenant_id, id, number, type, slug, parent_id, author_id, published_revision_id, scheduled_revision_id, scheduled_at, published_at, source_format, source_body, created_at, updated_at
+RETURNING tenant_id, id, number, type, slug, parent_id, author_id, published_revision_id, scheduled_revision_id, scheduled_at, published_at, source_format, source_body, created_at, updated_at, pending_settings
 `
 
 type CreateImportedContentParams struct {
@@ -82,6 +82,7 @@ func (q *Queries) CreateImportedContent(ctx context.Context, arg CreateImportedC
 		&i.SourceBody,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PendingSettings,
 	)
 	return i, err
 }

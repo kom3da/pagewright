@@ -36,6 +36,7 @@ type Content struct {
 	SourceBody          *string
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
+	PendingSettings     []byte
 }
 
 type ContentCategory struct {

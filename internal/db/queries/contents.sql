@@ -131,3 +131,16 @@ SELECT id FROM contents WHERE id = $1 FOR UPDATE;
 -- after the event). On an unpublished content it becomes the date used
 -- when it is published.
 UPDATE contents SET published_at = @published_at, updated_at = now() WHERE id = @id;
+
+-- name: SetPendingSettings :exec
+-- Saves (or with NULL, clears) the settings of a live content that wait
+-- until its changes are published.
+UPDATE contents SET pending_settings = @pending_settings, updated_at = now() WHERE id = @id;
+
+-- name: ListCategoryIDsIn :many
+-- The given ids that are categories of the tenant.
+SELECT id FROM categories WHERE id = ANY(@ids::bigint[]) ORDER BY id;
+
+-- name: ListTagIDsIn :many
+-- The given ids that are tags of the tenant.
+SELECT id FROM tags WHERE id = ANY(@ids::bigint[]) ORDER BY id;

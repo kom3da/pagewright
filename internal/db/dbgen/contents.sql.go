@@ -99,7 +99,7 @@ func (q *Queries) ContentAncestry(ctx context.Context, id int64) ([]ContentAnces
 const createContent = `-- name: CreateContent :one
 INSERT INTO contents (type, slug, parent_id, author_id)
 VALUES ($1, $2, $3, $4)
-RETURNING tenant_id, id, number, type, slug, parent_id, author_id, published_revision_id, scheduled_revision_id, scheduled_at, published_at, source_format, source_body, created_at, updated_at
+RETURNING tenant_id, id, number, type, slug, parent_id, author_id, published_revision_id, scheduled_revision_id, scheduled_at, published_at, source_format, source_body, created_at, updated_at, pending_settings
 `
 
 type CreateContentParams struct {
@@ -135,6 +135,7 @@ func (q *Queries) CreateContent(ctx context.Context, arg CreateContentParams) (C
 		&i.SourceBody,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PendingSettings,
 	)
 	return i, err
 }
@@ -204,7 +205,7 @@ func (q *Queries) DeleteRevision(ctx context.Context, id int64) (int64, error) {
 }
 
 const getContent = `-- name: GetContent :one
-SELECT tenant_id, id, number, type, slug, parent_id, author_id, published_revision_id, scheduled_revision_id, scheduled_at, published_at, source_format, source_body, created_at, updated_at FROM contents WHERE id = $1
+SELECT tenant_id, id, number, type, slug, parent_id, author_id, published_revision_id, scheduled_revision_id, scheduled_at, published_at, source_format, source_body, created_at, updated_at, pending_settings FROM contents WHERE id = $1
 `
 
 func (q *Queries) GetContent(ctx context.Context, id int64) (Content, error) {
@@ -226,12 +227,13 @@ func (q *Queries) GetContent(ctx context.Context, id int64) (Content, error) {
 		&i.SourceBody,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PendingSettings,
 	)
 	return i, err
 }
 
 const getContentByNumber = `-- name: GetContentByNumber :one
-SELECT tenant_id, id, number, type, slug, parent_id, author_id, published_revision_id, scheduled_revision_id, scheduled_at, published_at, source_format, source_body, created_at, updated_at FROM contents WHERE number = $1
+SELECT tenant_id, id, number, type, slug, parent_id, author_id, published_revision_id, scheduled_revision_id, scheduled_at, published_at, source_format, source_body, created_at, updated_at, pending_settings FROM contents WHERE number = $1
 `
 
 func (q *Queries) GetContentByNumber(ctx context.Context, number int64) (Content, error) {
@@ -253,6 +255,7 @@ func (q *Queries) GetContentByNumber(ctx context.Context, number int64) (Content
 		&i.SourceBody,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PendingSettings,
 	)
 	return i, err
 }
@@ -287,6 +290,31 @@ func (q *Queries) GetLatestRevision(ctx context.Context, contentID int64) (Conte
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listCategoryIDsIn = `-- name: ListCategoryIDsIn :many
+SELECT id FROM categories WHERE id = ANY($1::bigint[]) ORDER BY id
+`
+
+// The given ids that are categories of the tenant.
+func (q *Queries) ListCategoryIDsIn(ctx context.Context, ids []int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listCategoryIDsIn, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listChildContentIDs = `-- name: ListChildContentIDs :many
@@ -362,7 +390,7 @@ func (q *Queries) ListContentTagIDs(ctx context.Context, contentID int64) ([]int
 }
 
 const listContents = `-- name: ListContents :many
-SELECT c.tenant_id, c.id, c.number, c.type, c.slug, c.parent_id, c.author_id, c.published_revision_id, c.scheduled_revision_id, c.scheduled_at, c.published_at, c.source_format, c.source_body, c.created_at, c.updated_at, coalesce(lr.title, '')::text AS title, coalesce(lr.id, 0)::bigint AS latest_revision_id,
+SELECT c.tenant_id, c.id, c.number, c.type, c.slug, c.parent_id, c.author_id, c.published_revision_id, c.scheduled_revision_id, c.scheduled_at, c.published_at, c.source_format, c.source_body, c.created_at, c.updated_at, c.pending_settings, coalesce(lr.title, '')::text AS title, coalesce(lr.id, 0)::bigint AS latest_revision_id,
   r.path AS url
 FROM contents c
 LEFT JOIN LATERAL (
@@ -402,6 +430,7 @@ type ListContentsRow struct {
 	SourceBody          *string
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
+	PendingSettings     []byte
 	Title               string
 	LatestRevisionID    int64
 	Url                 *string
@@ -435,6 +464,7 @@ func (q *Queries) ListContents(ctx context.Context, arg ListContentsParams) ([]L
 			&i.SourceBody,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PendingSettings,
 			&i.Title,
 			&i.LatestRevisionID,
 			&i.Url,
@@ -473,6 +503,31 @@ func (q *Queries) ListScheduled(ctx context.Context) ([]ListScheduledRow, error)
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTagIDsIn = `-- name: ListTagIDsIn :many
+SELECT id FROM tags WHERE id = ANY($1::bigint[]) ORDER BY id
+`
+
+// The given ids that are tags of the tenant.
+func (q *Queries) ListTagIDsIn(ctx context.Context, ids []int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listTagIDsIn, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -559,6 +614,22 @@ func (q *Queries) ScheduleRevision(ctx context.Context, arg ScheduleRevisionPara
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setPendingSettings = `-- name: SetPendingSettings :exec
+UPDATE contents SET pending_settings = $1, updated_at = now() WHERE id = $2
+`
+
+type SetPendingSettingsParams struct {
+	PendingSettings []byte
+	ID              int64
+}
+
+// Saves (or with NULL, clears) the settings of a live content that wait
+// until its changes are published.
+func (q *Queries) SetPendingSettings(ctx context.Context, arg SetPendingSettingsParams) error {
+	_, err := q.db.Exec(ctx, setPendingSettings, arg.PendingSettings, arg.ID)
+	return err
 }
 
 const setPublishedAt = `-- name: SetPublishedAt :exec
