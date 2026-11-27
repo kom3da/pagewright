@@ -12,3 +12,4 @@ coverage/
 /pagewright
 docs/.vitepress/dist/
 docs/.vitepress/cache/
+/deploy/backups/

@@ -12,6 +12,7 @@
 #   docker compose run --rm cli init ...       最初のサイトと管理者を作る
 #   docker compose run --rm cli login-url ...  ログイン用URLを出す（メールが届かないとき）
 #   docker compose run --rm cli site set-url ...  2つ目以降のサイトの公開URLを設定する
+#   docker compose run --rm cli backup --keep 14  バックアップを取る（backups/ に保存）
 #   docker compose logs -f app                 ログを見る
 
 name: pagewright
@@ -55,6 +56,8 @@ services:
       TZ: ${TZ:-Asia/Tokyo}
     volumes:
       - data:/data
+      # backup・restore のファイルの置き場所（docs/install/backup.md）
+      - ${PAGEWRIGHT_BACKUP_DIR:-./backups}:/backups
     depends_on:
       db:
         condition: service_healthy

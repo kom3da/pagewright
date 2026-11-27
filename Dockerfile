@@ -70,8 +70,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 pagewright \
     && useradd --system --uid 10001 --gid 10001 --home-dir /data --shell /usr/sbin/nologin pagewright \
-    && mkdir -p /data \
-    && chown pagewright:pagewright /data
+    && mkdir -p /data /backups \
+    && chown pagewright:pagewright /data /backups
 COPY --from=pagefind /out/pagefind_extended /usr/local/bin/pagefind_extended
 ENV PAGEWRIGHT_DATA_DIR=/data \
     PAGEWRIGHT_ADDR=:8080 \
@@ -81,6 +81,7 @@ ENV PAGEWRIGHT_DATA_DIR=/data \
     # loopback where nothing outside the container can reach it.
     PAGEWRIGHT_SITE_ADDR=127.0.0.1:8081
 # `import-wxr` defaults to --media-root ./data/media, which is /data/media from here.
+# `backup` writes to ./backups, i.e. /backups (bind-mounted by compose.yaml).
 WORKDIR /
 VOLUME /data
 EXPOSE 8080
