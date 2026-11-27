@@ -57,7 +57,7 @@ type Options struct {
 	MediaQuotaBytes int64
 	Jobs            Jobs   // nil: no builds or scheduled publishing
 	BaseURL         string // admin origin, for login links
-	PublicBaseURL   string // public site origin, for links on form result pages
+	PublicBaseURL   string // public origin of sites without their own URL (tenants.public_base_url)
 	// TrustedProxies are reverse proxies whose X-Forwarded-For is believed
 	// when they are the direct peer.
 	TrustedProxies []netip.Prefix

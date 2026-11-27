@@ -207,7 +207,7 @@ type SiteSettings = {
   theme?: string;              // テーマの名前（省略時は標準の "corporate"）。入っていないテーマは 422
   themeSettings?: Record<string, Record<string, string | number>>; // テーマ名 → そのテーマが宣言した設定の値（docs/themes.md）。page 型は固定ページの id
   themes: ThemeInfo[];         // 出力だけ。入っているテーマと、それぞれの設定項目の宣言
-  publicBaseUrl: string;       // 出力だけ。公開サイトの URL（末尾の / なし）。管理画面からのリンク用。PUT では送らない
+  publicBaseUrl: string;       // 出力だけ。公開サイトの URL（末尾の / なし）。サイトに設定されたもの（pagewright site set-url）、なければサーバーの PAGEWRIGHT_PUBLIC_BASE_URL。管理画面からのリンク用。PUT では送らない
   menu: MenuItem[];            // 空なら、親のない固定ページとお知らせを自動で並べる
 };
 type ThemeInfo = {

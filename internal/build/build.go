@@ -19,17 +19,25 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/kom3da/pagewright/internal/db"
+	"github.com/kom3da/pagewright/internal/site"
 )
 
 // DefaultBaseURL is the development preview server (ServeDir).
 const DefaultBaseURL = "http://localhost:8081"
+
+// baseURL is the site's own public URL, else fallback, else DefaultBaseURL.
+func baseURL(own *string, fallback string) string {
+	if u := site.PublicURL(own, fallback); u != "" {
+		return u
+	}
+	return DefaultBaseURL
+}
 
 // Options configure a build.
 type Options struct {
@@ -40,7 +48,8 @@ type Options struct {
 	// MediaRoot holds uploaded files at <MediaRoot>/<tenantID>/<storage_key>.
 	MediaRoot string
 	// BaseURL is the public origin used for absolute URLs (sitemap, feed,
-	// canonical links). Default DefaultBaseURL.
+	// canonical links) of a site that has no URL of its own
+	// (tenants.public_base_url). Default DefaultBaseURL.
 	BaseURL string
 	// Logger receives warnings. Default slog.Default().
 	Logger *slog.Logger
@@ -76,10 +85,6 @@ func Build(ctx context.Context, d *db.DB, tenantID uuid.UUID, opts Options) (Res
 	if opts.OutDir == "" {
 		return Result{}, errors.New("build: OutDir is required")
 	}
-	opts.BaseURL = strings.TrimSuffix(opts.BaseURL, "/")
-	if opts.BaseURL == "" {
-		opts.BaseURL = DefaultBaseURL
-	}
 	log := opts.Logger
 	if log == nil {
 		log = slog.Default()
@@ -101,6 +106,7 @@ func Build(ctx context.Context, d *db.DB, tenantID uuid.UUID, opts Options) (Res
 	if err != nil {
 		return Result{}, fmt.Errorf("build: %w", err)
 	}
+	opts.BaseURL = baseURL(snap.tenant.PublicBaseUrl, opts.BaseURL)
 
 	stagingRoot := filepath.Join(opts.OutDir, ".staging")
 	if err := os.MkdirAll(stagingRoot, 0o755); err != nil {

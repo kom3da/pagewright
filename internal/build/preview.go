@@ -17,7 +17,8 @@ import (
 
 // PreviewOptions configures Preview.
 type PreviewOptions struct {
-	// PublicBaseURL is the public site; links on the page point there.
+	// PublicBaseURL is the public site of a site that has no URL of its
+	// own (as Options.BaseURL); links on the page point there.
 	PublicBaseURL string
 	// SelfURL is the preview page's URL (ending in /). Its _assets/ and
 	// media/ serve the stylesheet and images.
@@ -54,10 +55,7 @@ func RenderPreview(ctx context.Context, d *db.DB, tenantID uuid.UUID, contentID 
 		return nil, err
 	}
 
-	base := strings.TrimSuffix(opts.PublicBaseURL, "/")
-	if base == "" {
-		base = DefaultBaseURL
-	}
+	base := baseURL(snap.tenant.PublicBaseUrl, opts.PublicBaseURL)
 	g := &generator{
 		snap: snap, opts: Options{BaseURL: base, FormBaseURL: opts.FormBaseURL}, tenantID: tenantID, theme: th,
 		warn: func(string, ...any) {},

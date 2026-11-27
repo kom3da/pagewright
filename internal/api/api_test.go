@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kom3da/pagewright/internal/api"
+	"github.com/kom3da/pagewright/internal/db"
 	"github.com/kom3da/pagewright/internal/db/dbgen"
 	"github.com/kom3da/pagewright/internal/db/dbtest"
 	"github.com/kom3da/pagewright/internal/jobs"
@@ -1188,6 +1189,70 @@ func TestSiteSettings(t *testing.T) {
 	bob.mustDo(http.MethodGet, "/api/site", nil, &bs, http.StatusOK)
 	if bs.Name != "サイトB" || bs.Logo != nil {
 		t.Errorf("site B changed: %+v", bs)
+	}
+}
+
+// Each site's public URL (set by the operator) reaches its own admin,
+// previews and form result pages only; a site without one uses the
+// server's PublicBaseURL.
+func TestSitePublicURL(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	if _, err := e.db.Admin.Exec(ctx, "UPDATE tenants SET public_base_url = 'https://site-b.example' WHERE id = $1", e.tenantB); err != nil {
+		t.Fatal(err)
+	}
+	alice := e.login("alice@example.com")
+	bob := e.login("bob@example.com")
+
+	var as, bs siteOut
+	alice.mustDo(http.MethodGet, "/api/site", nil, &as, http.StatusOK)
+	bob.mustDo(http.MethodGet, "/api/site", nil, &bs, http.StatusOK)
+	if as.PublicBaseURL != "https://site-a.example" || bs.PublicBaseURL != "https://site-b.example" {
+		t.Errorf("publicBaseUrl: A = %q, B = %q", as.PublicBaseURL, bs.PublicBaseURL)
+	}
+	bob.mustDo(http.MethodPut, "/api/site", map[string]any{"name": "サイトB"}, &bs, http.StatusOK)
+	if bs.PublicBaseURL != "https://site-b.example" {
+		t.Errorf("after PUT: B = %q", bs.PublicBaseURL)
+	}
+
+	// The admin cannot change it: not through the API, nor as the app role.
+	if got, code := bob.errorCode(http.MethodPut, "/api/site", map[string]any{"name": "サイトB", "publicBaseUrl": "https://evil.example"}); got != http.StatusUnprocessableEntity || code != "invalid_json" {
+		t.Errorf("PUT publicBaseUrl = %d %s, want 422 invalid_json", got, code)
+	}
+	err := e.db.DB.InTenantTx(db.WithTenant(ctx, e.tenantB), func(tx pgx.Tx, _ *dbgen.Queries) error {
+		_, err := tx.Exec(ctx, "UPDATE tenants SET public_base_url = 'https://evil.example'")
+		return err
+	})
+	if err == nil || !strings.Contains(err.Error(), "permission denied") {
+		t.Errorf("app role updating public_base_url: err = %v, want permission denied", err)
+	}
+	// A cannot read B's row at all.
+	var n int
+	err = e.db.DB.InTenantTx(db.WithTenant(ctx, e.tenantA), func(tx pgx.Tx, _ *dbgen.Queries) error {
+		return tx.QueryRow(ctx, "SELECT count(*) FROM tenants WHERE public_base_url IS NOT NULL").Scan(&n)
+	})
+	if err != nil || n != 0 {
+		t.Errorf("A sees %d sites with a URL (err %v), want 0", n, err)
+	}
+
+	// Form result pages link back to the site the form is on.
+	for tenant, want := range map[uuid.UUID]string{e.tenantA: "https://site-a.example/contact/", e.tenantB: "https://site-b.example/contact/"} {
+		status, page := e.postContact(tenant, contactForm())
+		if status != http.StatusOK || !strings.Contains(page, `href="`+want+`"`) {
+			t.Errorf("contact on %s = %d, want a link to %s:\n%s", tenant, status, want, page)
+		}
+	}
+
+	// Previews resolve links against the site's own URL.
+	d := bob.newContent("post", "Bの下書き", false)
+	_, _, page := bob.getPage(fmt.Sprintf("/api/contents/%d/preview/", d.ID))
+	if !strings.Contains(page, `<base href="https://site-b.example/">`) || strings.Contains(page, "site-a.example") {
+		t.Errorf("B's admin preview does not use B's URL:\n%s", page)
+	}
+	var link struct{ URL string }
+	bob.mustDo(http.MethodPost, fmt.Sprintf("/api/contents/%d/preview-links", d.ID), map[string]any{"days": 1}, &link, http.StatusCreated)
+	if _, _, page := e.getPreview(link.URL, ""); !strings.Contains(page, `<base href="https://site-b.example/">`) {
+		t.Errorf("B's preview link does not use B's URL:\n%s", page)
 	}
 }
 

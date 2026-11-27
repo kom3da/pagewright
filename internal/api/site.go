@@ -53,7 +53,8 @@ type siteSettingsJSON struct {
 	// Themes lists the installed themes and the settings each declares.
 	Themes []themeJSON `json:"themes"`
 	// PublicBaseURL is where the public site is served (no trailing
-	// slash), for links from the admin.
+	// slash), for links from the admin: the site's own URL, else the
+	// server's. Set by the operator (pagewright site set-url), not here.
 	PublicBaseURL string `json:"publicBaseUrl"`
 }
 
@@ -72,14 +73,16 @@ const maxMenuItems = 20
 
 var menuURL = regexp.MustCompile(`^(/|https?://)\S*$`)
 
-func loadSite(ctx context.Context, q *dbgen.Queries) (siteSettingsJSON, error) {
+// loadSite reads the current site. fallback is the public URL of a site
+// without its own.
+func loadSite(ctx context.Context, q *dbgen.Queries, fallback string) (siteSettingsJSON, error) {
 	row, err := q.GetSite(ctx)
 	if err != nil {
 		return siteSettingsJSON{}, err
 	}
 	out := siteSettingsJSON{siteSettingsInput: siteSettingsInput{
 		Name: row.Name, LogoMediaID: row.LogoMediaID, Settings: site.Parse(row.Settings), Menu: []menuItemJSON{},
-	}, Themes: []themeJSON{}}
+	}, Themes: []themeJSON{}, PublicBaseURL: site.PublicURL(row.PublicBaseUrl, fallback)}
 	for _, t := range build.Themes() {
 		out.Themes = append(out.Themes, themeJSON{Name: t.Name, Title: t.Title, Description: t.Description, Settings: nonNil(t.Settings),
 			SettingsTitle: t.SettingsTitle, SettingsDescription: t.SettingsDescription})
@@ -106,13 +109,12 @@ func (s *Server) getSite(w http.ResponseWriter, r *http.Request, _ *session) err
 	var out siteSettingsJSON
 	err := s.DB.InTenant(r.Context(), func(q *dbgen.Queries) error {
 		var err error
-		out, err = loadSite(r.Context(), q)
+		out, err = loadSite(r.Context(), q, s.PublicBaseURL)
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	out.PublicBaseURL = s.PublicBaseURL
 	writeJSON(w, http.StatusOK, out)
 	return nil
 }
@@ -206,13 +208,12 @@ func (s *Server) putSite(w http.ResponseWriter, r *http.Request, sess *session) 
 		if err := s.enqueueBuild(ctx, tx, sess.tenantID); err != nil {
 			return err
 		}
-		out, err = loadSite(ctx, q)
+		out, err = loadSite(ctx, q, s.PublicBaseURL)
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	out.PublicBaseURL = s.PublicBaseURL
 	writeJSON(w, http.StatusOK, out)
 	return nil
 }

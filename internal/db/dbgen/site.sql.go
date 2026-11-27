@@ -40,19 +40,25 @@ func (q *Queries) ClearMenu(ctx context.Context) error {
 }
 
 const getSite = `-- name: GetSite :one
-SELECT t.name, t.settings, t.logo_media_id FROM tenants t WHERE t.id = app_current_tenant()
+SELECT t.name, t.settings, t.logo_media_id, t.public_base_url FROM tenants t WHERE t.id = app_current_tenant()
 `
 
 type GetSiteRow struct {
-	Name        string
-	Settings    []byte
-	LogoMediaID *int64
+	Name          string
+	Settings      []byte
+	LogoMediaID   *int64
+	PublicBaseUrl *string
 }
 
 func (q *Queries) GetSite(ctx context.Context) (GetSiteRow, error) {
 	row := q.db.QueryRow(ctx, getSite)
 	var i GetSiteRow
-	err := row.Scan(&i.Name, &i.Settings, &i.LogoMediaID)
+	err := row.Scan(
+		&i.Name,
+		&i.Settings,
+		&i.LogoMediaID,
+		&i.PublicBaseUrl,
+	)
 	return i, err
 }
 

@@ -22,7 +22,7 @@ type Config struct {
 	Addr               string // PAGEWRIGHT_ADDR: admin and API
 	SiteAddr           string // PAGEWRIGHT_SITE_ADDR: public site preview; empty disables it
 	BaseURL            string // PAGEWRIGHT_BASE_URL: where the admin is reachable, for mail links
-	PublicBaseURL      string // PAGEWRIGHT_PUBLIC_BASE_URL: the public site, for sitemap and feed
+	PublicBaseURL      string // PAGEWRIGHT_PUBLIC_BASE_URL: the public site of sites without their own URL (pagewright site set-url)
 	DataDir            string // PAGEWRIGHT_DATA_DIR: media and built sites
 	SMTPAddr           string // PAGEWRIGHT_SMTP_ADDR
 	SMTPUsername       string // PAGEWRIGHT_SMTP_USERNAME: enables SMTP AUTH (over TLS only)

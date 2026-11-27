@@ -94,18 +94,20 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 	if !strings.HasPrefix(in.Page, "/") || strings.HasPrefix(in.Page, "//") || len(in.Page) > 500 || !plainText(in.Page, false) {
 		in.Page = "/"
 	}
-	back := s.backLink(in.Page)
+	// Checked before reading the site, so no back link yet: the browser's
+	// back button still works.
 	if !s.formByIP.allow(s.clientKey(r)) {
-		s.formPage(w, http.StatusTooManyRequests, "", "送信できませんでした", []string{"短い時間に多くの送信がありました。しばらく待ってからお試しください。"}, back)
+		s.formPage(w, http.StatusTooManyRequests, "", "送信できませんでした", []string{"短い時間に多くの送信がありました。しばらく待ってからお試しください。"}, "")
 		return
 	}
 
 	ctx := db.WithTenant(r.Context(), tenantID)
-	var siteName string
+	var siteName, back string
 	var settings site.Settings
 	if err := s.DB.InTenant(ctx, func(q *dbgen.Queries) error {
 		row, err := q.GetSite(ctx)
 		siteName, settings = row.Name, site.Parse(row.Settings)
+		back = backLink(site.PublicURL(row.PublicBaseUrl, s.PublicBaseURL), in.Page)
 		return err
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -113,7 +115,7 @@ func (s *Server) receiveContact(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.Logger.Error("contact form: load site", "tenant_id", tenantID, "err", err)
-		s.formPage(w, http.StatusInternalServerError, "", "送信できませんでした", []string{"サーバーでエラーが起きました。時間をおいてもう一度お試しください。"}, back)
+		s.formPage(w, http.StatusInternalServerError, "", "送信できませんでした", []string{"サーバーでエラーが起きました。時間をおいてもう一度お試しください。"}, "")
 		return
 	}
 	// Count per site only for sites that exist, so made-up ids cannot fill
@@ -193,12 +195,12 @@ func (s *Server) queueContactMails(ctx context.Context, tx pgx.Tx, tenantID uuid
 	})
 }
 
-// backLink is the page the form was on, on the public site.
-func (s *Server) backLink(page string) string {
-	if s.PublicBaseURL == "" {
+// backLink is the page the form was on, on the site's public origin base.
+func backLink(base, page string) string {
+	if base == "" {
 		return ""
 	}
-	return s.PublicBaseURL + page
+	return base + page
 }
 
 var formPageTmpl = template.Must(template.New("form").Parse(`<!doctype html>

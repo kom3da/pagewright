@@ -173,6 +173,7 @@ type Tenant struct {
 	CreatedAt         time.Time
 	Settings          []byte
 	LogoMediaID       *int64
+	PublicBaseUrl     *string
 }
 
 type TenantIDCounter struct {

@@ -1,5 +1,5 @@
 -- name: GetSite :one
-SELECT t.name, t.settings, t.logo_media_id FROM tenants t WHERE t.id = app_current_tenant();
+SELECT t.name, t.settings, t.logo_media_id, t.public_base_url FROM tenants t WHERE t.id = app_current_tenant();
 
 -- name: UpdateSite :exec
 UPDATE tenants SET name = @name, settings = @settings, logo_media_id = @logo_media_id

@@ -509,3 +509,46 @@ func TestBuildRequiresTenant(t *testing.T) {
 		t.Error("Build without tenant succeeded")
 	}
 }
+
+// Each site's absolute URLs use its own public URL; a site without one
+// uses Options.BaseURL.
+func TestBuildUsesSitePublicURL(t *testing.T) {
+	env := dbtest.New(t)
+	a := newSeeder(t, env, "サイトA", "alice@example.com")
+	b := newSeeder(t, env, "サイトB", "bob@example.com")
+	c := newSeeder(t, env, "サイトC", "carol@example.com")
+	a.admin("UPDATE tenants SET public_base_url = 'https://a.example.jp' WHERE id = $1", a.tenant())
+	b.admin("UPDATE tenants SET public_base_url = 'https://b.example.com:8443' WHERE id = $1", b.tenant())
+	for _, s := range []*seeder{a, b, c} {
+		post := s.content("post", ptr("hello"), nil)
+		rev := s.revision(post.ID, "こんにちは", paragraph("本文"))
+		s.publish(post.ID, rev.ID, time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC))
+	}
+	out := t.TempDir()
+	opts := build.Options{OutDir: out, MediaRoot: t.TempDir(), BaseURL: "https://fallback.example/"}
+	for _, tc := range []struct {
+		s    *seeder
+		want string
+	}{{a, "https://a.example.jp"}, {b, "https://b.example.com:8443"}, {c, "https://fallback.example"}} {
+		if _, err := build.Build(context.Background(), env.DB, tc.s.tenant(), opts); err != nil {
+			t.Fatal(err)
+		}
+		files := siteFiles(t, filepath.Join(out, tc.s.tenant().String()))
+		for path, want := range map[string]string{
+			"/posts/hello/index.html": `<link rel="canonical" href="` + tc.want + `/posts/hello/">`,
+			"/sitemap.xml":            "<loc>" + tc.want + "/posts/hello/</loc>",
+			"/feed.xml":               "<link>" + tc.want + "/posts/hello/</link>",
+		} {
+			if !strings.Contains(files[path], want) {
+				t.Errorf("%s of %s lacks %s:\n%s", path, tc.want, want, files[path])
+			}
+		}
+		for path, body := range files {
+			for _, other := range []string{"https://a.example.jp", "https://b.example.com:8443", "https://fallback.example"} {
+				if other != tc.want && strings.Contains(body, other) {
+					t.Errorf("%s of %s links to %s", path, tc.want, other)
+				}
+			}
+		}
+	}
+}
