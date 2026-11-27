@@ -601,6 +601,9 @@ func TestValidation(t *testing.T) {
 		{"page at /search/", alice, http.MethodPatch, fmt.Sprintf("/api/contents/%d", page.ID), map[string]any{"slug": "search"}, 422, "reserved_slug"},
 		{"category slug", alice, http.MethodPost, "/api/categories", map[string]any{"name": "x", "slug": "カテゴリ"}, 422, "invalid_slug"},
 		{"bad email", alice, http.MethodPost, "/api/auth/login-link", map[string]any{"email": "not an email"}, 422, "invalid_email"},
+		// Bodies of the login endpoints stop at 64 KB, before parsing.
+		{"huge login-link", alice, http.MethodPost, "/api/auth/login-link", map[string]any{"email": strings.Repeat("a", 70<<10)}, 422, "invalid_json"},
+		{"huge verify", alice, http.MethodPost, "/api/auth/verify", map[string]any{"token": strings.Repeat("a", 70<<10)}, 422, "invalid_json"},
 	}
 	for _, tc := range cases {
 		got, code := tc.c.errorCode(tc.method, tc.path, tc.in)

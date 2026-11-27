@@ -31,10 +31,15 @@ type siteJSON struct {
 	Role string `json:"role"`
 }
 
+// maxAuthBytes caps the bodies of the endpoints anyone can call without a
+// login (an address or a token fit with room to spare).
+const maxAuthBytes = 64 << 10
+
 func (s *Server) loginLink(w http.ResponseWriter, r *http.Request, _ *session) error {
 	var in struct {
 		Email string `json:"email"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxAuthBytes)
 	if err := decode(w, r, &in); err != nil {
 		return err
 	}
@@ -108,6 +113,7 @@ func (s *Server) verify(w http.ResponseWriter, r *http.Request, _ *session) erro
 	var in struct {
 		Token string `json:"token"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxAuthBytes)
 	if err := decode(w, r, &in); err != nil {
 		return err
 	}
