@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 
+	"github.com/kom3da/pagewright/internal/content"
 	"github.com/kom3da/pagewright/internal/db"
 	"github.com/kom3da/pagewright/internal/db/dbgen"
 	"github.com/kom3da/pagewright/internal/routing"
@@ -64,6 +65,20 @@ func (w *PublishScheduledWorker) Work(ctx context.Context, job *river.Job[Publis
 		}
 		if err != nil {
 			return fmt.Errorf("publish scheduled: %w", err)
+		}
+		// Settings saved while the content was live go out with the
+		// changes. A URL that cannot be applied stays pending instead of
+		// blocking the publishing.
+		c, err := q.GetContent(ctx, a.ContentID)
+		if err != nil {
+			return err
+		}
+		skipped, err := content.ApplyPendingExceptURL(ctx, tx, q, c, true)
+		if err != nil {
+			return fmt.Errorf("apply pending settings: %w", err)
+		}
+		if skipped != nil {
+			slog.WarnContext(ctx, "scheduled content published without its new URL", "tenant_id", a.TenantID, "content_id", a.ContentID, "err", skipped)
 		}
 		// A URL clash must not block publishing: the build falls back to
 		// the default URL and reports it.

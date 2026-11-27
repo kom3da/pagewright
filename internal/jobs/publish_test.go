@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -113,4 +114,78 @@ func TestPublishScheduledWaitsWhenEarly(t *testing.T) {
 	if published == nil || *published != revisionID {
 		t.Errorf("published = %v, want %d after waiting", published, revisionID)
 	}
+}
+
+// TestPublishScheduledAppliesPending schedules changes of a live post
+// whose settings wait: they go live with the scheduled revision. A URL
+// taken meanwhile stays pending instead of blocking the publishing.
+func TestPublishScheduledAppliesPending(t *testing.T) {
+	for _, taken := range []bool{false, true} {
+		env := dbtest.New(t)
+		tenant := env.CreateTenant(t, "予約株式会社")
+		ctx := context.Background()
+		at := time.Now().Add(-time.Second).UTC().Truncate(time.Second)
+		contentID, revisionID := scheduledPost(t, env, tenant, at)
+		var catID, oldRevisionID int64
+		if err := env.Admin.QueryRow(ctx, "INSERT INTO categories (tenant_id, name, slug) VALUES ($1, 'お知らせ', 'news') RETURNING id", tenant).Scan(&catID); err != nil {
+			t.Fatal(err)
+		}
+		if err := env.Admin.QueryRow(ctx, `INSERT INTO content_revisions (tenant_id, content_id, title, body, body_schema_version)
+			VALUES ($1, $2, '前の版', '{"type":"doc","content":[]}', 1) RETURNING id`, tenant, contentID).Scan(&oldRevisionID); err != nil {
+			t.Fatal(err)
+		}
+		// Live with an older revision, and a slug and category waiting.
+		pending := fmt.Sprintf(`{"slug": "moved", "categoryIds": [%d]}`, catID)
+		setup := []struct {
+			sql  string
+			args []any
+		}{
+			{"UPDATE contents SET published_revision_id = $1, published_at = now() - interval '1 day', pending_settings = $2 WHERE id = $3",
+				[]any{oldRevisionID, pending, contentID}},
+			{"INSERT INTO routes (tenant_id, path, kind, content_id) VALUES ($1, '/posts/later/', 'canonical', $2)", []any{tenant, contentID}},
+		}
+		if taken {
+			setup = append(setup, struct {
+				sql  string
+				args []any
+			}{"INSERT INTO routes (tenant_id, path, kind, category_id) VALUES ($1, '/posts/moved/', 'canonical', $2)", []any{tenant, catID}})
+		}
+		for _, s := range setup {
+			if _, err := env.Admin.Exec(ctx, s.sql, s.args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+		client := newRiver(t, env, NewWorkers(env.DB, build.Options{OutDir: t.TempDir()}, nil))
+		if _, err := client.Insert(ctx, PublishScheduledArgs{TenantID: tenant, ContentID: contentID, RevisionID: revisionID, At: at}, nil); err != nil {
+			t.Fatal(err)
+		}
+		runUntil(t, client, 2)
+
+		var published int64
+		var slug, left *string
+		var path string
+		var cats []int64
+		if err := env.Admin.QueryRow(ctx, `
+			SELECT c.published_revision_id, c.slug, c.pending_settings::text, r.path,
+			  coalesce((SELECT array_agg(category_id) FROM content_categories WHERE content_id = c.id), '{}')
+			FROM contents c JOIN routes r ON r.content_id = c.id AND r.kind = 'canonical'
+			WHERE c.id = $1`, contentID).Scan(&published, &slug, &left, &path, &cats); err != nil {
+			t.Fatal(err)
+		}
+		got := fmt.Sprintf("rev=%t slug=%v pending=%v path=%s cats=%v", published == revisionID, deref(slug), deref(left), path, cats)
+		want := fmt.Sprintf("rev=true slug=moved pending=<nil> path=/posts/moved/ cats=[%d]", catID)
+		if taken {
+			want = fmt.Sprintf(`rev=true slug=later pending={"slug": "moved"} path=/posts/later/ cats=[%d]`, catID)
+		}
+		if got != want {
+			t.Errorf("taken=%t: %s, want %s", taken, got, want)
+		}
+	}
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return "<nil>"
+	}
+	return *s
 }

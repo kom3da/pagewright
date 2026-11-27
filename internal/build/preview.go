@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kom3da/pagewright/internal/content"
 	"github.com/kom3da/pagewright/internal/db"
 	"github.com/kom3da/pagewright/internal/db/dbgen"
 	"github.com/kom3da/pagewright/internal/render"
@@ -27,8 +28,8 @@ type PreviewOptions struct {
 	Notice string
 }
 
-// RenderPreview renders one content with its latest revision, as the site
-// would show it once published, for a preview link.
+// RenderPreview renders one content with its latest revision and pending
+// settings, as the site would show it once published, for a preview link.
 func RenderPreview(ctx context.Context, d *db.DB, tenantID uuid.UUID, contentID int64, opts PreviewOptions) ([]byte, error) {
 	ctx = db.WithTenant(ctx, tenantID)
 	snap, err := load(ctx, d)
@@ -69,12 +70,30 @@ func RenderPreview(ctx context.Context, d *db.DB, tenantID uuid.UUID, contentID 
 		g.site.LogoURL = opts.SelfURL + "media/" + key
 	}
 
+	pending, err := content.Pending(c)
+	if err != nil {
+		return nil, err
+	}
+	if pending.PublishedAt != nil {
+		c.PublishedAt = pending.PublishedAt
+	}
+	moved := pending.SlugSet || pending.ParentSet
+	if moved {
+		t := g.treeByID[c.ID]
+		if pending.SlugSet {
+			t.Slug = pending.Slug
+		}
+		if pending.ParentSet {
+			t.ParentID = pending.ParentID
+		}
+		g.treeByID[c.ID] = t
+	}
 	publishedAt := time.Now()
 	if c.PublishedAt != nil {
 		publishedAt = *c.PublishedAt
 	}
 	path, parents, ok := g.rulePath(c.ID)
-	if it, published := g.itemByID[c.ID]; published {
+	if it, published := g.itemByID[c.ID]; published && !moved {
 		path, parents, ok = it.path, it.parents, true
 	}
 	if !ok {
@@ -96,6 +115,8 @@ func RenderPreview(ctx context.Context, d *db.DB, tenantID uuid.UUID, contentID 
 			BodySchemaVersion: rev.BodySchemaVersion, Fields: rev.Fields, RevisionCreatedAt: rev.CreatedAt,
 		},
 		path: path, body: body, parents: parents,
+		cats: g.previewLinks(c.ID, pending.CategoryIDs, true),
+		tags: g.previewLinks(c.ID, pending.TagIDs, false),
 	}
 	pg := g.page(c.Type, path)
 	pg.Title = g.title(it)
@@ -118,6 +139,48 @@ func RenderPreview(ctx context.Context, d *db.DB, tenantID uuid.UUID, contentID 
 	notice := `<div role="note" style="padding:0.6rem 1rem;background:#fff4ce;color:#1c2430;border-bottom:2px solid #9a6700;font:700 15px/1.6 system-ui,sans-serif;text-align:center">` +
 		template.HTMLEscapeString(opts.Notice) + `</div>`
 	return inject(b, `<base href="`+template.HTMLEscapeString(base+"/")+`">`, notice, ""), nil
+}
+
+// previewLinks returns the category (or tag) links of a content: of ids
+// when given, otherwise the live ones.
+func (g *generator) previewLinks(contentID int64, ids *[]int64, categories bool) []Link {
+	var list []int64
+	switch {
+	case ids != nil:
+		list = *ids
+	case categories:
+		for _, cc := range g.snap.contentCats {
+			if cc.ContentID == contentID {
+				list = append(list, cc.CategoryID)
+			}
+		}
+	default:
+		for _, ct := range g.snap.contentTags {
+			if ct.ContentID == contentID {
+				list = append(list, ct.TagID)
+			}
+		}
+	}
+	names, paths := map[int64]string{}, g.tagPath
+	if categories {
+		paths = g.catPath
+		for _, c := range g.snap.categories {
+			names[c.ID] = c.Name
+		}
+	} else {
+		for _, t := range g.snap.tags {
+			names[t.ID] = t.Name
+		}
+	}
+	var out []Link
+	for _, id := range list {
+		name, nok := names[id]
+		p, pok := paths[id]
+		if nok && pok {
+			out = append(out, Link{Title: name, URL: p})
+		}
+	}
+	return out
 }
 
 // ThemeAsset returns a file of the assets/ directory of the theme the

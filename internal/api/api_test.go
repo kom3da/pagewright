@@ -256,6 +256,7 @@ type detail struct {
 	ParentID              *int64
 	CategoryIDs           []int64
 	TagIDs                []int64
+	PendingSettings       bool
 	Revision              struct {
 		ID    int64
 		Title string
@@ -354,8 +355,9 @@ func TestContentLifecycle(t *testing.T) {
 		t.Errorf("after new draft = %+v, want published with unpublished changes", d)
 	}
 
-	// Changing the URL keeps the old one as a redirect.
+	// Changing the URL keeps the old one as a redirect, once published.
 	alice.mustDo(http.MethodPatch, fmt.Sprintf("/api/contents/%d", d.ID), map[string]any{"slug": "news-1"}, &d, http.StatusOK)
+	alice.mustDo(http.MethodPost, fmt.Sprintf("/api/contents/%d/publish", d.ID), nil, &d, http.StatusOK)
 	if d.URL == nil || *d.URL != "/posts/news-1/" {
 		t.Errorf("url after slug change = %v, want /posts/news-1/", d.URL)
 	}
@@ -367,6 +369,7 @@ func TestContentLifecycle(t *testing.T) {
 	// Pages nest under their parent's URL and follow its changes.
 	parent := alice.newContent("page", "会社概要", true)
 	alice.mustDo(http.MethodPatch, fmt.Sprintf("/api/contents/%d", parent.ID), map[string]any{"slug": "company"}, &parent, http.StatusOK)
+	alice.mustDo(http.MethodPost, fmt.Sprintf("/api/contents/%d/publish", parent.ID), nil, &parent, http.StatusOK)
 	child := alice.newContent("page", "アクセス", false)
 	alice.mustDo(http.MethodPatch, fmt.Sprintf("/api/contents/%d", child.ID), map[string]any{"slug": "access", "parentId": parent.ID}, &child, http.StatusOK)
 	alice.mustDo(http.MethodPost, fmt.Sprintf("/api/contents/%d/publish", child.ID), nil, &child, http.StatusOK)
@@ -374,6 +377,7 @@ func TestContentLifecycle(t *testing.T) {
 		t.Errorf("child url = %v, want /company/access/", child.URL)
 	}
 	alice.mustDo(http.MethodPatch, fmt.Sprintf("/api/contents/%d", parent.ID), map[string]any{"slug": "about"}, nil, http.StatusOK)
+	alice.mustDo(http.MethodPost, fmt.Sprintf("/api/contents/%d/publish", parent.ID), nil, nil, http.StatusOK)
 	alice.mustDo(http.MethodGet, fmt.Sprintf("/api/contents/%d", child.ID), nil, &child, http.StatusOK)
 	if child.URL == nil || *child.URL != "/about/access/" {
 		t.Errorf("child url after parent change = %v, want /about/access/", child.URL)
@@ -427,16 +431,24 @@ func TestMoveUnderDraftPage(t *testing.T) {
 		alice.mustDo(http.MethodPatch, fmt.Sprintf("/api/contents/%d", id), in, &d, http.StatusOK)
 		return d
 	}
-	a := alice.newContent("page", "A", true)
+	publish := func(id int64) detail {
+		var d detail
+		alice.mustDo(http.MethodPost, fmt.Sprintf("/api/contents/%d/publish", id), nil, &d, http.StatusOK)
+		return d
+	}
+	a := alice.newContent("page", "A", false)
 	patch(a.ID, map[string]any{"slug": "a"})
+	publish(a.ID)
 	b := alice.newContent("page", "B", false)
 	patch(b.ID, map[string]any{"slug": "b", "parentId": a.ID})
-	c := alice.newContent("page", "C", true)
-	c = patch(c.ID, map[string]any{"slug": "c", "parentId": b.ID})
+	c := alice.newContent("page", "C", false)
+	patch(c.ID, map[string]any{"slug": "c", "parentId": b.ID})
+	c = publish(c.ID)
 	if c.URL == nil || *c.URL != "/a/b/c/" {
 		t.Fatalf("C's URL = %v, want /a/b/c/", c.URL)
 	}
 	patch(a.ID, map[string]any{"slug": "a2"})
+	publish(a.ID)
 	alice.mustDo(http.MethodGet, fmt.Sprintf("/api/contents/%d", c.ID), nil, &c, http.StatusOK)
 	if c.URL == nil || *c.URL != "/a2/b/c/" {
 		t.Errorf("C's URL after moving A = %v, want /a2/b/c/", c.URL)
@@ -557,8 +569,12 @@ func TestTenantIsolation(t *testing.T) {
 	alice := e.login("alice@example.com")
 	bob := e.login("bob@example.com")
 
-	// Bob's site B data.
+	// Bob's site B data, with settings waiting to be published.
 	bPost := bob.newContent("post", "Bの記事", true)
+	bob.mustDo(http.MethodPatch, fmt.Sprintf("/api/contents/%d", bPost.ID), map[string]any{"slug": "b-pending"}, &bPost, http.StatusOK)
+	if !bPost.PendingSettings {
+		t.Fatalf("B's post has no pending settings: %+v", bPost)
+	}
 	bPage := bob.newContent("page", "Bのページ", true)
 	var bCat, bTag struct{ ID int64 }
 	bob.mustDo(http.MethodPost, "/api/categories", map[string]any{"name": "B", "slug": "b-cat"}, &bCat, http.StatusCreated)
@@ -629,11 +645,23 @@ func TestTenantIsolation(t *testing.T) {
 		t.Errorf("category under B's category = %d, want 422", got)
 	}
 
-	// B is untouched.
+	// B is untouched, its pending settings included.
 	var after detail
 	bob.mustDo(http.MethodGet, fmt.Sprintf("/api/contents/%d", bPost.ID), nil, &after, http.StatusOK)
 	if diff := cmp.Diff(bPost, after); diff != "" {
 		t.Errorf("B's content changed (-before +after):\n%s", diff)
+	}
+	var pending []byte
+	if err := e.db.Admin.QueryRow(context.Background(), "SELECT pending_settings FROM contents WHERE id = $1", bPost.ID).Scan(&pending); err != nil || string(pending) != `{"slug": "b-pending"}` {
+		t.Errorf("B's pending settings = %s (%v), want only its own slug", pending, err)
+	}
+	// A's pending settings are A's alone.
+	alice.mustDo(http.MethodPatch, fmt.Sprintf("/api/contents/%d", aPost.ID), map[string]any{"slug": "a-pending"}, nil, http.StatusOK)
+	if got, _ := bob.errorCode(http.MethodGet, fmt.Sprintf("/api/contents/%d", aPost.ID), nil); got != http.StatusNotFound {
+		t.Errorf("B reading A's content with pending settings = %d, want 404", got)
+	}
+	if got, _ := bob.errorCode(http.MethodPost, fmt.Sprintf("/api/contents/%d/publish", aPost.ID), nil); got != http.StatusNotFound {
+		t.Errorf("B publishing A's pending settings = %d, want 404", got)
 	}
 	var bCats []json.RawMessage
 	bob.mustDo(http.MethodGet, "/api/categories", nil, &bCats, http.StatusOK)

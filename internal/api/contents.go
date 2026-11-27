@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/kom3da/pagewright/internal/body"
+	"github.com/kom3da/pagewright/internal/content"
 	"github.com/kom3da/pagewright/internal/db/dbgen"
 	"github.com/kom3da/pagewright/internal/routing"
 )
@@ -49,6 +50,10 @@ type contentDetail struct {
 	TagIDs              []int64      `json:"tagIds"`
 	Revision            revisionJSON `json:"revision"`
 	PublishedRevisionID *int64       `json:"publishedRevisionId"`
+	// PendingSettings tells that the settings shown (slug, parentId,
+	// categoryIds, tagIds, publishedAt) wait to be published; url is the
+	// live one.
+	PendingSettings bool `json:"pendingSettings"`
 }
 
 func status(c dbgen.Content) string {
@@ -64,8 +69,9 @@ func status(c dbgen.Content) string {
 func summary(c dbgen.Content, title string, latestRevisionID int64, url *string) contentSummary {
 	return contentSummary{
 		ID: c.ID, Number: c.Number, Type: c.Type, Title: title, Slug: c.Slug, Status: status(c),
-		HasUnpublishedChanges: c.PublishedRevisionID != nil && *c.PublishedRevisionID != latestRevisionID,
-		URL:                   url, PublishedAt: c.PublishedAt, ScheduledAt: c.ScheduledAt, ParentID: c.ParentID,
+		HasUnpublishedChanges: c.PublishedRevisionID != nil &&
+			(*c.PublishedRevisionID != latestRevisionID || c.PendingSettings != nil),
+		URL: url, PublishedAt: c.PublishedAt, ScheduledAt: c.ScheduledAt, ParentID: c.ParentID,
 		ScheduledRevisionID: c.ScheduledRevisionID, LatestRevisionID: latestRevisionID,
 		UpdatedAt: c.UpdatedAt,
 	}
@@ -109,7 +115,7 @@ func (s *Server) listContents(w http.ResponseWriter, r *http.Request, _ *session
 				TenantID: row.TenantID, ID: row.ID, Number: row.Number, Type: row.Type, Slug: row.Slug,
 				ParentID: row.ParentID, PublishedRevisionID: row.PublishedRevisionID,
 				ScheduledRevisionID: row.ScheduledRevisionID, ScheduledAt: row.ScheduledAt,
-				PublishedAt: row.PublishedAt, UpdatedAt: row.UpdatedAt,
+				PublishedAt: row.PublishedAt, PendingSettings: row.PendingSettings, UpdatedAt: row.UpdatedAt,
 			}
 			out = append(out, summary(c, row.Title, row.LatestRevisionID, row.Url))
 		}
@@ -139,18 +145,23 @@ func loadDetail(ctx context.Context, q *dbgen.Queries, id int64) (contentDetail,
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return contentDetail{}, err
 	}
-	cats, err := q.ListContentCategoryIDs(ctx, id)
+	live, err := content.Live(ctx, q, c)
 	if err != nil {
 		return contentDetail{}, err
 	}
-	tags, err := q.ListContentTagIDs(ctx, id)
+	pending, err := content.Pending(c)
 	if err != nil {
 		return contentDetail{}, err
 	}
+	// The editor shows what was saved, pending or not.
+	set := pending.Over(live)
+	sum := summary(c, rev.Title, rev.ID, url)
+	sum.Slug, sum.ParentID, sum.PublishedAt = set.Slug, set.ParentID, set.PublishedAt
 	return contentDetail{
-		contentSummary: summary(c, rev.Title, rev.ID, url),
-		CategoryIDs:    nonNil(cats),
-		TagIDs:         nonNil(tags),
+		contentSummary:  sum,
+		CategoryIDs:     *set.CategoryIDs,
+		TagIDs:          *set.TagIDs,
+		PendingSettings: !pending.Empty(),
 		Revision: revisionJSON{
 			ID: rev.ID, Title: rev.Title, Body: rev.Body, BodySchemaVersion: rev.BodySchemaVersion,
 			Fields: rev.Fields, CreatedAt: rev.CreatedAt,
@@ -306,7 +317,10 @@ func rawHTMLUnchanged(prev, next []string) bool {
 	return true
 }
 
-func (s *Server) patchContent(w http.ResponseWriter, r *http.Request, sess *session) error {
+// patchContent changes the settings. On a live content they wait in
+// pending_settings until its changes are published, like the title and
+// body; otherwise they are saved directly.
+func (s *Server) patchContent(w http.ResponseWriter, r *http.Request, _ *session) error {
 	id, err := pathID(r)
 	if err != nil {
 		return err
@@ -321,102 +335,74 @@ func (s *Server) patchContent(w http.ResponseWriter, r *http.Request, sess *sess
 	if err := decode(w, r, &in); err != nil {
 		return err
 	}
-	var slug, parent *json.RawMessage
+	var set content.Settings
 	if len(in.Slug) > 0 {
-		slug = &in.Slug
+		if err := json.Unmarshal(in.Slug, &set.Slug); err != nil {
+			return invalid("invalid_slug", slugMessage)
+		}
+		if set.Slug != nil && *set.Slug == "" {
+			set.Slug = nil
+		}
+		set.SlugSet = true
 	}
 	if len(in.ParentID) > 0 {
-		parent = &in.ParentID
+		if err := json.Unmarshal(in.ParentID, &set.ParentID); err != nil {
+			return invalid("invalid_parent", "親ページの指定が正しくありません")
+		}
+		set.ParentSet = true
+	}
+	if in.PublishedAt != nil {
+		at := in.PublishedAt.UTC().Truncate(time.Second)
+		if at.Year() < 1900 || at.After(time.Now().Add(time.Minute)) {
+			return invalid("invalid_published_at", "公開日は今より前の日時にしてください。先の日時に公開するときは「日時を指定して公開」を使ってください")
+		}
+		set.PublishedAt = &at
+	}
+	if in.CategoryIDs != nil {
+		ids := dedupe(*in.CategoryIDs)
+		set.CategoryIDs = &ids
+	}
+	if in.TagIDs != nil {
+		ids := dedupe(*in.TagIDs)
+		set.TagIDs = &ids
 	}
 
 	ctx := r.Context()
 	var d contentDetail
 	err = s.DB.InTenantTx(ctx, func(tx pgx.Tx, q *dbgen.Queries) error {
+		if _, err := q.LockContent(ctx, id); err != nil {
+			return err
+		}
 		c, err := q.GetContent(ctx, id)
 		if err != nil {
 			return err
 		}
-		urlChanged := false
-		if slug != nil {
-			var v *string
-			if err := json.Unmarshal(*slug, &v); err != nil {
-				return invalid("invalid_slug", slugMessage)
-			}
-			if v != nil && *v == "" {
-				v = nil
-			}
-			if !equalPtr(v, c.Slug) {
-				if v != nil {
-					if err := checkSlug(*v); err != nil {
-						return err
-					}
-				}
-				if err := q.UpdateContentSlug(ctx, dbgen.UpdateContentSlugParams{ID: id, Slug: v}); err != nil {
-					return err
-				}
-				urlChanged = true
-			}
+		if err := checkSettings(ctx, q, c, set); err != nil {
+			return err
 		}
-		if parent != nil {
-			var v *int64
-			if err := json.Unmarshal(*parent, &v); err != nil {
-				return invalid("invalid_parent", "親ページの指定が正しくありません")
-			}
-			if !equalPtr(v, c.ParentID) {
-				if err := checkParent(ctx, q, c, v); err != nil {
-					return err
-				}
-				if err := q.UpdateContentParent(ctx, dbgen.UpdateContentParentParams{ID: id, ParentID: v}); err != nil {
-					return err
-				}
-				urlChanged = true
-			}
-		}
-		if in.PublishedAt != nil {
-			at := in.PublishedAt.UTC().Truncate(time.Second)
-			if at.Year() < 1900 || at.After(time.Now().Add(time.Minute)) {
-				return invalid("invalid_published_at", "公開日は今より前の日時にしてください。先の日時に公開するときは「日時を指定して公開」を使ってください")
-			}
-			if err := q.SetPublishedAt(ctx, dbgen.SetPublishedAtParams{ID: id, PublishedAt: &at}); err != nil {
+		if c.PublishedRevisionID == nil {
+			if err := content.Apply(ctx, q, c, set); err != nil {
 				return err
 			}
-		}
-		if in.CategoryIDs != nil {
-			if err := q.ClearContentCategories(ctx, id); err != nil {
-				return err
-			}
-			for _, cid := range dedupe(*in.CategoryIDs) {
-				if err := q.AddContentCategory(ctx, dbgen.AddContentCategoryParams{ContentID: id, CategoryID: cid}); err != nil {
-					return err
-				}
-			}
-		}
-		if in.TagIDs != nil {
-			if err := q.ClearContentTags(ctx, id); err != nil {
-				return err
-			}
-			for _, tid := range dedupe(*in.TagIDs) {
-				if err := q.AddContentTag(ctx, dbgen.AddContentTagParams{ContentID: id, TagID: tid}); err != nil {
-					return err
-				}
-			}
-		}
-		if urlChanged && c.Type == "page" {
-			updated, err := q.GetContent(ctx, id)
+		} else {
+			pending, err := content.Pending(c)
 			if err != nil {
 				return err
 			}
-			if _, err := routing.ContentPath(ctx, q, updated); err != nil {
+			live, err := content.Live(ctx, q, c)
+			if err != nil {
 				return err
 			}
-		}
-		if urlChanged {
-			if err := routing.SyncContent(ctx, q, id); err != nil {
+			next := set.Over(pending).ChangesFrom(live)
+			// A URL in use is reported now rather than when publishing.
+			if err := content.Try(ctx, tx, q, c, next); err != nil {
 				return err
 			}
-		}
-		if c.PublishedRevisionID != nil {
-			if err := s.enqueueBuild(ctx, tx, sess.tenantID); err != nil {
+			b, err := next.Marshal()
+			if err != nil {
+				return err
+			}
+			if err := q.SetPendingSettings(ctx, dbgen.SetPendingSettingsParams{ID: id, PendingSettings: b}); err != nil {
 				return err
 			}
 		}
@@ -427,6 +413,42 @@ func (s *Server) patchContent(w http.ResponseWriter, r *http.Request, sess *sess
 		return err
 	}
 	writeJSON(w, http.StatusOK, d)
+	return nil
+}
+
+// checkSettings validates settings typed in the admin for c. A slug or
+// parent equal to the live one is not checked again, so slugs migrated
+// from WordPress can stay.
+func checkSettings(ctx context.Context, q *dbgen.Queries, c dbgen.Content, set content.Settings) error {
+	if set.SlugSet && set.Slug != nil && !equalPtr(set.Slug, c.Slug) {
+		if err := checkSlug(*set.Slug); err != nil {
+			return err
+		}
+	}
+	if set.ParentSet && !equalPtr(set.ParentID, c.ParentID) {
+		if err := checkParent(ctx, q, c, set.ParentID); err != nil {
+			return err
+		}
+	}
+	missing := invalid("invalid_reference", "指定したものが見つかりません")
+	if set.CategoryIDs != nil {
+		ids, err := q.ListCategoryIDsIn(ctx, *set.CategoryIDs)
+		if err != nil {
+			return err
+		}
+		if len(ids) != len(*set.CategoryIDs) {
+			return missing
+		}
+	}
+	if set.TagIDs != nil {
+		ids, err := q.ListTagIDsIn(ctx, *set.TagIDs)
+		if err != nil {
+			return err
+		}
+		if len(ids) != len(*set.TagIDs) {
+			return missing
+		}
+	}
 	return nil
 }
 
@@ -496,6 +518,27 @@ func (s *Server) setPublished(w http.ResponseWriter, r *http.Request, sess *sess
 				return errEditConflict
 			}
 			rev = &latest.ID
+		}
+		c, err := q.GetContent(ctx, id)
+		if err != nil {
+			return err
+		}
+		if publish {
+			// Settings saved while live go out with the changes; a URL
+			// taken meanwhile fails the publishing as it would the save.
+			if err := content.ApplyPending(ctx, q, c); err != nil {
+				return err
+			}
+		} else {
+			// Unpublishing must not be blocked by a URL that cannot be
+			// applied: it then stays as it is.
+			skipped, err := content.ApplyPendingExceptURL(ctx, tx, q, c, false)
+			if err != nil {
+				return err
+			}
+			if skipped != nil {
+				s.Logger.WarnContext(ctx, "pending URL dropped on unpublish", "content_id", id, "err", skipped)
+			}
 		}
 		if _, err := q.PublishRevision(ctx, dbgen.PublishRevisionParams{ContentID: id, RevisionID: rev}); err != nil {
 			return err

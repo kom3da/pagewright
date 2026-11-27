@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/kom3da/pagewright/internal/body"
+	"github.com/kom3da/pagewright/internal/content"
 	"github.com/kom3da/pagewright/internal/db"
 	"github.com/kom3da/pagewright/internal/jobs"
 	"github.com/kom3da/pagewright/internal/mail"
@@ -275,6 +276,8 @@ func (s *Server) finish(w http.ResponseWriter, r *http.Request, err error) {
 		ae = errURLTaken
 	case errors.Is(err, routing.ErrReservedPath):
 		ae = invalid("reserved_slug", "「posts」「media」「search」「pagefind」はサイトの仕組みで使っているため、いちばん上の固定ページのURLには使えません")
+	case errors.Is(err, content.ErrParentLoop):
+		ae = invalid("invalid_parent", "親ページに、このページ自身やその下のページは選べません")
 	case errors.As(err, &be):
 		ae = invalid("invalid_body", be.Message)
 	case errors.As(err, &se):
