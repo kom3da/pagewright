@@ -45,6 +45,8 @@ async function open() {
   }
   new window.PagefindUI({
     element: "#pagefind-search",
+    // Result links get the site's base (/pagewright/ on GitHub Pages).
+    baseUrl: withBase("/"),
     showSubResults: true,
     showImages: false,
   });

@@ -98,6 +98,9 @@ const dev: DefaultTheme.SidebarItem[] = [
 
 export default defineConfig({
   lang: "ja",
+  // GitHub Pages serves the site under /pagewright/ (DOCS_BASE in
+  // .github/workflows/docs.yaml); locally it is at the root.
+  base: process.env.DOCS_BASE ?? "/",
   title: "Pagewright",
   description: "中小企業・個人のWebサイト向けの、セルフホストでも速く、日本語に強いCMS",
   // A broken link fails the build. Only the dev URLs (http://localhost:8080/
