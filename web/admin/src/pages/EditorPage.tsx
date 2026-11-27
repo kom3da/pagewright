@@ -353,8 +353,9 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
       // The server cancels a pending schedule when publishing now.
       const hadSchedule = content.scheduledAt !== null;
       if (!(await persist())) return;
+      let detail: ContentDetail;
       try {
-        update(await api.publish(id, baseRevisionId.current));
+        detail = await api.publish(id, baseRevisionId.current);
       } catch (e) {
         if (isApiError(e, 409, "edit_conflict")) {
           setConflict(true);
@@ -362,6 +363,13 @@ function EditorForm({ content: initial }: { content: ContentDetail }) {
         }
         throw e;
       }
+      update(detail);
+      // The first publish sets the date shown on the site: show it like a fresh load does.
+      // (Its fields are not mounted yet, so resetField would not reach them.)
+      form.reset(
+        { ...form.formState.defaultValues, published: settingsFrom(detail).published },
+        { keepDirtyValues: true },
+      );
       notify(
         `公開しました。${hadSchedule ? "予約は取り消しました。" : ""}公開サイトに反映されるまで少しお待ちください。`,
       );

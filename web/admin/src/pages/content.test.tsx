@@ -569,6 +569,11 @@ describe("editor", () => {
     expect(await screen.findByText(/公開サイトに反映されるまで/)).toBeInTheDocument();
     expect(screen.getByText("公開中")).toBeInTheDocument();
     expect(db.contents.find((c) => c.id === 1)?.status).toBe("published");
+    // The date set by the first publish fills the 公開日 fields, with nothing left to save.
+    const date = screen.getByRole("group", { name: "公開日（日本時間）" });
+    expect(within(date).getByLabelText("日付")).not.toHaveValue("");
+    expect(within(date).getByLabelText("時刻")).not.toHaveValue("");
+    expect(screen.queryByText("保存していない変更があります")).not.toBeInTheDocument();
 
     await chooseMore(user, "公開をやめる");
     const dialog = await screen.findByRole("alertdialog", { name: "公開をやめますか？" });
