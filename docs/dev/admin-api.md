@@ -53,7 +53,7 @@ type ContentSummary = {
   title: string;             // 最新の版のタイトル
   slug: string | null;       // 「ページのURL（英数字）」
   status: ContentStatus;
-  hasUnpublishedChanges: boolean; // 公開中の版より新しい版がある（一度も公開していなければ false）
+  hasUnpublishedChanges: boolean; // 公開中の版より新しい版か、公開を待つ設定がある（一度も公開していなければ false）
   url: string | null;        // 公開中の URL（routes の canonical）
   publishedAt: string | null;
   scheduledAt: string | null; // 予約公開の日時。公開中の記事の更新を予約しているときも入る
@@ -77,8 +77,11 @@ type ContentDetail = ContentSummary & {
   tagIds: number[];
   revision: Revision;        // 最新の版（編集中の内容）
   publishedRevisionId: number | null;
+  pendingSettings: boolean;  // 公開を待つ設定がある
 };
 ```
+
+公開中のコンテンツの設定（`slug`・`parentId`・`categoryIds`・`tagIds`・`publishedAt`）は、タイトルや本文と同じく変更を公開するまで公開サイトに出ない。`ContentDetail` はこれらに保存した値（公開を待つ値を含む）を返し、`pendingSettings` が true になる。`url` は公開中の URL のまま。一覧（`ContentSummary[]`）は公開中の値を返す。
 
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
@@ -86,10 +89,10 @@ type ContentDetail = ContentSummary & {
 | `POST /api/contents` | `{"type": "post"}` | 201 `ContentDetail`（空の版を 1 つ作る） |
 | `GET /api/contents/{id}` | | 200 `ContentDetail` |
 | `PUT /api/contents/{id}/draft` | `{"title": "...", "body": {...}, "fields": {...}, "baseRevisionId": 12}`（`fields`・`baseRevisionId` は省略可） | 200 `ContentDetail`。保存のたびに新しい版を作る。`baseRevisionId`（編集を始めたときの `revision.id`）が最新の版と違えば、ほかの人が先に保存したので 409 `edit_conflict` |
-| `PATCH /api/contents/{id}` | `{"slug"?: string \| null, "parentId"?: number \| null, "categoryIds"?: number[], "tagIds"?: number[], "publishedAt"?: string}` | 200 `ContentDetail`。公開中に URL が変わったら、古い URL はリダイレクトとして残す。`publishedAt` はサイトに出る公開日（今より前の日時。未公開ならその日付で公開される）。先の日時は 422 `invalid_published_at` |
-| `POST /api/contents/{id}/publish` | なし、または `{"baseRevisionId": 12}` | 200 `ContentDetail`。最新の版を公開し、サイトの再ビルドを予約する。公開の予約があれば取り消す。`baseRevisionId`（画面で見ていた版）が最新の版と違えば、ほかの人が先に保存したので 409 `edit_conflict` |
-| `POST /api/contents/{id}/unpublish` | なし | 200 `ContentDetail`。公開の予約があれば取り消す。再ビルドを予約する |
-| `POST /api/contents/{id}/schedule` | `{"publishAt": "RFC 3339", "baseRevisionId"?: 12}`（今から 1 分以上あと） | 200 `ContentDetail`。最新の版をその日時に公開する。もう一度呼ぶと予約を置き換える。過去の日時は 422 `invalid_publish_at`。`baseRevisionId` は公開と同じ |
+| `PATCH /api/contents/{id}` | `{"slug"?: string \| null, "parentId"?: number \| null, "categoryIds"?: number[], "tagIds"?: number[], "publishedAt"?: string}` | 200 `ContentDetail`。公開中でなければそのまま保存する。公開中なら同じように検証したうえで、公開中の値と違う項目だけを公開待ちとして残し（前に残したものに重ねる。すべて公開中の値に戻れば公開待ちはなくなる）、公開サイトは変えず再ビルドもしない。URL の重なりは保存の時点でも確かめる（409 `conflict`）。`publishedAt` はサイトに出る公開日（今より前の日時。未公開ならその日付で公開される）。先の日時は 422 `invalid_published_at`。ないカテゴリ・タグは 422 `invalid_reference` |
+| `POST /api/contents/{id}/publish` | なし、または `{"baseRevisionId": 12}` | 200 `ContentDetail`。最新の版を公開し、公開を待つ設定も反映して（公開中に URL が変われば古い URL はリダイレクトとして残す）、サイトの再ビルドを予約する。そのあいだに消えたカテゴリ・タグは飛ばす。URL がほかで使われていれば 409 `conflict`（`field: "slug"`）で、何も変えない。公開の予約があれば取り消す。`baseRevisionId`（画面で見ていた版）が最新の版と違えば、ほかの人が先に保存したので 409 `edit_conflict` |
+| `POST /api/contents/{id}/unpublish` | なし | 200 `ContentDetail`。公開を待つ設定は反映して下書きの設定にする（URL が反映できなければ URL の変更だけは捨てる。取り消しは止めない）。公開の予約があれば取り消す。再ビルドを予約する |
+| `POST /api/contents/{id}/schedule` | `{"publishAt": "RFC 3339", "baseRevisionId"?: 12}`（今から 1 分以上あと） | 200 `ContentDetail`。最新の版をその日時に公開する。そのときに公開を待っている設定も反映する（URL が反映できなければ、URL の変更だけ公開待ちに残して公開は進める）。もう一度呼ぶと予約を置き換える。過去の日時は 422 `invalid_publish_at`。`baseRevisionId` は公開と同じ |
 | `DELETE /api/contents/{id}/schedule` | | 200 `ContentDetail`。予約を取り消す |
 | `DELETE /api/contents/{id}` | | 204。再ビルドを予約する |
 | `POST /api/contents/{id}/preview-links` | `{"days": 1〜30}`（本体は必須。`days` のキーを省くと 3） | 201 `PreviewLink`（`url` 付き）。ログインなしで見られるリンク。開くたびにその時点の最新の版を描く（作った時点の内容に固定しない）。`url` はこのときしか返らない（保存しているのはハッシュだけ）。範囲外は 422 `invalid_days`（`field: "days"`） |
