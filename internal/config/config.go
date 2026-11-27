@@ -25,6 +25,7 @@ type Config struct {
 	SMTPUsername       string // PAGEWRIGHT_SMTP_USERNAME: enables SMTP AUTH (over TLS only)
 	SMTPPassword       string // PAGEWRIGHT_SMTP_PASSWORD
 	SMTPImplicitTLS    bool   // PAGEWRIGHT_SMTP_TLS=implicit: TLS from the start (port 465)
+	SMTPRequireTLS     bool   // PAGEWRIGHT_SMTP_TLS=starttls: refuse servers without STARTTLS
 	MailFrom           string // PAGEWRIGHT_MAIL_FROM
 	AdminDir           string // PAGEWRIGHT_ADMIN_DIR: built admin UI, when not embedded
 	Pagefind           string // PAGEWRIGHT_PAGEFIND: Pagefind binary for site search; "off" disables
@@ -46,6 +47,7 @@ func FromEnv() Config {
 		SMTPUsername:    os.Getenv("PAGEWRIGHT_SMTP_USERNAME"),
 		SMTPPassword:    os.Getenv("PAGEWRIGHT_SMTP_PASSWORD"),
 		SMTPImplicitTLS: os.Getenv("PAGEWRIGHT_SMTP_TLS") == "implicit",
+		SMTPRequireTLS:  os.Getenv("PAGEWRIGHT_SMTP_TLS") == "starttls",
 		MailFrom:        env("PAGEWRIGHT_MAIL_FROM", "Pagewright <no-reply@localhost>"),
 		AdminDir:        env("PAGEWRIGHT_ADMIN_DIR", filepath.Join("web", "admin", "dist")),
 		Pagefind:        os.Getenv("PAGEWRIGHT_PAGEFIND"),

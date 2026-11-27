@@ -153,7 +153,7 @@ Pagewright はログイン用リンクとお問い合わせの通知をメール
 | --- | --- |
 | `PAGEWRIGHT_SMTP_ADDR` | SMTP サーバー（例：`smtp.example.co.jp:587`） |
 | `PAGEWRIGHT_SMTP_USERNAME`・`PAGEWRIGHT_SMTP_PASSWORD` | 認証が必要なサービスのとき。パスワードは TLS の上でしか送りません（サーバーが STARTTLS に対応しているか、次の implicit） |
-| `PAGEWRIGHT_SMTP_TLS` | 465 番ポートのように最初から TLS で話すサーバーなら `implicit` |
+| `PAGEWRIGHT_SMTP_TLS` | 465 番ポートのように最初から TLS で話すサーバーなら `implicit`。`starttls` にすると、STARTTLS に対応していないサーバーには送りません（暗号化なしでメールを送らないため。外部のメール送信サービスを使うときにおすすめ）。空のときは、サーバーが対応していれば STARTTLS を使い、対応していなければ暗号化せずに送ります（同じマシンの中継サーバーや Mailpit 向け） |
 
 メール送信サービス（SendGrid、Amazon SES など）の SMTP、Google Workspace の SMTP リレー、社内の中継サーバーのどれでも使えます。
 

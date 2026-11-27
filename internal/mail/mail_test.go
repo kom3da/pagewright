@@ -1,8 +1,12 @@
 package mail
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/base64"
+	"fmt"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -20,5 +24,60 @@ func TestBuildKeepsLinesShort(t *testing.T) {
 	dec, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(enc, "\r\n", ""))
 	if err != nil || string(dec) != body {
 		t.Errorf("body does not round-trip: %v", err)
+	}
+}
+
+// plainSMTP is an SMTP server without STARTTLS. It reports whether a
+// MAIL command arrived.
+func plainSMTP(t *testing.T) (addr string, gotMail <-chan bool) {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = l.Close() })
+	ch := make(chan bool, 1)
+	go func() {
+		conn, err := l.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		r := bufio.NewReader(conn)
+		_, _ = fmt.Fprint(conn, "220 test\r\n")
+		mailed := false
+		defer func() { ch <- mailed }()
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			cmd := strings.ToUpper(strings.TrimSpace(line))
+			switch {
+			case strings.HasPrefix(cmd, "EHLO"):
+				_, _ = fmt.Fprint(conn, "250-test\r\n250 8BITMIME\r\n")
+			case strings.HasPrefix(cmd, "MAIL"):
+				mailed = true
+				_, _ = fmt.Fprint(conn, "250 ok\r\n")
+			case strings.HasPrefix(cmd, "QUIT"):
+				_, _ = fmt.Fprint(conn, "221 bye\r\n")
+				return
+			default:
+				_, _ = fmt.Fprint(conn, "250 ok\r\n")
+			}
+		}
+	}()
+	return l.Addr().String(), ch
+}
+
+func TestRequireStartTLS(t *testing.T) {
+	addr, gotMail := plainSMTP(t)
+	s := SMTP{Addr: addr, From: "a@example.com", RequireStartTLS: true}
+	err := s.Send(context.Background(), Message{To: "b@example.com", Subject: "s", Body: "b"})
+	if err == nil || !strings.Contains(err.Error(), "STARTTLS") {
+		t.Fatalf("Send = %v, want a STARTTLS error", err)
+	}
+	if <-gotMail {
+		t.Error("mail was sent without TLS")
 	}
 }

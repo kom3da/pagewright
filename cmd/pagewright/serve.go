@@ -32,6 +32,7 @@ func runServe(ctx context.Context, cfg config.Config) error {
 	sender := mail.SMTP{
 		Addr: cfg.SMTPAddr, From: cfg.MailFrom,
 		Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, ImplicitTLS: cfg.SMTPImplicitTLS,
+		RequireStartTLS: cfg.SMTPRequireTLS,
 	}
 	riverClient, err := newRiver(d, cfg, sender)
 	if err != nil {

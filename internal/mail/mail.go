@@ -37,6 +37,10 @@ type SMTP struct {
 	Username, Password string
 	// ImplicitTLS starts TLS on connect (port 465) instead of STARTTLS.
 	ImplicitTLS bool
+	// RequireStartTLS refuses to send when the server does not offer
+	// STARTTLS. Without it, mail goes in plain text to servers that do not
+	// (a local relay or Mailpit).
+	RequireStartTLS bool
 }
 
 // Send implements Sender. It gives up after 30 seconds or when ctx ends.
@@ -71,7 +75,11 @@ func (s SMTP) Send(ctx context.Context, m Message) error {
 	}
 	defer func() { _ = c.Close() }()
 	if !s.ImplicitTLS {
-		if ok, _ := c.Extension("STARTTLS"); ok {
+		ok, _ := c.Extension("STARTTLS")
+		if !ok && s.RequireStartTLS {
+			return fmt.Errorf("smtp server %s does not offer STARTTLS", s.Addr)
+		}
+		if ok {
 			if err := c.StartTLS(tlsConfig); err != nil {
 				return fmt.Errorf("starttls: %w", err)
 			}
