@@ -2,6 +2,26 @@ import { defineConfig, type DefaultTheme } from "vitepress";
 
 const repo = "https://github.com/kom3da/pagewright";
 
+const guide: DefaultTheme.SidebarItem[] = [
+  {
+    text: "使い方",
+    items: [
+      { text: "はじめに", link: "/guide/" },
+      { text: "ログインとログアウト", link: "/guide/login" },
+      { text: "ホーム", link: "/guide/home" },
+      { text: "記事を書く・公開する", link: "/guide/posts" },
+      { text: "本文の書き方", link: "/guide/editor" },
+      { text: "固定ページと親子", link: "/guide/pages" },
+      { text: "カテゴリとタグ", link: "/guide/taxonomy" },
+      { text: "画像", link: "/guide/images" },
+      { text: "サイトの設定", link: "/guide/settings" },
+      { text: "お問い合わせ", link: "/guide/inquiries" },
+      { text: "サイトを更新する", link: "/guide/site-update" },
+      { text: "困ったとき", link: "/guide/troubleshooting" },
+    ],
+  },
+];
+
 const install: DefaultTheme.SidebarItem[] = [
   {
     text: "導入・運用",
@@ -67,11 +87,13 @@ export default defineConfig({
   },
   themeConfig: {
     nav: [
+      { text: "使い方", link: "/guide/", activeMatch: "^/guide/" },
       { text: "導入・運用", link: "/install/", activeMatch: "^/install/" },
       { text: "テーマを作る", link: "/themes/", activeMatch: "^/themes/" },
       { text: "開発", link: "/dev/", activeMatch: "^/(dev/|design)" },
     ],
     sidebar: {
+      "/guide/": guide,
       "/install/": install,
       "/themes/": themes,
       "/dev/": dev,

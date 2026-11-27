@@ -7,6 +7,9 @@ hero:
   tagline: 中小企業・個人のWebサイト向け。管理画面は動的、公開サイトは静的に書き出します。開発中です。
   actions:
     - theme: brand
+      text: 使い方を見る
+      link: /guide/
+    - theme: alt
       text: 導入する
       link: /install/
     - theme: alt
@@ -17,6 +20,10 @@ hero:
       link: /dev/
 
 features:
+  - title: 使い方
+    details: 管理画面で記事やページを書いて公開する方法。ログイン、画像、お問い合わせへの対応、困ったときの対処。ふだん管理画面を使う人向け。
+    link: /guide/
+    linkText: 使い方へ
   - title: 導入・運用
     details: Docker Compose で PostgreSQL・Pagewright・nginx・Caddy をまとめて動かす手順と、バックアップ・アップデート・困ったときの対処。
     link: /install/
