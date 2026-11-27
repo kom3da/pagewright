@@ -30,3 +30,12 @@ SELECT (EXISTS (
 
 -- name: DeleteMedia :one
 DELETE FROM media WHERE id = $1 RETURNING storage_key;
+
+-- name: LockMediaQuota :exec
+-- Makes uploads of the current tenant take turns until the transaction
+-- ends, so two uploads cannot both pass the quota check. Two-key advisory
+-- lock in the namespace 'pwmq' (see build.buildLockNamespace).
+SELECT pg_advisory_xact_lock(1886874993, hashtext(app_current_tenant()::text));
+
+-- name: MediaTotalBytes :one
+SELECT coalesce(sum(size_bytes), 0)::bigint AS total FROM media;

@@ -128,6 +128,18 @@ func (q *Queries) ListMedia(ctx context.Context) ([]Medium, error) {
 	return items, nil
 }
 
+const lockMediaQuota = `-- name: LockMediaQuota :exec
+SELECT pg_advisory_xact_lock(1886874993, hashtext(app_current_tenant()::text))
+`
+
+// Makes uploads of the current tenant take turns until the transaction
+// ends, so two uploads cannot both pass the quota check. Two-key advisory
+// lock in the namespace 'pwmq' (see build.buildLockNamespace).
+func (q *Queries) LockMediaQuota(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockMediaQuota)
+	return err
+}
+
 const mediaInUse = `-- name: MediaInUse :one
 SELECT (EXISTS (
   SELECT FROM contents c
@@ -148,6 +160,17 @@ func (q *Queries) MediaInUse(ctx context.Context, mediaID int64) (bool, error) {
 	var in_use bool
 	err := row.Scan(&in_use)
 	return in_use, err
+}
+
+const mediaTotalBytes = `-- name: MediaTotalBytes :one
+SELECT coalesce(sum(size_bytes), 0)::bigint AS total FROM media
+`
+
+func (q *Queries) MediaTotalBytes(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, mediaTotalBytes)
+	var total int64
+	err := row.Scan(&total)
+	return total, err
 }
 
 const updateMediaAlt = `-- name: UpdateMediaAlt :one

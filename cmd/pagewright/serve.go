@@ -40,14 +40,15 @@ func runServe(ctx context.Context, cfg config.Config) error {
 	}
 
 	apiServer := api.New(api.Options{
-		DB:             d,
-		Jobs:           riverJobs{client: riverClient},
-		Mail:           sender,
-		PublicBaseURL:  cfg.PublicBaseURL,
-		TrustedProxies: cfg.TrustedProxies,
-		Media:          media.Store{Root: cfg.MediaDir()},
-		BaseURL:        cfg.BaseURL,
-		SecureCookies:  cfg.SecureCookies(),
+		DB:              d,
+		Jobs:            riverJobs{client: riverClient},
+		Mail:            sender,
+		PublicBaseURL:   cfg.PublicBaseURL,
+		TrustedProxies:  cfg.TrustedProxies,
+		Media:           media.Store{Root: cfg.MediaDir()},
+		MediaQuotaBytes: cfg.MediaQuotaMB << 20,
+		BaseURL:         cfg.BaseURL,
+		SecureCookies:   cfg.SecureCookies(),
 	})
 
 	mux := http.NewServeMux()

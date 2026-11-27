@@ -2,10 +2,13 @@
 package config
 
 import (
+	"log/slog"
+	"math"
 	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -29,6 +32,7 @@ type Config struct {
 	MailFrom           string // PAGEWRIGHT_MAIL_FROM
 	AdminDir           string // PAGEWRIGHT_ADMIN_DIR: built admin UI, when not embedded
 	Pagefind           string // PAGEWRIGHT_PAGEFIND: Pagefind binary for site search; "off" disables
+	MediaQuotaMB       int64  // PAGEWRIGHT_MEDIA_QUOTA_MB: media storage per site; 0 is unlimited
 	// TrustedProxies (PAGEWRIGHT_TRUSTED_PROXIES, comma-separated CIDRs or
 	// addresses) are reverse proxies whose X-Forwarded-For is believed.
 	TrustedProxies []netip.Prefix
@@ -51,6 +55,14 @@ func FromEnv() Config {
 		MailFrom:        env("PAGEWRIGHT_MAIL_FROM", "Pagewright <no-reply@localhost>"),
 		AdminDir:        env("PAGEWRIGHT_ADMIN_DIR", filepath.Join("web", "admin", "dist")),
 		Pagefind:        os.Getenv("PAGEWRIGHT_PAGEFIND"),
+	}
+	if v := os.Getenv("PAGEWRIGHT_MEDIA_QUOTA_MB"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 0 || n > math.MaxInt64>>20 {
+			slog.Warn("PAGEWRIGHT_MEDIA_QUOTA_MB は0以上の整数（MB）で書いてください。画像の容量は制限しません", "value", v)
+		} else {
+			c.MediaQuotaMB = n
+		}
 	}
 	for _, p := range strings.Split(os.Getenv("PAGEWRIGHT_TRUSTED_PROXIES"), ",") {
 		p = strings.TrimSpace(p)

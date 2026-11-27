@@ -196,6 +196,12 @@ func newEnv(t *testing.T) *env {
 // real sites do.
 func newEnvOverlappingIDs(t *testing.T) *env {
 	t.Helper()
+	return newEnvWith(t, nil)
+}
+
+// newEnvWith is newEnvOverlappingIDs with options changed by set.
+func newEnvWith(t *testing.T, set func(*api.Options)) *env {
+	t.Helper()
 	d := dbtest.New(t)
 	fm := &fakeMail{admin: d.Admin}
 	e := &env{t: t, db: d, mail: fm, builds: &fakeBuilds{mail: fm}, tenantA: uuid.New(), tenantB: uuid.New()}
@@ -216,10 +222,14 @@ func newEnvOverlappingIDs(t *testing.T) *env {
 			t.Fatalf("seed: %v", err)
 		}
 	}
-	s := api.New(api.Options{
+	opts := api.Options{
 		DB: d.DB, Mail: e.mail, Media: media.Store{Root: t.TempDir()}, Jobs: e.builds,
 		BaseURL: "http://admin.test", PublicBaseURL: "https://site-a.example",
-	})
+	}
+	if set != nil {
+		set(&opts)
+	}
+	s := api.New(opts)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", s.Handler())
 	mux.Handle("/f/", s.FormHandler())
@@ -654,6 +664,37 @@ func TestMedia(t *testing.T) {
 	alice.mustDo(http.MethodPatch, fmt.Sprintf("/api/media/%d", m.ID), map[string]string{"altText": "新しい説明"}, &m, http.StatusOK)
 	if m.AltText != "新しい説明" {
 		t.Errorf("alt after patch = %q", m.AltText)
+	}
+}
+
+func TestMediaQuota(t *testing.T) {
+	img := pngBytes(t)
+	e := newEnvWith(t, func(o *api.Options) { o.MediaQuotaBytes = int64(2 * len(img)) })
+	alice := e.login("alice@example.com")
+	bob := e.login("bob@example.com")
+
+	var first mediaOut
+	if got := alice.upload("a.png", img, "1枚目", &first); got != http.StatusCreated {
+		t.Fatalf("first upload = %d", got)
+	}
+	if got := alice.upload("b.png", img, "2枚目", nil); got != http.StatusCreated {
+		t.Fatalf("second upload = %d", got)
+	}
+	var out struct {
+		Error struct{ Code, Message string } `json:"error"`
+	}
+	if got := alice.upload("c.png", img, "3枚目", &out); got != http.StatusUnprocessableEntity || out.Error.Code != "quota_exceeded" ||
+		!strings.Contains(out.Error.Message, "古い画像を削除") {
+		t.Errorf("upload over quota = %d %+v, want 422 quota_exceeded", got, out.Error)
+	}
+	// Site A's images do not count against site B.
+	if got := bob.upload("b.png", img, "Bの画像", nil); got != http.StatusCreated {
+		t.Errorf("other site's upload = %d, want 201", got)
+	}
+	// Deleting an image frees its space.
+	alice.mustDo(http.MethodDelete, fmt.Sprintf("/api/media/%d", first.ID), nil, nil, http.StatusNoContent)
+	if got := alice.upload("c.png", img, "3枚目", nil); got != http.StatusCreated {
+		t.Errorf("upload after deleting = %d, want 201", got)
 	}
 }
 

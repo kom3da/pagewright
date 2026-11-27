@@ -80,6 +80,8 @@ services:
       PAGEWRIGHT_MAIL_FROM: ${PAGEWRIGHT_MAIL_FROM:?.env に PAGEWRIGHT_MAIL_FROM を書いてください}
       # サイト内検索（Pagefind）。off で使わない
       PAGEWRIGHT_PAGEFIND: ${PAGEWRIGHT_PAGEFIND:-/usr/local/bin/pagefind_extended}
+      # 1つのサイトに保存できる画像の合計（MB）。0 で上限なし
+      PAGEWRIGHT_MEDIA_QUOTA_MB: ${PAGEWRIGHT_MEDIA_QUOTA_MB:-0}
       TZ: ${TZ:-Asia/Tokyo}
     volumes:
       - data:/data # 画像（media/）と書き出したサイト（site/）

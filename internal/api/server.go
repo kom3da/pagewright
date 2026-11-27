@@ -50,12 +50,14 @@ type Jobs interface {
 
 // Options configures a Server.
 type Options struct {
-	DB            *db.DB
-	Mail          mail.Sender
-	Media         media.Store
-	Jobs          Jobs   // nil: no builds or scheduled publishing
-	BaseURL       string // admin origin, for login links
-	PublicBaseURL string // public site origin, for links on form result pages
+	DB    *db.DB
+	Mail  mail.Sender
+	Media media.Store
+	// MediaQuotaBytes caps the media storage of each tenant; 0 is unlimited.
+	MediaQuotaBytes int64
+	Jobs            Jobs   // nil: no builds or scheduled publishing
+	BaseURL         string // admin origin, for login links
+	PublicBaseURL   string // public site origin, for links on form result pages
 	// TrustedProxies are reverse proxies whose X-Forwarded-For is believed
 	// when they are the direct peer.
 	TrustedProxies []netip.Prefix
@@ -364,6 +366,7 @@ var errorFields = map[string]string{
 	"file_required":        "file",
 	"unsupported_type":     "file",
 	"too_large":            "file",
+	"quota_exceeded":       "file",
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

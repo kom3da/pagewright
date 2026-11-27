@@ -165,7 +165,7 @@ type Media = {
 
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
-| `POST /api/media` | multipart：`file`、`altText` | 201 `Media`。画像（JPEG・PNG・GIF・WebP）だけ、10MB まで。`altText` が空か 500 文字を超えると 422 `alt_required`、ファイルがなければ 422 `file_required`、画像でないか読めなければ 422 `unsupported_type`、大きすぎれば 413 `too_large`（どれも `field` 付き） |
+| `POST /api/media` | multipart：`file`、`altText` | 201 `Media`。画像（JPEG・PNG・GIF・WebP）だけ、10MB まで。`altText` が空か 500 文字を超えると 422 `alt_required`、ファイルがなければ 422 `file_required`、画像でないか読めなければ 422 `unsupported_type`、大きすぎれば 413 `too_large`（どれも `field` 付き）。サイトの画像の合計が上限（`PAGEWRIGHT_MEDIA_QUOTA_MB`。0 なら上限なし）を超えるなら 422 `quota_exceeded`（`field` 付き。`message` に上限と今の使用量、古い画像を消すか管理者に相談するよう案内が入る） |
 | `GET /api/media` | | 200 `Media[]`（新しい順） |
 | `GET /api/media/{id}/file` | | 画像そのもの |
 | `PATCH /api/media/{id}` | `{"altText"}` | 200 `Media`。空か 500 文字を超えると 422 `alt_required` |

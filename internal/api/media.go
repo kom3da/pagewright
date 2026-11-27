@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -99,6 +100,9 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request, sess *sessi
 	ctx := r.Context()
 	var m dbgen.Medium
 	err = s.DB.InTenant(ctx, func(q *dbgen.Queries) error {
+		if err := s.checkMediaQuota(ctx, q, int64(len(data))); err != nil {
+			return err
+		}
 		m, err = q.CreateMedia(ctx, dbgen.CreateMediaParams{
 			StorageKey: key, Filename: cleanFilename(hdr.Filename, ext), ContentType: ctype,
 			SizeBytes: int64(len(data)), Width: &width, Height: &height, AltText: alt, UploadedBy: &sess.userID,
@@ -111,6 +115,38 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request, sess *sessi
 	}
 	writeJSON(w, http.StatusCreated, toMedia(m))
 	return nil
+}
+
+// checkMediaQuota refuses an upload of size bytes that would take the
+// tenant past MediaQuotaBytes. It holds the tenant's upload lock until the
+// transaction ends, so call it in the transaction that adds the media.
+func (s *Server) checkMediaQuota(ctx context.Context, q *dbgen.Queries, size int64) error {
+	if s.MediaQuotaBytes <= 0 {
+		return nil
+	}
+	if err := q.LockMediaQuota(ctx); err != nil {
+		return err
+	}
+	used, err := q.MediaTotalBytes(ctx)
+	if err != nil {
+		return err
+	}
+	if used+size <= s.MediaQuotaBytes {
+		return nil
+	}
+	return &apiError{http.StatusUnprocessableEntity, "quota_exceeded", fmt.Sprintf(
+		"画像を保存できる容量（%s）がいっぱいのため、この画像を追加できません（今の使用量：%s）。"+
+			"使っていない古い画像を削除してから、もう一度お試しください。容量を増やしたいときは、サイトの管理者に相談してください",
+		formatMB(s.MediaQuotaBytes), formatMB(used))}
+}
+
+// formatMB shows a byte count in MB, rounded up to one decimal.
+func formatMB(n int64) string {
+	tenths := (n*10 + 1<<20 - 1) >> 20
+	if tenths%10 == 0 {
+		return fmt.Sprintf("%dMB", tenths/10)
+	}
+	return fmt.Sprintf("%d.%dMB", tenths/10, tenths%10)
 }
 
 func cleanFilename(name, ext string) string {
