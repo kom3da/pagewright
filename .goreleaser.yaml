@@ -32,6 +32,7 @@ archives:
   - formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
+      - LICENSE # AGPL-3.0: ship the license text with the binary
       - README.md
       - CHANGELOG.md
       - docs/install/*.md
