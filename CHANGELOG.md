@@ -8,6 +8,8 @@ GitHub のリリースノートは、この中のその版の節から作りま�
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-27
+
 ### 追加
 
 #### 記事と固定ページ
@@ -59,4 +61,5 @@ GitHub のリリースノートは、この中のその版の節から作りま�
 - 1つのサーバーで複数のサイトを動かしても、ほかのサイトのデータは見えません。サイトごとのデータは、データベース（PostgreSQL）の機能（行レベルセキュリティ）で分けています。アプリは権限を絞ったDBユーザー（`pagewright_app`）で接続します
 - ログイン用リンク・招待のリンク・セッション・プレビュー用リンクのトークンは、ハッシュにしてから保存し、nginx のログにも残しません。バックアップにも入れません
 
-[Unreleased]: https://github.com/kom3da/pagewright/commits/main
+[Unreleased]: https://github.com/kom3da/pagewright/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/kom3da/pagewright/releases/tag/v0.1.0
