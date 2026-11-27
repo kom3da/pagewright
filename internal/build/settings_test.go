@@ -23,7 +23,7 @@ func TestSiteSettingsInBuild(t *testing.T) {
 
 	s.admin(`INSERT INTO media (tenant_id, storage_key, filename, content_type, size_bytes) VALUES ($1, 'logo.png', 'logo.png', 'image/png', 1)`, s.tenant())
 	s.admin(`UPDATE tenants SET settings = '{"primaryColor":"#8a1538","font":"mincho","timeZone":"America/New_York"}',
-		logo_media_id = (SELECT id FROM media WHERE storage_key = 'logo.png') WHERE id = $1`, s.tenant())
+		logo_media_id = (SELECT id FROM media WHERE tenant_id = $1 AND storage_key = 'logo.png') WHERE id = $1`, s.tenant())
 	s.admin(`INSERT INTO menu_items (tenant_id, position, label, url) VALUES ($1, 0, '採用情報', 'https://example.com/jobs')`, s.tenant())
 	s.admin(`INSERT INTO menu_items (tenant_id, position, label, content_id) VALUES ($1, 1, '私たちについて', $2)`, s.tenant(), about.ID)
 

@@ -86,14 +86,16 @@ func (s *seeder) publish(contentID, revID int64, at time.Time) {
 		_, err := q.PublishRevision(s.ctx, dbgen.PublishRevisionParams{ContentID: contentID, RevisionID: &revID})
 		return err
 	})
-	s.admin("UPDATE contents SET published_at = $1 WHERE id = $2", at, contentID)
+	s.admin("UPDATE contents SET published_at = $1 WHERE tenant_id = $2 AND id = $3", at, s.tenant(), contentID)
 }
 
 func (s *seeder) unpublish(contentID int64) {
 	s.t.Helper()
-	s.admin("UPDATE contents SET published_revision_id = NULL WHERE id = $1", contentID)
+	s.admin("UPDATE contents SET published_revision_id = NULL WHERE tenant_id = $1 AND id = $2", s.tenant(), contentID)
 }
 
+// admin runs sql as the owner, outside RLS. Ids are unique only within a
+// tenant, so a statement that picks rows by id must also filter by tenant.
 func (s *seeder) admin(sql string, args ...any) {
 	s.t.Helper()
 	if _, err := s.env.Admin.Exec(context.Background(), sql, args...); err != nil {

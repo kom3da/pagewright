@@ -103,6 +103,24 @@ func (e *Env) CreateTenant(t testing.TB, name string) uuid.UUID {
 	return id
 }
 
+// SkipIDs moves tenant's id counters so that its next ids, in every table
+// numbered per tenant, are above n. Ids are unique only within a tenant, so
+// two fresh tenants both start at 1; isolation tests skip one tenant's ids
+// so that "the other tenant's id" is not also an id of the tenant asking.
+// admin must bypass RLS.
+func SkipIDs(t testing.TB, admin *pgxpool.Pool, tenant uuid.UUID, n int64) {
+	t.Helper()
+	_, err := admin.Exec(context.Background(), `
+		INSERT INTO tenant_id_counters (tenant_id, name, last_id)
+		SELECT $1, c.relname, $2 FROM pg_trigger tg JOIN pg_class c ON c.oid = tg.tgrelid
+		WHERE tg.tgfoid = 'assign_per_tenant_id'::regproc
+		ON CONFLICT (tenant_id, name) DO UPDATE
+		SET last_id = greatest(tenant_id_counters.last_id, EXCLUDED.last_id)`, tenant, n)
+	if err != nil {
+		t.Fatalf("skip ids: %v", err)
+	}
+}
+
 func migrate(t testing.TB, cfg *pgx.ConnConfig) {
 	t.Helper()
 	sqlDB := stdlib.OpenDB(*cfg)

@@ -5,7 +5,7 @@
 ## 共通
 
 - ベース：`/api/`。リクエスト・レスポンスとも JSON（メディアのアップロードだけ multipart）
-- キーは camelCase。日時は RFC 3339（UTC）。ID は数値、ユーザーとテナントの ID は UUID 文字列
+- キーは camelCase。日時は RFC 3339（UTC）。ID は数値、ユーザーとテナントの ID は UUID 文字列。数値の ID はサイトごとの連番で、別のサイトにも同じ ID がある（ID が指すのは、いま選んでいるサイトのもの）
 - 認証：HTTP-only の Cookie `pw_session`（SameSite=Lax、本番は Secure）
 - CSRF 対策：GET 以外は、ヘッダー `X-Pagewright: 1` を必ず付ける。付いていなければ 403
 - エラー：`{"error": {"code": "invalid_slug", "message": "ページのURLは英小文字・数字・ハイフンで入力してください", "field": "slug"}}`。`message` は管理画面にそのまま出せる日本語。`field` は入力欄に関係するエラーのときだけ付き、リクエストの項目名（`slug`、`title`、`parentId`、`name`、`altText`、`file`、`publishAt` など）が入る

@@ -171,6 +171,12 @@ type Tenant struct {
 	LogoMediaID       *int64
 }
 
+type TenantIDCounter struct {
+	TenantID uuid.UUID
+	Name     string
+	LastID   int64
+}
+
 type User struct {
 	ID          uuid.UUID
 	Email       string

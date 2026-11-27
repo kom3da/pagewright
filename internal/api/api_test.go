@@ -117,7 +117,18 @@ type env struct {
 
 // newEnv starts the API on a fresh database with two sites:
 // alice (A admin), dave (A editor), bob (B admin), carol (editor of both).
+// Site B's ids start after 1000, so an id of B is never also an id of A
+// and "A asks for B's item" asks for something A does not have.
 func newEnv(t *testing.T) *env {
+	t.Helper()
+	e := newEnvOverlappingIDs(t)
+	dbtest.SkipIDs(t, e.db.Admin, e.tenantB, 1000)
+	return e
+}
+
+// newEnvOverlappingIDs is newEnv where both sites number from 1, as two
+// real sites do.
+func newEnvOverlappingIDs(t *testing.T) *env {
 	t.Helper()
 	d := dbtest.New(t)
 	fm := &fakeMail{}
@@ -362,7 +373,7 @@ func TestContentLifecycle(t *testing.T) {
 		t.Errorf("url after slug change = %v, want /posts/news-1/", d.URL)
 	}
 	var kind string
-	if err := e.db.Admin.QueryRow(context.Background(), "SELECT kind FROM routes WHERE path = $1", wantURL).Scan(&kind); err != nil || kind != "redirect" {
+	if err := e.db.Admin.QueryRow(context.Background(), "SELECT kind FROM routes WHERE tenant_id = $1 AND path = $2", e.tenantA, wantURL).Scan(&kind); err != nil || kind != "redirect" {
 		t.Errorf("old url %s: kind=%q err=%v, want redirect", wantURL, kind, err)
 	}
 
@@ -652,7 +663,7 @@ func TestTenantIsolation(t *testing.T) {
 		t.Errorf("B's content changed (-before +after):\n%s", diff)
 	}
 	var pending []byte
-	if err := e.db.Admin.QueryRow(context.Background(), "SELECT pending_settings FROM contents WHERE id = $1", bPost.ID).Scan(&pending); err != nil || string(pending) != `{"slug": "b-pending"}` {
+	if err := e.db.Admin.QueryRow(context.Background(), "SELECT pending_settings FROM contents WHERE tenant_id = $1 AND id = $2", e.tenantB, bPost.ID).Scan(&pending); err != nil || string(pending) != `{"slug": "b-pending"}` {
 		t.Errorf("B's pending settings = %s (%v), want only its own slug", pending, err)
 	}
 	// A's pending settings are A's alone.
@@ -783,7 +794,7 @@ func TestTagEditAndMediaDelete(t *testing.T) {
 	alice.mustDo(http.MethodPost, "/api/tags", map[string]any{"name": "旧", "slug": "old"}, &tag, http.StatusCreated)
 	alice.mustDo(http.MethodPatch, fmt.Sprintf("/api/tags/%d", tag.ID), map[string]any{"name": "新", "slug": "new"}, &tag, http.StatusOK)
 	var kinds []string
-	rows, err := e.db.Admin.Query(context.Background(), "SELECT path || ' ' || kind FROM routes WHERE tag_id = $1 ORDER BY path", tag.ID)
+	rows, err := e.db.Admin.Query(context.Background(), "SELECT path || ' ' || kind FROM routes WHERE tenant_id = $1 AND tag_id = $2 ORDER BY path", e.tenantA, tag.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1109,7 +1120,7 @@ func TestPreviewLinks(t *testing.T) {
 	}
 
 	// Expired and revoked links stop working.
-	if _, err := e.db.Admin.Exec(context.Background(), "UPDATE preview_links SET expires_at = now() - interval '1 second' WHERE id = $1", link.ID); err != nil {
+	if _, err := e.db.Admin.Exec(context.Background(), "UPDATE preview_links SET expires_at = now() - interval '1 second' WHERE tenant_id = $1 AND id = $2", e.tenantA, link.ID); err != nil {
 		t.Fatal(err)
 	}
 	if status, _, _ := e.getPreview(link.URL, ""); status != http.StatusNotFound {

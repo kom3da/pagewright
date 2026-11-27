@@ -21,16 +21,18 @@ type liveState struct {
 	Pending     bool
 }
 
+// liveState reads site A's content as the owner, outside RLS; ids are
+// unique only within a site, so every lookup also filters by site.
 func (e *env) liveState(id int64) liveState {
 	e.t.Helper()
 	ctx := context.Background()
 	var s liveState
 	if err := e.db.Admin.QueryRow(ctx, `
 		SELECT c.slug, c.published_at, c.pending_settings IS NOT NULL,
-		  coalesce((SELECT array_agg(category_id ORDER BY category_id) FROM content_categories WHERE content_id = c.id), '{}'),
-		  coalesce((SELECT array_agg(tag_id ORDER BY tag_id) FROM content_tags WHERE content_id = c.id), '{}'),
-		  coalesce((SELECT path FROM routes WHERE content_id = c.id AND kind = 'canonical'), '')
-		FROM contents c WHERE c.id = $1`, id).Scan(&s.Slug, &s.PublishedAt, &s.Pending, &s.Categories, &s.Tags, &s.Canonical); err != nil {
+		  coalesce((SELECT array_agg(category_id ORDER BY category_id) FROM content_categories WHERE tenant_id = c.tenant_id AND content_id = c.id), '{}'),
+		  coalesce((SELECT array_agg(tag_id ORDER BY tag_id) FROM content_tags WHERE tenant_id = c.tenant_id AND content_id = c.id), '{}'),
+		  coalesce((SELECT path FROM routes WHERE tenant_id = c.tenant_id AND content_id = c.id AND kind = 'canonical'), '')
+		FROM contents c WHERE c.tenant_id = $1 AND c.id = $2`, e.tenantA, id).Scan(&s.Slug, &s.PublishedAt, &s.Pending, &s.Categories, &s.Tags, &s.Canonical); err != nil {
 		e.t.Fatal(err)
 	}
 	return s
@@ -99,7 +101,7 @@ func TestPendingSettings(t *testing.T) {
 		t.Errorf("live state after publishing (-want +got):\n%s", diff)
 	}
 	var kind string
-	if err := e.db.Admin.QueryRow(context.Background(), "SELECT kind FROM routes WHERE path = $1", oldURL).Scan(&kind); err != nil || kind != "redirect" {
+	if err := e.db.Admin.QueryRow(context.Background(), "SELECT kind FROM routes WHERE tenant_id = $1 AND path = $2", e.tenantA, oldURL).Scan(&kind); err != nil || kind != "redirect" {
 		t.Errorf("old url %s: kind=%q err=%v, want redirect", oldURL, kind, err)
 	}
 

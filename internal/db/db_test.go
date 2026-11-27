@@ -22,6 +22,7 @@ import (
 
 	"github.com/kom3da/pagewright/internal/db"
 	"github.com/kom3da/pagewright/internal/db/dbgen"
+	"github.com/kom3da/pagewright/internal/db/dbtest"
 	"github.com/kom3da/pagewright/internal/db/migrations"
 )
 
@@ -179,6 +180,10 @@ func (e *testEnv) seed(t *testing.T) {
 		}
 	}
 
+	// B's ids start after 1000, so B's ids are not also A's and "A asks
+	// for B's id" really asks for a row A does not have. Overlapping ids
+	// are tested in TestPerTenantIDs.
+	dbtest.SkipIDs(t, e.admin, e.tenantB, 1000)
 	a := e.seedTenant(t, e.ctxA, "a", e.alice)
 	b := e.seedTenant(t, e.ctxB, "b", e.bob)
 	e.postA, e.revA, e.catA, e.tagA, e.mediaA, e.routeA = a.post, a.rev, a.cat, a.tag, a.media, a.route
@@ -515,7 +520,7 @@ func TestTenantCannotWriteOtherTenant(t *testing.T) {
 
 	// B's content is still there and published.
 	var published *int64
-	if err := e.admin.QueryRow(context.Background(), "SELECT published_revision_id FROM contents WHERE id = $1", e.postB.ID).Scan(&published); err != nil {
+	if err := e.admin.QueryRow(context.Background(), "SELECT published_revision_id FROM contents WHERE tenant_id = $1 AND id = $2", e.tenantB, e.postB.ID).Scan(&published); err != nil {
 		t.Fatal(err)
 	}
 	if published == nil || *published != e.revB.ID {

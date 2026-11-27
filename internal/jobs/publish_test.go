@@ -26,8 +26,8 @@ func scheduledPost(t *testing.T, env *dbtest.Env, tenant uuid.UUID, at time.Time
 		VALUES ($1, $2, '予約の記事', '{"type":"doc","content":[]}', 1) RETURNING id`, tenant, contentID).Scan(&revisionID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := env.Admin.Exec(ctx, "UPDATE contents SET scheduled_revision_id = $1, scheduled_at = $2 WHERE id = $3",
-		revisionID, at, contentID); err != nil {
+	if _, err := env.Admin.Exec(ctx, "UPDATE contents SET scheduled_revision_id = $1, scheduled_at = $2 WHERE tenant_id = $3 AND id = $4",
+		revisionID, at, tenant, contentID); err != nil {
 		t.Fatal(err)
 	}
 	return contentID, revisionID
@@ -52,8 +52,8 @@ func TestPublishScheduled(t *testing.T) {
 	var path string
 	err := env.Admin.QueryRow(context.Background(), `
 		SELECT c.published_revision_id, c.published_at, r.path
-		FROM contents c JOIN routes r ON r.content_id = c.id AND r.kind = 'canonical'
-		WHERE c.id = $1 AND c.scheduled_revision_id IS NULL`, contentID).Scan(&published, &publishedAt, &path)
+		FROM contents c JOIN routes r ON r.tenant_id = c.tenant_id AND r.content_id = c.id AND r.kind = 'canonical'
+		WHERE c.tenant_id = $1 AND c.id = $2 AND c.scheduled_revision_id IS NULL`, tenant, contentID).Scan(&published, &publishedAt, &path)
 	if err != nil {
 		t.Fatalf("published content with route: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestPublishScheduledIgnoresStaleJobs(t *testing.T) {
 	runUntil(t, client, len(stale))
 
 	var published *int64
-	if err := env.Admin.QueryRow(context.Background(), "SELECT published_revision_id FROM contents WHERE id = $1", contentID).Scan(&published); err != nil {
+	if err := env.Admin.QueryRow(context.Background(), "SELECT published_revision_id FROM contents WHERE tenant_id = $1 AND id = $2", tenant, contentID).Scan(&published); err != nil {
 		t.Fatal(err)
 	}
 	if published != nil {
@@ -108,7 +108,7 @@ func TestPublishScheduledWaitsWhenEarly(t *testing.T) {
 	runUntil(t, client, 2) // the publish after its snooze, then the build
 
 	var published *int64
-	if err := env.Admin.QueryRow(context.Background(), "SELECT published_revision_id FROM contents WHERE id = $1", contentID).Scan(&published); err != nil {
+	if err := env.Admin.QueryRow(context.Background(), "SELECT published_revision_id FROM contents WHERE tenant_id = $1 AND id = $2", tenant, contentID).Scan(&published); err != nil {
 		t.Fatal(err)
 	}
 	if published == nil || *published != revisionID {
@@ -140,8 +140,8 @@ func TestPublishScheduledAppliesPending(t *testing.T) {
 			sql  string
 			args []any
 		}{
-			{"UPDATE contents SET published_revision_id = $1, published_at = now() - interval '1 day', pending_settings = $2 WHERE id = $3",
-				[]any{oldRevisionID, pending, contentID}},
+			{"UPDATE contents SET published_revision_id = $1, published_at = now() - interval '1 day', pending_settings = $2 WHERE tenant_id = $3 AND id = $4",
+				[]any{oldRevisionID, pending, tenant, contentID}},
 			{"INSERT INTO routes (tenant_id, path, kind, content_id) VALUES ($1, '/posts/later/', 'canonical', $2)", []any{tenant, contentID}},
 		}
 		if taken {
@@ -167,9 +167,9 @@ func TestPublishScheduledAppliesPending(t *testing.T) {
 		var cats []int64
 		if err := env.Admin.QueryRow(ctx, `
 			SELECT c.published_revision_id, c.slug, c.pending_settings::text, r.path,
-			  coalesce((SELECT array_agg(category_id) FROM content_categories WHERE content_id = c.id), '{}')
-			FROM contents c JOIN routes r ON r.content_id = c.id AND r.kind = 'canonical'
-			WHERE c.id = $1`, contentID).Scan(&published, &slug, &left, &path, &cats); err != nil {
+			  coalesce((SELECT array_agg(category_id) FROM content_categories WHERE tenant_id = c.tenant_id AND content_id = c.id), '{}')
+			FROM contents c JOIN routes r ON r.tenant_id = c.tenant_id AND r.content_id = c.id AND r.kind = 'canonical'
+			WHERE c.tenant_id = $1 AND c.id = $2`, tenant, contentID).Scan(&published, &slug, &left, &path, &cats); err != nil {
 			t.Fatal(err)
 		}
 		got := fmt.Sprintf("rev=%t slug=%v pending=%v path=%s cats=%v", published == revisionID, deref(slug), deref(left), path, cats)

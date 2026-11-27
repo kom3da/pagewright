@@ -54,7 +54,21 @@ func TestContactNotify(t *testing.T) {
 	if err := run(other); err != nil || len(sender.sent) != 1 {
 		t.Errorf("other tenant: err = %v, sent %d, want nothing sent", err, len(sender.sent))
 	}
-	if _, err := env.Admin.Exec(ctx, "DELETE FROM form_submissions WHERE id = $1", id); err != nil {
+	// Ids are per tenant: the other tenant's first submission has the same
+	// id, and its job sends that one.
+	var otherID int64
+	if err := env.Admin.QueryRow(ctx, `INSERT INTO form_submissions (tenant_id, name, email, message)
+		VALUES ($1, '佐藤', 's@example.com', '見積もりをお願いします') RETURNING id`, other).Scan(&otherID); err != nil {
+		t.Fatal(err)
+	}
+	if otherID != id {
+		t.Fatalf("other tenant's submission id = %d, want %d (ids are per tenant)", otherID, id)
+	}
+	if err := run(other); err != nil || len(sender.sent) != 2 || !strings.Contains(sender.sent[1].Body, "見積もり") || strings.Contains(sender.sent[1].Body, "お湯") {
+		t.Fatalf("other tenant's job: err = %v, sent = %+v, want its own submission only", err, sender.sent)
+	}
+	sender.sent = sender.sent[:1]
+	if _, err := env.Admin.Exec(ctx, "DELETE FROM form_submissions WHERE tenant_id = $1 AND id = $2", tenant, id); err != nil {
 		t.Fatal(err)
 	}
 	if err := run(tenant); err != nil || len(sender.sent) != 1 {
