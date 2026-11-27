@@ -22,6 +22,7 @@ const guide: DefaultTheme.SidebarItem[] = [
       { text: "はじめに", link: "/guide/" },
       { text: "ログインとログアウト", link: "/guide/login" },
       { text: "ホーム", link: "/guide/home" },
+      { text: "はじめての記事（画像つきのお知らせを出す）", link: "/guide/first-post" },
       { text: "記事を書く・公開する", link: "/guide/posts" },
       { text: "本文の書き方", link: "/guide/editor" },
       { text: "固定ページと親子", link: "/guide/pages" },
