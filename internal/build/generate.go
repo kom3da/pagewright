@@ -326,7 +326,7 @@ func (g *generator) buildSite() {
 	if g.site.ContactURL == "" {
 		for _, it := range g.items {
 			if it.body.HasContactForm {
-				g.site.ContactURL = it.path
+				g.site.ContactURL = g.urlOf(it)
 				break
 			}
 		}
@@ -418,6 +418,15 @@ func (g *generator) frontPage() *item {
 		return it
 	}
 	return nil
+}
+
+// urlOf is where an item is read: its own path, or "/" for the front page
+// chosen in the settings, whose own path only redirects to the home page.
+func (g *generator) urlOf(it *item) string {
+	if it.path != "/" && it == g.frontPage() {
+		return "/"
+	}
+	return it.path
 }
 
 func (g *generator) title(it *item) string {
@@ -534,7 +543,7 @@ func (g *generator) content(it *item) *Content {
 		Tags:        it.tags,
 	}
 	g.relate()
-	link := func(x *item) *Link { return &Link{Title: g.title(x), URL: x.path, Current: x == it} }
+	link := func(x *item) *Link { return &Link{Title: g.title(x), URL: g.urlOf(x), Current: x == it} }
 	links := func(list []*item) []Link {
 		out := make([]Link, 0, len(list))
 		for _, x := range list {
@@ -614,6 +623,14 @@ func (g *generator) writeContents() error {
 		if it.path == "/" && it.row.Type == "page" {
 			continue // rendered by writeHome
 		}
+		who := fmt.Sprintf("%s %d", it.row.Type, it.row.Number)
+		if it == g.frontPage() {
+			// Shown on the home page: its own URL would be the same page twice.
+			if err := g.addRedirect(it.path, "/", who); err != nil {
+				return err
+			}
+			continue
+		}
 		pg := g.page(it.row.Type, it.path)
 		pg.Title = g.title(it)
 		pg.Content = g.content(it)
@@ -624,11 +641,10 @@ func (g *generator) writeContents() error {
 		}
 		for _, pid := range it.parents {
 			if p, ok := g.itemByID[pid]; ok {
-				crumbs = append(crumbs, Link{Title: g.title(p), URL: p.path})
+				crumbs = append(crumbs, Link{Title: g.title(p), URL: g.urlOf(p)})
 			}
 		}
 		pg.Breadcrumbs = append(crumbs, Link{Title: pg.Title})
-		who := fmt.Sprintf("%s %d", it.row.Type, it.row.Number)
 		if err := g.writePage("single", who, pg, it.row.RevisionCreatedAt); err != nil {
 			return err
 		}

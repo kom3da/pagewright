@@ -88,6 +88,19 @@ func TestCorporateHome(t *testing.T) {
 			t.Errorf("home page has %q", unwanted)
 		}
 	}
+	// The front page is read on the home page: its own URL only redirects there.
+	if top := files["/top/index.html"]; !strings.Contains(top, `<meta http-equiv="refresh" content="0; url=/">`) {
+		t.Errorf("/top/ is not a redirect to /:\n%s", top)
+	}
+	if !strings.Contains(files["/_redirects.nginx"], `location = "/top/" { return 301 "/"; }`) {
+		t.Errorf("_redirects.nginx lacks /top/:\n%s", files["/_redirects.nginx"])
+	}
+	if strings.Contains(files["/sitemap.xml"], "/top/") {
+		t.Errorf("sitemap lists /top/:\n%s", files["/sitemap.xml"])
+	}
+	if !strings.Contains(files["/sitemap.xml"], "/service/") {
+		t.Errorf("sitemap lacks /service/:\n%s", files["/sitemap.xml"])
+	}
 	if !strings.Contains(files["/contact/index.html"], `<form class="contact-form"`) {
 		t.Error("the contact page has no form")
 	}

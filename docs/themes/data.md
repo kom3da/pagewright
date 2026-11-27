@@ -28,7 +28,7 @@
 | `NoIndex` | 検索エンジンに載せないページ（`<meta name="robots" content="noindex">` を出す） |
 | `Breadcrumbs` | パンくず（`[]Link`。最後は現在のページで URL なし） |
 | `Content` | 記事・固定ページ（`Title`、`Body`、`Type`、`PublishedAt`、`Categories`、`Tags`、下の親子と前後）。トップでは、トップに載せるページの本文 |
-| `Front` | トップに載せるページの要約（`Summary`。なければ nil）。トップだけ |
+| `Front` | トップに載せるページの要約（`Summary`。なければ nil）。トップだけ。このページ自身のURLには `single` を書き出さず、トップへの転送にする（サイトマップにも載せない）。メニューやパンくずでこのページを指すリンクは `/` になる |
 | `Posts` | お知らせの一覧（`[]PostItem`）。トップ（最新数件）と一覧ページ |
 | `Heading`・`Pagination` | 一覧ページの見出しとページ送り |
 | `SelfURL` | プレビューのときだけ、このページ自身の URL（下の「[本体が自動で付けるもの](#本体が自動で付けるもの)」のプレビュー） |

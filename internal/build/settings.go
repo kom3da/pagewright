@@ -53,7 +53,7 @@ func (g *generator) configuredMenu() []Link {
 			if !ok {
 				continue
 			}
-			l := Link{Title: g.title(it), URL: it.path}
+			l := Link{Title: g.title(it), URL: g.urlOf(it)}
 			if m.Label != nil {
 				l.Title = *m.Label
 			}

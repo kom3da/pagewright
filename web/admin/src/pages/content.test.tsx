@@ -85,6 +85,19 @@ describe("content list", () => {
     await expectNoAxeViolations();
   });
 
+  it("marks the page shown at the top of the home page instead of its own URL", async () => {
+    db.site.frontPageId = 4;
+    renderApp("/pages");
+    const table = await screen.findByRole("table");
+    const company = within(table).getAllByRole("row")[2];
+    expect(company).toHaveTextContent(/^会社概要/);
+    expect(
+      await within(company).findByRole("link", { name: /トップページに表示中/ }),
+    ).toHaveAttribute("href", expect.stringMatching(/\/$/));
+    expect(within(company).queryByText("/company/")).not.toBeInTheDocument();
+    expect(within(table).getByText("/company/history/")).toBeInTheDocument();
+  });
+
   it("creates a new page and opens the editor", async () => {
     const { user } = renderApp("/pages");
     await user.click(await screen.findByRole("button", { name: "固定ページを作る" }));

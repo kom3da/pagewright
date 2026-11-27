@@ -181,7 +181,7 @@ func (g *generator) themeValues() map[string]any {
 	for key, v := range values {
 		if id, ok := v.(int64); ok {
 			if it := g.itemByID[id]; it != nil && it.row.Type == "page" {
-				out[key] = &Link{Title: g.title(it), URL: it.path}
+				out[key] = &Link{Title: g.title(it), URL: g.urlOf(it)}
 			}
 			continue
 		}

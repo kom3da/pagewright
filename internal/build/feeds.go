@@ -25,7 +25,7 @@ func (g *generator) writeRedirects() error {
 		case r.ContentID != nil:
 			var it *item
 			if it, ok = g.itemByID[*r.ContentID]; ok {
-				to = it.path
+				to = g.urlOf(it)
 			}
 		case r.CategoryID != nil:
 			to, ok = g.catPath[*r.CategoryID]
@@ -35,20 +35,9 @@ func (g *generator) writeRedirects() error {
 		if !ok || to == r.Path {
 			continue // target not public (yet); the old URL stays a 404
 		}
-		rel, safe := fileForPath(r.Path)
-		if !safe || !nginxSafe(r.Path) {
-			g.warn("redirect %q: unsafe path; skipped", r.Path)
-			continue
-		}
-		page, err := redirectPage(absURL(g.opts.BaseURL, to), escapePath(to))
-		if err != nil {
+		if err := g.addRedirect(r.Path, to, "redirect "+r.Path); err != nil {
 			return err
 		}
-		if err := g.out.write(rel, "redirect "+r.Path, page); err != nil {
-			g.warn("%v; skipped", err)
-			continue
-		}
-		g.redirects = append(g.redirects, redirect{from: r.Path, to: to})
 	}
 
 	var b strings.Builder
@@ -68,6 +57,26 @@ func (g *generator) writeRedirects() error {
 			nginxQuote(r.from), nginxQuote(strings.ReplaceAll(escapePath(r.to), "$", "%24")))
 	}
 	return g.out.write(redirectsFile, systemOwner, []byte(b.String()))
+}
+
+// addRedirect writes a redirect page at from and lists the redirect for the
+// nginx include. Problems with the path are warnings.
+func (g *generator) addRedirect(from, to, who string) error {
+	rel, safe := fileForPath(from)
+	if !safe || !nginxSafe(from) {
+		g.warn("redirect %q: unsafe path; skipped", from)
+		return nil
+	}
+	page, err := redirectPage(absURL(g.opts.BaseURL, to), escapePath(to))
+	if err != nil {
+		return err
+	}
+	if err := g.out.write(rel, who, page); err != nil {
+		g.warn("%v; skipped", err)
+		return nil
+	}
+	g.redirects = append(g.redirects, redirect{from: from, to: to})
+	return nil
 }
 
 // nginxSafe refuses characters that have no business in a path and could

@@ -494,7 +494,7 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
           >
             <PageSelect
               label="トップに載せる固定ページ"
-              description="選んだページのタイトルと本文を、トップページのいちばん上に載せます。どのように見せるかはテーマによって違います。"
+              description="選んだページのタイトルと本文を、トップページのいちばん上に載せます。どのように見せるかはテーマによって違います。選んだページ自身のURLを開くと、トップページに移ります。"
               emptyLabel="載せない"
               value={form.frontPageId}
               onChange={(v) => set("frontPageId", v)}

@@ -13,7 +13,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { FileText, Newspaper, Search } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { errorMessage } from "../api/client";
-import { contentsPagesQuery, contentsQuery } from "../api/queries";
+import { contentsPagesQuery, contentsQuery, siteQuery } from "../api/queries";
 import type { ContentFilter, ContentStatus, ContentSummary, ContentType } from "../api/types";
 import { NewContentButton } from "../components/NewContentButton";
 import { AnchorLink } from "../components/ui/AnchorLink";
@@ -93,6 +93,8 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
   const more = paged && postList.hasNextPage;
   // Search results lose their parents; the whole list (usually cached) supplies them.
   const all = useQuery({ ...contentsQuery("page"), enabled: type === "page" && filtered });
+  // The page chosen for the top of the home page is read there, not at its own URL.
+  const frontPageId = useQuery({ ...siteQuery, enabled: type === "page" }).data?.frontPageId;
 
   const found = data ?? [];
   // Pages are shown as a tree (parents first) unless searching; posts keep the API order.
@@ -170,9 +172,15 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
                     {/* Only published contents have a public URL. */}
                     {c.url && (
                       <Box>
-                        <ExternalLink href={publicUrl(c.url)} size="sm" c="dimmed">
-                          {c.url}
-                        </ExternalLink>
+                        {c.id === frontPageId ? (
+                          <ExternalLink href={publicUrl("/")} size="sm" c="dimmed">
+                            トップページに表示中
+                          </ExternalLink>
+                        ) : (
+                          <ExternalLink href={publicUrl(c.url)} size="sm" c="dimmed">
+                            {c.url}
+                          </ExternalLink>
+                        )}
                       </Box>
                     )}
                   </div>
