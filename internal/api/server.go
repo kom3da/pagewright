@@ -43,6 +43,9 @@ type Jobs interface {
 	// EnqueueContactNotify tells to that a contact form submission (made
 	// in tx) arrived. The job reads the submission when it runs.
 	EnqueueContactNotify(ctx context.Context, tx pgx.Tx, args jobs.ContactNotifyArgs) error
+	// EnqueuePruneRevisions makes sure the tenant's old revisions are
+	// pruned at the next daily run. Duplicates are dropped.
+	EnqueuePruneRevisions(ctx context.Context, tenantID uuid.UUID) error
 }
 
 // Options configures a Server.

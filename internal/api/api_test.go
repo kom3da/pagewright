@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -99,6 +100,7 @@ type fakeBuilds struct {
 	mu        sync.Mutex
 	tenants   []uuid.UUID
 	publishes []scheduledPublish
+	prunes    []uuid.UUID
 	mailJobs  int // EnqueueMail calls, committed or not
 	mail      *fakeMail
 }
@@ -114,6 +116,13 @@ func (f *fakeBuilds) EnqueuePublish(_ context.Context, _ pgx.Tx, _ uuid.UUID, co
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.publishes = append(f.publishes, scheduledPublish{contentID, revisionID, at})
+	return nil
+}
+
+func (f *fakeBuilds) EnqueuePruneRevisions(_ context.Context, id uuid.UUID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.prunes = append(f.prunes, id)
 	return nil
 }
 
@@ -425,6 +434,12 @@ func TestContentLifecycle(t *testing.T) {
 	}
 	if e.builds.count(e.tenantA) == 0 {
 		t.Error("publishing did not schedule a build")
+	}
+	e.builds.mu.Lock()
+	prunes := slices.Clone(e.builds.prunes)
+	e.builds.mu.Unlock()
+	if len(prunes) == 0 || prunes[0] != e.tenantA {
+		t.Errorf("saving a draft scheduled pruning for %v, want tenant A", prunes)
 	}
 
 	// A new draft leaves the published version and shows pending changes.

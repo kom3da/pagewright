@@ -241,6 +241,41 @@ func (q *Queries) DeleteContent(ctx context.Context, id int64) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
+const deleteOldRevisions = `-- name: DeleteOldRevisions :execrows
+DELETE FROM content_revisions
+WHERE id IN (
+  SELECT r.id FROM (
+    SELECT id, content_id, created_at,
+      row_number() OVER (PARTITION BY content_id ORDER BY id DESC) AS rank
+    FROM content_revisions
+  ) r
+  WHERE r.rank > $1::bigint AND r.created_at < $2::timestamptz
+    AND NOT EXISTS (
+      SELECT FROM contents c
+      WHERE c.id = r.content_id AND r.id IN (c.published_revision_id, c.scheduled_revision_id))
+  ORDER BY r.id
+  LIMIT $3::int
+)
+`
+
+type DeleteOldRevisionsParams struct {
+	KeepNewest int64
+	Cutoff     time.Time
+	BatchSize  int32
+}
+
+// Deletes up to batch_size revisions that the retention policy lets go:
+// created before cutoff, not among the keep_newest newest of their
+// content, and neither published nor scheduled. keep_newest must be at
+// least 1 so the latest revision (the one being edited) always stays.
+func (q *Queries) DeleteOldRevisions(ctx context.Context, arg DeleteOldRevisionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOldRevisions, arg.KeepNewest, arg.Cutoff, arg.BatchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteRevision = `-- name: DeleteRevision :execrows
 DELETE FROM content_revisions WHERE id = $1
 `
@@ -340,6 +375,21 @@ func (q *Queries) GetLatestRevision(ctx context.Context, contentID int64) (Conte
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const hasRevisionsBeyond = `-- name: HasRevisionsBeyond :one
+SELECT EXISTS (
+  SELECT FROM content_revisions GROUP BY content_id HAVING count(*) > $1::bigint
+)
+`
+
+// Reports whether some content has more than keep_newest revisions, i.e.
+// whether revisions may become old enough to delete without new saves.
+func (q *Queries) HasRevisionsBeyond(ctx context.Context, keepNewest int64) (bool, error) {
+	row := q.db.QueryRow(ctx, hasRevisionsBeyond, keepNewest)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listCategoryIDsIn = `-- name: ListCategoryIDsIn :many

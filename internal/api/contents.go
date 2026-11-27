@@ -370,6 +370,13 @@ func (s *Server) saveDraft(w http.ResponseWriter, r *http.Request, sess *session
 	if err != nil {
 		return err
 	}
+	// After the commit, so saves of one tenant do not queue up on the
+	// job's unique key. A failure only delays pruning to a later save.
+	if s.Jobs != nil {
+		if err := s.Jobs.EnqueuePruneRevisions(ctx, sess.tenantID); err != nil {
+			s.Logger.Warn("schedule revision pruning", "tenant_id", sess.tenantID, "err", err)
+		}
+	}
 	writeJSON(w, http.StatusOK, d)
 	return nil
 }

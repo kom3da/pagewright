@@ -185,3 +185,30 @@ SELECT id FROM categories WHERE id = ANY(@ids::bigint[]) ORDER BY id;
 -- name: ListTagIDsIn :many
 -- The given ids that are tags of the tenant.
 SELECT id FROM tags WHERE id = ANY(@ids::bigint[]) ORDER BY id;
+
+-- name: DeleteOldRevisions :execrows
+-- Deletes up to batch_size revisions that the retention policy lets go:
+-- created before cutoff, not among the keep_newest newest of their
+-- content, and neither published nor scheduled. keep_newest must be at
+-- least 1 so the latest revision (the one being edited) always stays.
+DELETE FROM content_revisions
+WHERE id IN (
+  SELECT r.id FROM (
+    SELECT id, content_id, created_at,
+      row_number() OVER (PARTITION BY content_id ORDER BY id DESC) AS rank
+    FROM content_revisions
+  ) r
+  WHERE r.rank > @keep_newest::bigint AND r.created_at < @cutoff::timestamptz
+    AND NOT EXISTS (
+      SELECT FROM contents c
+      WHERE c.id = r.content_id AND r.id IN (c.published_revision_id, c.scheduled_revision_id))
+  ORDER BY r.id
+  LIMIT @batch_size::int
+);
+
+-- name: HasRevisionsBeyond :one
+-- Reports whether some content has more than keep_newest revisions, i.e.
+-- whether revisions may become old enough to delete without new saves.
+SELECT EXISTS (
+  SELECT FROM content_revisions GROUP BY content_id HAVING count(*) > @keep_newest::bigint
+);

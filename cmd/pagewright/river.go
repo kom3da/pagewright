@@ -79,3 +79,8 @@ func (j riverJobs) EnqueuePublish(ctx context.Context, tx pgx.Tx, tenantID uuid.
 	}, nil)
 	return err
 }
+
+func (j riverJobs) EnqueuePruneRevisions(ctx context.Context, tenantID uuid.UUID) error {
+	_, err := j.client.Insert(ctx, jobs.NextPruneRevisions(tenantID, time.Now()), nil)
+	return err
+}
