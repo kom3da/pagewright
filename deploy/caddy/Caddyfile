@@ -1,6 +1,6 @@
 # HTTPS の証明書（Let's Encrypt）を自動で取得・更新し、nginx へ中継する。
 # ドメインは .env の PAGEWRIGHT_SITE_DOMAIN と PAGEWRIGHT_ADMIN_DOMAIN。
-# 2つ目以降のサイトのドメインは PAGEWRIGHT_EXTRA_SITE_DOMAINS（docs/install.md）。
+# 2つ目以降のサイトのドメインは PAGEWRIGHT_EXTRA_SITE_DOMAINS（docs/install/second-site.md）。
 #
 # アクセスログはわざと出していない（log を書かなければ Caddy は記録しない）。
 # ログイン用URL（/admin/login/verify?token=…）とプレビューURL（/p/<token>/…）の

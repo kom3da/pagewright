@@ -2,7 +2,7 @@
 # DBを初めて作るときに1回だけ実行される（PostgreSQL公式イメージの仕組み）。
 # アプリが接続に使うユーザー pagewright_app を、ログインできる形で先に作る。
 # マイグレーション（00001）は pagewright_app が既にあれば作らないので、
-# この設定がそのまま使われる。パスワードを後から変えるときは docs/install.md を参照。
+# この設定がそのまま使われる。パスワードを後から変えるときは docs/install/settings.md を参照。
 set -eu
 
 if [ -z "${PAGEWRIGHT_APP_DB_PASSWORD:-}" ]; then

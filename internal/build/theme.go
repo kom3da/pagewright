@@ -143,7 +143,7 @@ type theme struct {
 	parts *template.Template
 }
 
-// Manifest is a theme's theme.json. See docs/themes.md.
+// Manifest is a theme's theme.json. See docs/themes/index.md.
 type Manifest struct {
 	Name        string `json:"name"`
 	Title       string `json:"title"`

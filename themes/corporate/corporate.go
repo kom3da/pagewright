@@ -1,6 +1,6 @@
 // Package corporate is the standard theme for small company sites.
 //
-// The files follow the theme contract in docs/themes.md: theme.json,
+// The files follow the theme contract in docs/themes/: theme.json,
 // templates/ (page templates and parts/), and assets/.
 package corporate
 

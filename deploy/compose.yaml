@@ -1,6 +1,6 @@
-# Pagewright 本番用の構成（サーバー1台。2つ目以降のサイトの公開は docs/install.md）
+# Pagewright 本番用の構成（サーバー1台。2つ目以降のサイトの公開は docs/install/second-site.md）
 #
-# 使い方は docs/install.md を参照。設定はこのファイルと同じ場所の .env に書く
+# 使い方は docs/install/ を参照。設定はこのファイルと同じ場所の .env に書く
 # （.env.example をコピーして作る）。
 #
 #   閲覧者 ─HTTPS→ caddy ─→ nginx ─┬→ 公開サイト（静的ファイル。app が止まっても表示される）
@@ -76,7 +76,7 @@ services:
       # 送る X-Forwarded-For を信じて、回数制限を閲覧者ごとにかける。
       # Caddy もロードバランサーも置かずに nginx を直接公開するなら、ここを
       # nginx のIPだけにする（Docker のゲートウェイも信じてしまい、閲覧者が
-      # X-Forwarded-For を偽れるため）。docs/install.md の「HTTPS について」を参照。
+      # X-Forwarded-For を偽れるため）。docs/install/https.md を参照。
       PAGEWRIGHT_TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
       PAGEWRIGHT_MAIL_FROM: ${PAGEWRIGHT_MAIL_FROM:?.env に PAGEWRIGHT_MAIL_FROM を書いてください}
       # サイト内検索（Pagefind）。off で使わない
@@ -112,7 +112,7 @@ services:
   # HTTPS（証明書の自動取得）。クラウドのロードバランサーでHTTPSを終端するなら、
   # このサービスを消し、nginx に ports: ["80:8080"] を付けてそちらへ向ける。
   # ロードバランサーなしで nginx を直接公開するときは、app の
-  # PAGEWRIGHT_TRUSTED_PROXIES も変える（docs/install.md の「HTTPS について」）。
+  # PAGEWRIGHT_TRUSTED_PROXIES も変える（docs/install/https.md）。
   caddy:
     image: caddy:2
     restart: unless-stopped

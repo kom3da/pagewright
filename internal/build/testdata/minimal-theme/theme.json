@@ -1,7 +1,7 @@
 {
   "name": "minimal",
   "title": "Minimal",
-  "description": "The smallest theme that meets the contract in docs/themes.md. Used by tests; a starting point for theme authors.",
+  "description": "The smallest theme that meets the contract in docs/themes/. Used by tests; a starting point for theme authors.",
   "labels": {
     "home": "Home",
     "posts": "News",
