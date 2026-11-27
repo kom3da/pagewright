@@ -273,6 +273,27 @@ func TestAppRoleIsSubjectToRLS(t *testing.T) {
 	}
 }
 
+// SECURITY DEFINER functions run as the owner, so a caller's temporary
+// objects must never shadow what they reference: pg_temp goes last.
+func TestDefinerFunctionsPinSearchPath(t *testing.T) {
+	e := newTestEnv(t)
+	rows, err := e.admin.Query(context.Background(), `
+		SELECT p.proname FROM pg_proc p
+		WHERE p.prosecdef AND p.pronamespace = 'public'::regnamespace
+		  AND NOT coalesce('search_path=pg_catalog, public, pg_temp' = ANY (p.proconfig), false)
+		ORDER BY 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bad) != 0 {
+		t.Errorf("SECURITY DEFINER functions without search_path = pg_catalog, public, pg_temp: %v", bad)
+	}
+}
+
 func TestTenantCannotReadOtherTenant(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := e.ctxA
