@@ -41,11 +41,11 @@ DNS が反映される前に起動すると証明書の取得に失敗します�
 
 ```sh
 docker compose up -d
-docker compose ps
+docker compose ps -a
 ```
 
 起動のたびに、まず `cli` がデータベースを最新の形にして（マイグレーション）終了し、そのあと `app` が起動します。
-`cli` が `exited (0)`、ほかが `running`（`app` と `db` は `healthy`）になっていれば成功です。
+`cli` が `Exited (0)`、ほかが `Up`（`app` と `db` は `healthy`）になっていれば成功です（`-a` を付けないと、終わった `cli` は表示されません）。
 
 ## 5. サイトと管理者を作る
 

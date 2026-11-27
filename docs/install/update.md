@@ -19,11 +19,11 @@
    ```sh
    docker compose pull
    docker compose up -d
-   docker compose ps
+   docker compose ps -a
    docker compose run --rm cli version   # 新しい版になったか確かめる
    ```
 
-マイグレーションに失敗すると `cli` が `exited (1)` になり、`app` は起動しません（`docker compose logs cli` で理由を確かめる）。
+マイグレーションに失敗すると `cli` が `Exited (1)` になり、`app` は起動しません（`docker compose logs cli` で理由を確かめる）。
 前の版に戻すときは、`.env` の `PAGEWRIGHT_IMAGE` と `git checkout` を前の版にし、バックアップから復元します（「[バックアップと復元](./backup.md)」）。
 
 PostgreSQL の大きな版（18 → 19 など）を上げるときは、別の手順が必要です（いまは 18 のままにしてください）。

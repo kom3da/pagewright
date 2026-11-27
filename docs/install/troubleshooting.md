@@ -13,7 +13,7 @@ docker compose run --rm cli login-url --email you@example.co.jp
 ## 状態とログを見る
 
 ```sh
-docker compose ps
+docker compose ps -a
 docker compose logs -f app      # 本体
 docker compose logs nginx caddy # 配信と HTTPS
 curl -s https://<管理画面のドメイン>/healthz   # ok と出れば本体とDBは動いている
