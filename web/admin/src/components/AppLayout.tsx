@@ -239,6 +239,7 @@ function SiteSwitcher() {
       </Menu.Target>
       <Menu.Dropdown>
         {/* A label directly inside role="menu" is not allowed (axe): label a group instead. */}
+        {/* biome-ignore lint/a11y/useSemanticElements: fieldset groups form controls, not menu items */}
         <div role="group" aria-labelledby={labelId}>
           <Menu.Label id={labelId}>サイトを切り替える</Menu.Label>
           {me.sites.map((s) => {
@@ -297,6 +298,7 @@ function UserMenu() {
         </Button>
       </Menu.Target>
       <Menu.Dropdown>
+        {/* biome-ignore lint/a11y/useSemanticElements: fieldset groups form controls, not menu items */}
         <div role="group" aria-labelledby={labelId}>
           <Menu.Label id={labelId}>{me.user.email} でログイン中</Menu.Label>
           <Menu.Item
