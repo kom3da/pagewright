@@ -3,7 +3,6 @@ import {
   Button,
   Group,
   Input,
-  NativeSelect,
   Paper,
   Radio,
   Stack,
@@ -14,6 +13,7 @@ import {
 import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import type { ContentSummary, MenuItem } from "../api/types";
+import { ContentPicker, contentTitle, lookedUpLabel, useContentsById } from "./ContentPicker";
 import classes from "./MenuEditor.module.css";
 import { Dialog } from "./ui/Dialog";
 import { Form } from "./ui/Form";
@@ -33,7 +33,6 @@ export const toMenuRows = (items: MenuItem[]): MenuRow[] =>
 type Props = {
   items: MenuRow[];
   onChange: (items: MenuRow[]) => void;
-  contents: ContentSummary[];
   error?: string;
   errorId: string;
 };
@@ -52,7 +51,7 @@ export function menuItemProblem(it: MenuItem, index: number) {
   return undefined;
 }
 
-export function MenuEditor({ items, onChange, contents, error, errorId }: Props) {
+export function MenuEditor({ items, onChange, error, errorId }: Props) {
   const [editing, setEditing] = useState<MenuRow | "new" | null>(null);
   const [announce, setAnnounce] = useState("");
   const [focusTarget, setFocusTarget] = useState<string | null>(null);
@@ -65,11 +64,22 @@ export function MenuEditor({ items, onChange, contents, error, errorId }: Props)
     setFocusTarget(null);
   }, [focusTarget]);
 
-  const byId = new Map(contents.map((c) => [c.id, c]));
+  // Contents chosen in this screen are known; saved ones are looked up by id.
+  const [known, setKnown] = useState(() => new Map<number, ContentSummary>());
+  const byId = useContentsById(
+    items.flatMap((it) => (it.contentId === null ? [] : [it.contentId])),
+    known,
+  );
   const title = (it: MenuItem) => {
     if (it.label) return it.label;
-    const c = it.contentId !== null ? byId.get(it.contentId) : undefined;
-    return c ? c.title || "（タイトルなし）" : "（見つからないページ）";
+    const c = it.contentId !== null ? byId.get(it.contentId) : "missing";
+    return c === undefined
+      ? "読み込み中…"
+      : c === "missing"
+        ? "（見つからないページ）"
+        : c === "failed"
+          ? "（タイトルを読み込めませんでした）"
+          : contentTitle(c);
   };
 
   const move = (index: number, by: -1 | 1) => {
@@ -95,7 +105,8 @@ export function MenuEditor({ items, onChange, contents, error, errorId }: Props)
     setFocusTarget(neighbor ? `${neighbor.key}-delete` : "add");
   };
 
-  const save = (it: MenuItem) => {
+  const save = (it: MenuItem, content: ContentSummary | null) => {
+    if (content) setKnown((m) => new Map(m).set(content.id, content));
     if (editing === "new") {
       const row = { ...it, key: nextKey++ };
       onChange([...items, row]);
@@ -133,7 +144,7 @@ export function MenuEditor({ items, onChange, contents, error, errorId }: Props)
         >
           {items.map((it, i) => {
             const name = title(it);
-            const c = it.contentId !== null ? byId.get(it.contentId) : undefined;
+            const c = it.contentId !== null ? byId.get(it.contentId) : "missing";
             return (
               <Group component="li" key={it.key} gap="sm" className={classes.row}>
                 <Text
@@ -150,13 +161,15 @@ export function MenuEditor({ items, onChange, contents, error, errorId }: Props)
                   <Text size="sm" c="dimmed">
                     {it.url !== null
                       ? `URL：${it.url}`
-                      : c
-                        ? `${typeLabel[c.type]}「${c.title || "（タイトルなし）"}」${
-                            c.status === "published"
-                              ? ""
-                              : "（公開していないため、いまはサイトに出ません）"
-                          }`
-                        : "リンク先のページが見つかりません。削除されたか、編集で選び直してください。"}
+                      : c === "missing"
+                        ? "リンク先のページが見つかりません。削除されたか、編集で選び直してください。"
+                        : typeof c === "object"
+                          ? `${typeLabel[c.type]}「${contentTitle(c)}」${
+                              c.status === "published"
+                                ? ""
+                                : "（公開していないため、いまはサイトに出ません）"
+                            }`
+                          : lookedUpLabel(c)}
                   </Text>
                 </Box>
                 <Group gap={4} className={classes.actions}>
@@ -228,7 +241,6 @@ export function MenuEditor({ items, onChange, contents, error, errorId }: Props)
         {editing !== null && (
           <MenuItemForm
             initial={editing === "new" ? null : editing}
-            contents={contents}
             onSubmit={save}
             onCancel={() => setEditing(null)}
           />
@@ -240,19 +252,16 @@ export function MenuEditor({ items, onChange, contents, error, errorId }: Props)
 
 function MenuItemForm({
   initial,
-  contents,
   onSubmit,
   onCancel,
 }: {
   initial: MenuItem | null;
-  contents: ContentSummary[];
-  onSubmit: (it: MenuItem) => void;
+  onSubmit: (it: MenuItem, content: ContentSummary | null) => void;
   onCancel: () => void;
 }) {
   const [kind, setKind] = useState<"content" | "url">(initial?.url != null ? "url" : "content");
-  const [contentId, setContentId] = useState(
-    initial?.contentId != null ? String(initial.contentId) : "",
-  );
+  const [contentId, setContentId] = useState(initial?.contentId ?? null);
+  const [content, setContent] = useState<ContentSummary | null>(null);
   const [url, setUrl] = useState(initial?.url ?? "");
   const [label, setLabel] = useState(initial?.label ?? "");
   const [errors, setErrors] = useState<{ contentId?: string; url?: string; label?: string }>({});
@@ -263,7 +272,7 @@ function MenuItemForm({
     e.stopPropagation();
     const l = label.trim();
     const next: typeof errors = {};
-    if (kind === "content" && !contentId)
+    if (kind === "content" && contentId === null)
       next.contentId = "リンク先のページか記事を選んでください。";
     if (kind === "url" && !menuUrl.test(url.trim())) {
       next.url =
@@ -279,19 +288,11 @@ function MenuItemForm({
     }
     onSubmit(
       kind === "content"
-        ? { contentId: Number(contentId), url: null, label: l || null }
+        ? { contentId, url: null, label: l || null }
         : { contentId: null, url: url.trim(), label: l },
+      kind === "content" ? content : null,
     );
   };
-
-  const pages = contents.filter((c) => c.type === "page");
-  const posts = contents.filter((c) => c.type === "post");
-  const option = (c: ContentSummary) => (
-    <option key={c.id} value={String(c.id)}>
-      {c.title || "（タイトルなし）"}
-      {c.status === "published" ? "" : "（公開していません）"}
-    </option>
-  );
 
   return (
     <Form ref={formRef} onSubmit={submit} gap="md">
@@ -310,17 +311,18 @@ function MenuItemForm({
         </Stack>
       </Radio.Group>
       {kind === "content" ? (
-        <NativeSelect
+        <ContentPicker
           label="ページや記事"
+          description="タイトルの一部を入力すると探せます。"
           error={errors.contentId}
           required
+          types={["page", "post"]}
           value={contentId}
-          onChange={(e) => setContentId(e.currentTarget.value)}
-        >
-          <option value="">選んでください</option>
-          {pages.length > 0 && <optgroup label="固定ページ">{pages.map(option)}</optgroup>}
-          {posts.length > 0 && <optgroup label="記事">{posts.map(option)}</optgroup>}
-        </NativeSelect>
+          onChange={(id, item) => {
+            setContentId(id);
+            setContent(item);
+          }}
+        />
       ) : (
         <TextInput
           label="URL"

@@ -14,6 +14,15 @@ async function openSettings() {
   return r;
 }
 
+type User = Awaited<ReturnType<typeof openSettings>>["user"];
+
+/** Opens a content picker, optionally searches, and chooses the option named `name`. */
+async function pick(user: User, picker: HTMLElement, name: string, search?: string) {
+  await user.click(picker);
+  if (search) await user.type(picker, search, { skipClick: true });
+  await user.click(await screen.findByRole("option", { name }));
+}
+
 const save = async (user: Awaited<ReturnType<typeof openSettings>>["user"]) =>
   user.click(screen.getByRole("button", { name: "設定を保存する" }));
 
@@ -169,10 +178,12 @@ describe("site settings", () => {
     expect(instagram).toHaveAttribute("type", "url");
     await user.type(instagram, "https://instagram.com/yamada");
     const recruit = within(section).getByRole("combobox", { name: "採用情報のページ" });
+    await user.click(recruit);
     expect(
-      within(recruit).getByRole("option", { name: "お問い合わせ（公開していません）" }),
+      await screen.findByRole("option", { name: "お問い合わせ（公開していません）" }),
     ).toBeInTheDocument();
-    await user.selectOptions(recruit, "会社概要");
+    await user.click(screen.getByRole("option", { name: "会社概要" }));
+    expect(recruit).toHaveValue("会社概要");
 
     // Switching back keeps what was typed for corporate.
     await user.click(screen.getByRole("radio", { name: /コーポレート/ }));
@@ -234,13 +245,14 @@ describe("site settings", () => {
     const requests = recordRequests();
     const { user } = await openSettings();
     const front = screen.getByRole("combobox", { name: "トップに載せる固定ページ" });
-    expect(front).toHaveValue("");
-    // Child pages are indented under their parent.
-    expect(within(front).getByRole("option", { name: "沿革" }).textContent).toBe("　沿革");
-    await user.selectOptions(front, "会社概要");
-    await user.selectOptions(
+    expect(front).toHaveValue("載せない");
+    await pick(user, front, "会社概要");
+    expect(front).toHaveValue("会社概要");
+    await pick(
+      user,
       screen.getByRole("combobox", { name: "個人情報の取り扱いのページ" }),
-      "5",
+      "沿革",
+      "沿",
     );
     await save(user);
     await waitFor(() => expect(front).toHaveFocus());
@@ -249,6 +261,67 @@ describe("site settings", () => {
       frontPageId: 4,
       privacyPageId: 5,
     });
+  });
+
+  it("searches pages on the server and shows the saved choice even when not listed", async () => {
+    // More pages than the picker lists; the saved privacy page is one of the oldest.
+    for (let i = 0; i < 30; i++) {
+      db.contents.push({ ...db.contents[3], id: 100 + i, number: 100 + i, title: `ページ${i}` });
+    }
+    db.site.privacyPageId = 5;
+    const requests = recordRequests();
+    const { user } = await openSettings();
+    const privacy = screen.getByRole("combobox", { name: "個人情報の取り扱いのページ" });
+    await waitFor(() => expect(privacy).toHaveValue("沿革"));
+    expect(privacy).toHaveAccessibleDescription(/タイトルの一部を入力すると探せます/);
+    // Nothing is listed until a picker opens.
+    expect(requests.filter((r) => r.path.startsWith("/api/contents?"))).toEqual([]);
+
+    await user.click(privacy);
+    expect(privacy).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByRole("option", { name: "ページ29" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "沿革" })).toBeNull();
+    expect(
+      await screen.findByText(
+        "新しい固定ページ20件を表示しています。タイトルの一部を入力すると探せます",
+      ),
+    ).toBeInTheDocument();
+    const list = screen.getByRole("listbox", { name: "個人情報の取り扱いのページ" });
+    expect(within(list).getAllByRole("option")).toHaveLength(21); // 「選ばない」 and 20 pages
+    expect(list.parentElement).toHaveTextContent(/新しいものから20件を表示しています/);
+
+    await user.type(privacy, "沿", { skipClick: true });
+    expect(await screen.findByText("「沿」に合う固定ページ：1件")).toBeInTheDocument();
+    expect(
+      within(list)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["沿革"]);
+    expect(screen.getByRole("option", { name: "沿革" })).toHaveAttribute("aria-selected", "true");
+
+    await user.type(privacy, "zzz", { skipClick: true });
+    expect(
+      await screen.findByText("「沿zzz」に合う固定ページは見つかりません"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("見つかりません")).toBeInTheDocument();
+
+    // Escape closes the list and shows the choice again; nothing changed.
+    await user.keyboard("{Escape}");
+    expect(privacy).toHaveAttribute("aria-expanded", "false");
+    expect(privacy).toHaveValue("沿革");
+
+    // Choosing with the keyboard: the first option is 「選ばない」.
+    await user.keyboard("{ArrowDown}");
+    await screen.findByRole("option", { name: "ページ29" });
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(privacy).toHaveValue("選ばない");
+
+    const lists = requests.filter((r) => r.path.startsWith("/api/contents?"));
+    expect(lists.length).toBeGreaterThan(0);
+    for (const r of lists) {
+      expect(new URLSearchParams(r.path.split("?")[1]).get("limit")).toBe("20");
+    }
+    expect(lists.some((r) => r.path.includes("type=post"))).toBe(false);
   });
 
   it("moves to a section from the table of contents", async () => {
@@ -314,10 +387,18 @@ describe("menu editor", () => {
 
     await user.click(screen.getByRole("button", { name: "メニューに項目を追加" }));
     let dialog = await screen.findByRole("dialog", { name: "メニューに項目を追加" });
-    await user.selectOptions(
-      within(dialog).getByRole("combobox", { name: /ページや記事/ }),
-      "会社概要",
-    );
+    // Nothing chosen yet.
+    await user.click(within(dialog).getByRole("button", { name: "追加する" }));
+    const picker = within(dialog).getByRole("combobox", { name: /ページや記事/ });
+    expect(picker).toHaveAccessibleDescription(/リンク先のページか記事を選んでください/);
+    // Pages and posts are grouped; Escape closes the list but not the dialog.
+    await user.click(picker);
+    expect(await within(dialog).findByRole("group", { name: "記事" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("group", { name: "固定ページ" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(picker).toHaveAttribute("aria-expanded", "false");
+    expect(dialog).toBeInTheDocument();
+    await pick(user, picker, "会社概要", "会社");
     await user.click(within(dialog).getByRole("button", { name: "追加する" }));
 
     await user.click(screen.getByRole("button", { name: "メニューに項目を追加" }));

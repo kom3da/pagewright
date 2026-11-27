@@ -14,9 +14,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
 import { type FormEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { api, errorField, errorMessage, isApiError } from "../api/client";
-import { contentsQuery, meQuery, siteQuery } from "../api/queries";
+import { meQuery, siteQuery } from "../api/queries";
 import type {
-  ContentSummary,
   Media,
   SiteFont,
   SiteSettings,
@@ -26,6 +25,7 @@ import type {
 } from "../api/types";
 import { AdminOnly } from "../components/AdminOnly";
 import { ColorField, colorProblem } from "../components/ColorField";
+import { ContentPicker } from "../components/ContentPicker";
 import { MenuEditor, type MenuRow, menuItemProblem, toMenuRows } from "../components/MenuEditor";
 import { confirm } from "../components/ui/confirm";
 import { Dialog } from "../components/ui/Dialog";
@@ -36,7 +36,6 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { Section } from "../components/ui/Section";
 import { MediaPicker, UploadForm } from "../editor/MediaDialog";
 import { DEFAULT_FOOTER_COLOR, DEFAULT_PRIMARY_COLOR, isHexColor } from "../lib/color";
-import { pageRows } from "../lib/pageTree";
 import classes from "./SiteSettingsPage.module.css";
 
 const TITLE = "サイトの設定";
@@ -249,8 +248,6 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
   const [errors, setErrors] = useState<Errors>({});
   const [logoOpen, setLogoOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
-  const pages = useQuery(contentsQuery("page"));
-  const posts = useQuery(contentsQuery("post"));
 
   // The API does not say which theme is the default; until one is chosen, the first listed
   // theme is shown as selected but nothing is sent, so the server keeps its default.
@@ -351,11 +348,9 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
     save.mutate(toInput(form, themes));
   };
 
-  const contents = [...(pages.data ?? []), ...(posts.data ?? [])];
   const zoneChoices = timeZones.some(([z]) => z === form.timeZone)
     ? timeZones
     : [...timeZones, [form.timeZone, form.timeZone] as [string, string]];
-  const pageList = pageRows(pages.data ?? []);
 
   return (
     <>
@@ -488,30 +483,22 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
             title={sectionTitle["site-pages"]}
             description="トップページや、お問い合わせフォームから案内する固定ページを選びます。"
           >
-            {pages.isPending ? (
-              <Loading />
-            ) : (
-              <>
-                <PageSelect
-                  label="トップに載せる固定ページ"
-                  description="選んだページのタイトルと本文を、トップページのいちばん上に載せます。どのように見せるかはテーマによって違います。"
-                  emptyLabel="載せない"
-                  pages={pageList}
-                  value={form.frontPageId}
-                  onChange={(v) => set("frontPageId", v)}
-                  error={shown.frontPageId}
-                />
-                <PageSelect
-                  label="個人情報の取り扱いのページ"
-                  description="お問い合わせフォームの「同意する」の欄から、このページにリンクします。お問い合わせフォームを使うときは選んでください。"
-                  emptyLabel="選ばない"
-                  pages={pageList}
-                  value={form.privacyPageId}
-                  onChange={(v) => set("privacyPageId", v)}
-                  error={shown.privacyPageId}
-                />
-              </>
-            )}
+            <PageSelect
+              label="トップに載せる固定ページ"
+              description="選んだページのタイトルと本文を、トップページのいちばん上に載せます。どのように見せるかはテーマによって違います。"
+              emptyLabel="載せない"
+              value={form.frontPageId}
+              onChange={(v) => set("frontPageId", v)}
+              error={shown.frontPageId}
+            />
+            <PageSelect
+              label="個人情報の取り扱いのページ"
+              description="お問い合わせフォームの「同意する」の欄から、このページにリンクします。お問い合わせフォームを使うときは選んでください。"
+              emptyLabel="選ばない"
+              value={form.privacyPageId}
+              onChange={(v) => set("privacyPageId", v)}
+              error={shown.privacyPageId}
+            />
           </Section>
 
           <Section
@@ -525,14 +512,11 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
           >
             {!theme || theme.settings.length === 0 ? (
               <Text size="sm">このテーマには、ここで入力する項目はありません。</Text>
-            ) : pages.isPending && theme.settings.some((d) => d.type === "page") ? (
-              <Loading />
             ) : (
               theme.settings.map((d) => (
                 <ThemeSettingInput
                   key={`${theme.name}.${d.key}`}
                   decl={d}
-                  pages={pageList}
                   value={form.themeSettings[theme.name]?.[d.key] ?? ""}
                   onChange={(v) => setThemeValue(d.key, v)}
                   error={shown[themeField(d.key)]}
@@ -546,17 +530,12 @@ function SiteSettingsForm({ initial }: { initial: SiteSettings }) {
             title={sectionTitle["site-menu"]}
             description="公開サイトのいちばん上に並ぶリンクです。上下のボタンで順番を変えられます。公開していないページや記事は、メニューに入れてもサイトには表示されません。"
           >
-            {pages.isPending || posts.isPending ? (
-              <Loading />
-            ) : (
-              <MenuEditor
-                items={form.menu}
-                onChange={(menu) => set("menu", menu)}
-                contents={contents}
-                error={shown.menu}
-                errorId="menu-error"
-              />
-            )}
+            <MenuEditor
+              items={form.menu}
+              onChange={(menu) => set("menu", menu)}
+              error={shown.menu}
+              errorId="menu-error"
+            />
           </Section>
 
           <Section id="site-contact" title={sectionTitle["site-contact"]}>
@@ -665,16 +644,11 @@ function TableOfContents({ titles }: { titles: Partial<Record<SectionId, string>
   );
 }
 
-const pageOptionLabel = (p: ContentSummary & { depth: number }) =>
-  `${"　".repeat(p.depth)}${p.title || "（タイトルなし）"}${
-    p.status === "published" ? "" : "（公開していません）"
-  }`;
-
+/** A page chosen by searching. Form values are ids as strings, "" for none. */
 function PageSelect({
   label,
   description,
   emptyLabel,
-  pages,
   value,
   onChange,
   error,
@@ -682,29 +656,21 @@ function PageSelect({
   label: string;
   description?: string;
   emptyLabel: string;
-  pages: (ContentSummary & { depth: number })[];
   value: string;
   onChange: (value: string) => void;
   error?: string;
 }) {
-  const missing = value !== "" && !pages.some((p) => String(p.id) === value);
   return (
-    <NativeSelect
+    <ContentPicker
       label={label}
-      description={description}
+      description={[description, "タイトルの一部を入力すると探せます。"].filter(Boolean).join("")}
+      emptyLabel={emptyLabel}
+      types={["page"]}
+      value={value ? Number(value) : null}
+      onChange={(id) => onChange(id === null ? "" : String(id))}
       error={error}
-      value={value}
-      onChange={(e) => onChange(e.currentTarget.value)}
       maw="40rem"
-    >
-      <option value="">{emptyLabel}</option>
-      {pages.map((p) => (
-        <option key={p.id} value={String(p.id)}>
-          {pageOptionLabel(p)}
-        </option>
-      ))}
-      {missing && <option value={value}>（見つからないページ。選び直してください）</option>}
-    </NativeSelect>
+    />
   );
 }
 
@@ -718,13 +684,11 @@ const typeHint = {
 /** One setting declared by the theme. Nothing here knows what the keys mean. */
 function ThemeSettingInput({
   decl,
-  pages,
   value,
   onChange,
   error,
 }: {
   decl: ThemeSettingDecl;
-  pages: (ContentSummary & { depth: number })[];
   value: string;
   onChange: (value: string) => void;
   error?: string;
@@ -735,7 +699,6 @@ function ThemeSettingInput({
         label={decl.label}
         description={decl.description || undefined}
         emptyLabel="選ばない"
-        pages={pages}
         value={value}
         onChange={onChange}
         error={error}

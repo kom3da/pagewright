@@ -120,7 +120,17 @@ test("site settings: contrast check, keyboard menu editing and saving", async ({
   for (const title of ["会社概要", "沿革"]) {
     await menu.getByRole("button", { name: "メニューに項目を追加" }).click();
     const dialog = page.getByRole("dialog", { name: "メニューに項目を追加" });
-    await dialog.getByRole("combobox", { name: /ページや記事/ }).selectOption({ label: title });
+    // Search by title and choose with the keyboard; the result count is announced.
+    const picker = dialog.getByRole("combobox", { name: /ページや記事/ });
+    await picker.focus();
+    await page.keyboard.type(title);
+    await expect(page.getByText(`「${title}」に合う固定ページや記事：1件`)).toBeAttached();
+    await expect(page.getByRole("option", { name: title })).toBeVisible();
+    if (title === "沿革") await expectAccessible(page);
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await expect(picker).toHaveValue(title);
+    await expect(picker).toHaveAttribute("aria-expanded", "false");
     await dialog.getByRole("button", { name: "追加する" }).click();
     await expect(dialog).toBeHidden();
   }
@@ -129,6 +139,15 @@ test("site settings: contrast check, keyboard menu editing and saving", async ({
   await page.keyboard.press("Enter");
   await expect(menu.getByRole("listitem").first()).toContainText("沿革");
   await expect(menu.getByRole("button", { name: "「沿革」を下へ移動" })).toBeFocused();
+
+  // With the mouse: clicking selects the shown choice, so typing searches afresh.
+  const front = page.getByRole("combobox", { name: "トップに載せる固定ページ" });
+  await expect(front).toHaveValue("載せない");
+  await front.click();
+  await page.keyboard.type("会社");
+  await expect(page.getByText("「会社」に合う固定ページ：1件")).toBeAttached();
+  await page.getByRole("option", { name: "会社概要" }).click();
+  await expect(front).toHaveValue("会社概要");
 
   await page.getByRole("button", { name: "設定を保存する" }).click();
   await expect(page.getByText(/サイトの設定を保存しました/)).toBeVisible();
