@@ -2,6 +2,7 @@ import { HttpResponse, http } from "msw";
 import type {
   Build,
   Category,
+  ContentCounts,
   ContentDetail,
   ContentSummary,
   ContentType,
@@ -584,6 +585,15 @@ export const handlers = [
     if (!(Number.isInteger(limit) && limit >= 1 && limit <= 1000)) {
       return error(422, "invalid_limit", "件数は1から1000のあいだで指定してください");
     }
+    const sort = params.get("sort");
+    if (sort && (sort !== "updated" || q || status || before !== undefined)) {
+      return error(422, "invalid_sort", "並べ替えの指定が正しくありません");
+    }
+    const order =
+      sort === "updated"
+        ? (a: ContentDetail, b: ContentDetail) =>
+            Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || b.number - a.number
+        : (a: ContentDetail, b: ContentDetail) => b.number - a.number;
     return HttpResponse.json(
       db.contents
         .filter((c) => c.type === type)
@@ -593,10 +603,31 @@ export const handlers = [
             !q || c.title.toLowerCase().includes(q) || (c.slug ?? "").toLowerCase().includes(q),
         )
         .filter((c) => !status || c.status === status)
-        .sort((a, b) => b.number - a.number)
+        .sort(order)
         .slice(0, limit)
         .map(summary),
     );
+  }),
+
+  http.get("/api/contents/counts", ({ request }) => {
+    const denied = guard(request);
+    if (denied) return denied;
+    const count = (type: ContentType): ContentCounts => {
+      const of = db.contents.filter((c) => c.type === type);
+      const scheduled = of.filter((c) => c.status === "scheduled");
+      return {
+        draft: of.filter((c) => c.status === "draft").length,
+        scheduled: scheduled.length,
+        published: of.filter((c) => c.status === "published").length,
+        changed: of.filter((c) => c.hasUnpublishedChanges).length,
+        nextScheduledAt:
+          scheduled
+            .map((c) => c.scheduledAt)
+            .filter((d): d is string => d !== null)
+            .sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null,
+      };
+    };
+    return HttpResponse.json({ post: count("post"), page: count("page") });
   }),
 
   http.post("/api/contents", async ({ request }) => {

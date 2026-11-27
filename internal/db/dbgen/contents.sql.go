@@ -96,6 +96,56 @@ func (q *Queries) ContentAncestry(ctx context.Context, id int64) ([]ContentAnces
 	return items, nil
 }
 
+const countContents = `-- name: CountContents :many
+SELECT c.type,
+  count(*) FILTER (WHERE c.published_revision_id IS NULL AND c.scheduled_revision_id IS NULL)::bigint AS draft,
+  count(*) FILTER (WHERE c.published_revision_id IS NULL AND c.scheduled_revision_id IS NOT NULL)::bigint AS scheduled,
+  count(*) FILTER (WHERE c.published_revision_id IS NOT NULL)::bigint AS published,
+  count(*) FILTER (WHERE c.published_revision_id IS NOT NULL
+    AND (c.pending_settings IS NOT NULL OR c.published_revision_id <> coalesce(lr.id, 0)))::bigint AS changed
+FROM contents c
+LEFT JOIN LATERAL (
+  SELECT max(id) AS id FROM content_revisions WHERE content_id = c.id
+) lr ON true
+GROUP BY c.type
+`
+
+type CountContentsRow struct {
+	Type      string
+	Draft     int64
+	Scheduled int64
+	Published int64
+	Changed   int64
+}
+
+// Per type, the contents by derived status (as ListContents), the live
+// ones with unpublished changes (a newer revision or pending settings).
+func (q *Queries) CountContents(ctx context.Context) ([]CountContentsRow, error) {
+	rows, err := q.db.Query(ctx, countContents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountContentsRow
+	for rows.Next() {
+		var i CountContentsRow
+		if err := rows.Scan(
+			&i.Type,
+			&i.Draft,
+			&i.Scheduled,
+			&i.Published,
+			&i.Changed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createContent = `-- name: CreateContent :one
 INSERT INTO contents (type, slug, parent_id, author_id)
 VALUES ($1, $2, $3, $4)
@@ -489,6 +539,89 @@ func (q *Queries) ListContents(ctx context.Context, arg ListContentsParams) ([]L
 	return items, nil
 }
 
+const listRecentContents = `-- name: ListRecentContents :many
+SELECT c.tenant_id, c.id, c.number, c.type, c.slug, c.parent_id, c.author_id, c.published_revision_id, c.scheduled_revision_id, c.scheduled_at, c.published_at, c.source_format, c.source_body, c.created_at, c.updated_at, c.pending_settings, coalesce(lr.title, '')::text AS title, coalesce(lr.id, 0)::bigint AS latest_revision_id,
+  r.path AS url
+FROM contents c
+LEFT JOIN LATERAL (
+  SELECT id, title FROM content_revisions
+  WHERE content_id = c.id ORDER BY id DESC LIMIT 1
+) lr ON true
+LEFT JOIN routes r ON r.content_id = c.id AND r.kind = 'canonical'
+WHERE c.type = $1
+ORDER BY c.updated_at DESC, c.number DESC
+LIMIT $2
+`
+
+type ListRecentContentsParams struct {
+	Type    string
+	MaxRows int32
+}
+
+type ListRecentContentsRow struct {
+	TenantID            uuid.UUID
+	ID                  int64
+	Number              int64
+	Type                string
+	Slug                *string
+	ParentID            *int64
+	AuthorID            *uuid.UUID
+	PublishedRevisionID *int64
+	ScheduledRevisionID *int64
+	ScheduledAt         *time.Time
+	PublishedAt         *time.Time
+	SourceFormat        *string
+	SourceBody          *string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	PendingSettings     []byte
+	Title               string
+	LatestRevisionID    int64
+	Url                 *string
+}
+
+// Contents of a type, last updated first, with the same columns as
+// ListContents.
+func (q *Queries) ListRecentContents(ctx context.Context, arg ListRecentContentsParams) ([]ListRecentContentsRow, error) {
+	rows, err := q.db.Query(ctx, listRecentContents, arg.Type, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecentContentsRow
+	for rows.Next() {
+		var i ListRecentContentsRow
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.ID,
+			&i.Number,
+			&i.Type,
+			&i.Slug,
+			&i.ParentID,
+			&i.AuthorID,
+			&i.PublishedRevisionID,
+			&i.ScheduledRevisionID,
+			&i.ScheduledAt,
+			&i.PublishedAt,
+			&i.SourceFormat,
+			&i.SourceBody,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PendingSettings,
+			&i.Title,
+			&i.LatestRevisionID,
+			&i.Url,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listScheduled = `-- name: ListScheduled :many
 SELECT id, scheduled_revision_id, scheduled_at FROM contents
 WHERE scheduled_revision_id IS NOT NULL ORDER BY scheduled_at
@@ -556,6 +689,38 @@ func (q *Queries) LockContent(ctx context.Context, id int64) (int64, error) {
 	var id_2 int64
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const nextScheduledContents = `-- name: NextScheduledContents :many
+SELECT DISTINCT ON (type) type, scheduled_at FROM contents
+WHERE published_revision_id IS NULL AND scheduled_revision_id IS NOT NULL
+ORDER BY type, scheduled_at
+`
+
+type NextScheduledContentsRow struct {
+	Type        string
+	ScheduledAt *time.Time
+}
+
+// Per type, the earliest scheduled first publication (status scheduled).
+func (q *Queries) NextScheduledContents(ctx context.Context) ([]NextScheduledContentsRow, error) {
+	rows, err := q.db.Query(ctx, nextScheduledContents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []NextScheduledContentsRow
+	for rows.Next() {
+		var i NextScheduledContentsRow
+		if err := rows.Scan(&i.Type, &i.ScheduledAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const publishRevision = `-- name: PublishRevision :execrows

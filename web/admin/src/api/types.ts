@@ -179,6 +179,17 @@ export type Submission = {
 /** A login-free link to the latest revision. `url` is returned only when created. */
 export type PreviewLink = { id: number; url?: string; expiresAt: string; createdAt: string };
 
+/** Contents of one type by what the admin home shows (GET /api/contents/counts). */
+export type ContentCounts = {
+  draft: number;
+  scheduled: number;
+  published: number;
+  /** Published ones with unpublished changes (hasUnpublishedChanges). */
+  changed: number;
+  /** The earliest scheduledAt of the scheduled ones. */
+  nextScheduledAt: string | null;
+};
+
 /** Filters of GET /api/contents. `q` matches the title or the URL (英数字). */
 export type ContentFilter = { q?: string; status?: ContentStatus };
 

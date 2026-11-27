@@ -1,6 +1,8 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
 import { db } from "../mocks/handlers";
+import { server } from "../test/server";
 import { expectNoAxeViolations, recordRequests, renderApp } from "../test/utils";
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
@@ -26,6 +28,39 @@ describe("home dashboard", () => {
     expect(history.location.search).toBe("?status=draft");
     expect(screen.getByLabelText("状態")).toHaveValue("draft");
     await waitFor(() => expect(screen.getAllByRole("row")).toHaveLength(2));
+  });
+
+  it("takes the numbers from the server's counts, not from the lists (big sites)", async () => {
+    const requests = recordRequests();
+    server.use(
+      http.get("/api/contents/counts", () =>
+        HttpResponse.json({
+          post: { draft: 1500, scheduled: 0, published: 3000, changed: 12, nextScheduledAt: null },
+          page: {
+            draft: 2,
+            scheduled: 1,
+            published: 40,
+            changed: 0,
+            nextScheduledAt: "2026-12-24T00:00:00Z",
+          },
+        }),
+      ),
+    );
+    renderApp("/");
+    await screen.findByRole("region", { name: "記事とページの状況" });
+    expect(tile("下書き")).toHaveTextContent("1502件");
+    expect(
+      within(tile("下書き")).getByRole("link", { name: "下書きの記事 1500件を見る" }),
+    ).toBeVisible();
+    expect(tile("公開の予約")).toHaveTextContent("次は2026/12/24 9:00");
+    expect(tile("未公開の変更あり")).toHaveTextContent("12件");
+    await screen.findByRole("table", { name: /最近編集した記事・ページ/ });
+    // Only short lists: the 5 last edited of each type.
+    const lists = requests.filter((r) => r.method === "GET" && r.path.startsWith("/api/contents?"));
+    expect(lists.map((r) => r.path).sort()).toEqual([
+      "/api/contents?type=page&sort=updated&limit=5",
+      "/api/contents?type=post&sort=updated&limit=5",
+    ]);
   });
 
   it("lists recently edited posts and pages, newest first", async () => {

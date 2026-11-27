@@ -125,9 +125,25 @@ func (s *Server) listContents(w http.ResponseWriter, r *http.Request, _ *session
 		}
 		params.Status = &st
 	}
+	// sort=updated lists the last updated first, for the admin home; it
+	// takes no filters or paging.
+	sort := query.Get("sort")
+	if sort != "" && sort != "updated" || sort == "updated" && (params.Q != nil || params.Status != nil || params.Before != nil) {
+		return invalid("invalid_sort", "並べ替えの指定が正しくありません")
+	}
 	out := []contentSummary{}
 	err := s.DB.InTenant(r.Context(), func(q *dbgen.Queries) error {
-		rows, err := q.ListContents(r.Context(), params)
+		var rows []dbgen.ListContentsRow
+		var err error
+		if sort == "updated" {
+			var recent []dbgen.ListRecentContentsRow
+			recent, err = q.ListRecentContents(r.Context(), dbgen.ListRecentContentsParams{Type: typ, MaxRows: params.MaxRows})
+			for _, row := range recent {
+				rows = append(rows, dbgen.ListContentsRow(row))
+			}
+		} else {
+			rows, err = q.ListContents(r.Context(), params)
+		}
 		for _, row := range rows {
 			c := dbgen.Content{
 				TenantID: row.TenantID, ID: row.ID, Number: row.Number, Type: row.Type, Slug: row.Slug,
@@ -136,6 +152,45 @@ func (s *Server) listContents(w http.ResponseWriter, r *http.Request, _ *session
 				PublishedAt: row.PublishedAt, PendingSettings: row.PendingSettings, UpdatedAt: row.UpdatedAt,
 			}
 			out = append(out, summary(c, row.Title, row.LatestRevisionID, row.Url))
+		}
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, out)
+	return nil
+}
+
+// typeCounts are the contents of one type by what the admin home shows.
+type typeCounts struct {
+	Draft     int64 `json:"draft"`
+	Scheduled int64 `json:"scheduled"`
+	Published int64 `json:"published"`
+	// Changed are published contents with unpublished changes
+	// (hasUnpublishedChanges).
+	Changed int64 `json:"changed"`
+	// NextScheduledAt is the earliest scheduledAt of the scheduled ones.
+	NextScheduledAt *time.Time `json:"nextScheduledAt"`
+}
+
+func (s *Server) countContents(w http.ResponseWriter, r *http.Request, _ *session) error {
+	out := map[string]*typeCounts{"post": {}, "page": {}}
+	err := s.DB.InTenant(r.Context(), func(q *dbgen.Queries) error {
+		counts, err := q.CountContents(r.Context())
+		if err != nil {
+			return err
+		}
+		for _, c := range counts {
+			if t, ok := out[c.Type]; ok {
+				t.Draft, t.Scheduled, t.Published, t.Changed = c.Draft, c.Scheduled, c.Published, c.Changed
+			}
+		}
+		next, err := q.NextScheduledContents(r.Context())
+		for _, n := range next {
+			if t, ok := out[n.Type]; ok {
+				t.NextScheduledAt = n.ScheduledAt
+			}
 		}
 		return err
 	})

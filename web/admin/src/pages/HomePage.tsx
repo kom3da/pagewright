@@ -23,8 +23,14 @@ import {
 import { CircleAlert, CircleCheck, CircleDashed, RefreshCw, TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { api, errorMessage } from "../api/client";
-import { buildsQuery, contentsQuery, meQuery, submissionsQuery } from "../api/queries";
-import type { ContentSummary, ContentType } from "../api/types";
+import {
+  buildsQuery,
+  contentCountsQuery,
+  meQuery,
+  recentContentsQuery,
+  submissionsQuery,
+} from "../api/queries";
+import type { ContentCounts, ContentType } from "../api/types";
 import { NewContentButton } from "../components/NewContentButton";
 import { AnchorLink } from "../components/ui/AnchorLink";
 import { ExternalLink } from "../components/ui/ExternalLink";
@@ -48,38 +54,35 @@ const tiles: {
   status: ListStatus;
   title: string;
   text: string;
-  match: (c: ContentSummary) => boolean;
+  count: (c: ContentCounts) => number;
 }[] = [
-  {
-    status: "draft",
-    title: "下書き",
-    text: "まだ公開していないもの",
-    match: (c) => c.status === "draft",
-  },
+  { status: "draft", title: "下書き", text: "まだ公開していないもの", count: (c) => c.draft },
   {
     status: "scheduled",
     title: "公開の予約",
     text: "公開する日時を決めたもの",
-    match: (c) => c.status === "scheduled",
+    count: (c) => c.scheduled,
   },
   {
     status: "changed",
     title: "未公開の変更あり",
     text: "変更がまだサイトに出ていないもの",
-    match: (c) => c.hasUnpublishedChanges,
+    count: (c) => c.changed,
   },
 ];
+
+const total = (c: ContentCounts) => c.draft + c.scheduled + c.published;
 
 export function HomePage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const isAdmin = useIsAdmin();
-  const posts = useQuery(contentsQuery("post"));
-  const pages = useQuery(contentsQuery("page"));
+  // Counted on the server: the lists stop at 1000, and a site may have more.
+  const counts = useQuery(contentCountsQuery);
   const siteName = me.sites.find((s) => s.id === me.currentSiteId)?.name;
 
-  const loaded = posts.data && pages.data;
-  const all = [...(posts.data ?? []), ...(pages.data ?? [])];
-  const published = all.some((c) => c.status === "published");
+  const post = counts.data?.post;
+  const page = counts.data?.page;
+  const any = !!post && !!page && total(post) + total(page) > 0;
 
   return (
     <>
@@ -95,20 +98,20 @@ export function HomePage() {
         }
       />
       <Stack gap="xl">
-        {posts.isPending || pages.isPending ? (
+        {counts.isPending ? (
           <Loading />
-        ) : !loaded ? (
-          <ErrorMessage>{errorMessage(posts.error ?? pages.error)}</ErrorMessage>
+        ) : !post || !page ? (
+          <ErrorMessage>{errorMessage(counts.error)}</ErrorMessage>
         ) : (
           <>
-            {!published && (
+            {post.published + page.published === 0 && (
               <GettingStarted
                 isAdmin={isAdmin}
-                hasPage={pages.data.length > 0}
-                hasPost={posts.data.length > 0}
+                hasPage={total(page) > 0}
+                hasPost={total(post) > 0}
               />
             )}
-            {all.length > 0 && (
+            {any && (
               <Section title="記事とページの状況" variant="plain">
                 <SimpleGrid
                   component="ul"
@@ -118,7 +121,7 @@ export function HomePage() {
                   p={0}
                 >
                   {tiles.map((t) => (
-                    <StatusTile key={t.status} {...t} posts={posts.data} pages={pages.data} />
+                    <StatusTile key={t.status} {...t} counts={{ post, page }} />
                   ))}
                   {isAdmin && <InquiriesTile />}
                 </SimpleGrid>
@@ -129,14 +132,14 @@ export function HomePage() {
         {/* The site update comes first on phones (a failure matters most), on the right on PCs. */}
         <Grid gap="xl">
           <Grid.Col
-            span={{ base: 12, md: all.length > 0 ? 5 : 12, lg: all.length > 0 ? 4 : 12 }}
+            span={{ base: 12, md: any ? 5 : 12, lg: any ? 4 : 12 }}
             order={{ base: 1, md: 2 }}
           >
             <SiteUpdate />
           </Grid.Col>
-          {all.length > 0 && (
+          {any && (
             <Grid.Col span={{ base: 12, md: 7, lg: 8 }} order={{ base: 2, md: 1 }}>
-              <RecentEdits contents={all} />
+              <RecentEdits />
             </Grid.Col>
           )}
         </Grid>
@@ -245,24 +248,21 @@ function StatusTile({
   status,
   title,
   text,
-  match,
-  posts,
-  pages,
-}: (typeof tiles)[number] & { posts: ContentSummary[]; pages: ContentSummary[] }) {
-  const counts = { post: posts.filter(match).length, page: pages.filter(match).length };
-  const next = [...posts, ...pages]
-    .filter(match)
-    .map((c) => c.scheduledAt)
+  count,
+  counts,
+}: (typeof tiles)[number] & { counts: Record<ContentType, ContentCounts> }) {
+  const n = { post: count(counts.post), page: count(counts.page) };
+  const next = [counts.post.nextScheduledAt, counts.page.nextScheduledAt]
     .filter((d): d is string => d !== null)
-    .sort()[0];
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0];
   return (
     <Tile
       title={title}
       links={(["post", "page"] as const).map((type) => (
-        <TileLink key={type} type={type} status={status} title={title} n={counts[type]} />
+        <TileLink key={type} type={type} status={status} title={title} n={n[type]} />
       ))}
     >
-      <Count n={counts.post + counts.page} />
+      <Count n={n.post + n.page} />
       <Text size="sm" c="dimmed">
         {text}
         {status === "scheduled" && next && `。次は${formatDateTime(next)}`}
@@ -338,40 +338,49 @@ function InquiriesTile() {
   );
 }
 
-function RecentEdits({ contents }: { contents: ContentSummary[] }) {
-  const recent = [...contents]
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+function RecentEdits() {
+  // The newest of both types together are among the newest RECENT of each.
+  const posts = useQuery(recentContentsQuery("post", RECENT));
+  const pages = useQuery(recentContentsQuery("page", RECENT));
+  const recent = [...(posts.data ?? []), ...(pages.data ?? [])]
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     .slice(0, RECENT);
   return (
     <Section title="最近編集した記事・ページ" variant="plain">
-      <ResponsiveList
-        items={recent}
-        getKey={(c) => c.id}
-        caption={`最近編集した記事・ページ（新しい順に${recent.length}件）`}
-        columns={[
-          {
-            key: "title",
-            header: "タイトル",
-            render: (c) => (
-              <AnchorLink
-                to={c.type === "post" ? "/posts/$id" : "/pages/$id"}
-                params={{ id: String(c.id) }}
-                fw={700}
-              >
-                {c.title || "（タイトルなし）"}
-              </AnchorLink>
-            ),
-          },
-          { key: "type", header: "種類", nowrap: true, render: (c) => typeLabel[c.type] },
-          { key: "status", header: "状態", render: (c) => <ContentStatusBadges {...c} /> },
-          {
-            key: "updatedAt",
-            header: "最終更新",
-            nowrap: true,
-            render: (c) => <Text size="sm">{formatDateTime(c.updatedAt)}</Text>,
-          },
-        ]}
-      />
+      {posts.isPending || pages.isPending ? (
+        <Loading />
+      ) : posts.error || pages.error ? (
+        <ErrorMessage>{errorMessage(posts.error ?? pages.error)}</ErrorMessage>
+      ) : (
+        <ResponsiveList
+          items={recent}
+          getKey={(c) => c.id}
+          caption={`最近編集した記事・ページ（新しい順に${recent.length}件）`}
+          columns={[
+            {
+              key: "title",
+              header: "タイトル",
+              render: (c) => (
+                <AnchorLink
+                  to={c.type === "post" ? "/posts/$id" : "/pages/$id"}
+                  params={{ id: String(c.id) }}
+                  fw={700}
+                >
+                  {c.title || "（タイトルなし）"}
+                </AnchorLink>
+              ),
+            },
+            { key: "type", header: "種類", nowrap: true, render: (c) => typeLabel[c.type] },
+            { key: "status", header: "状態", render: (c) => <ContentStatusBadges {...c} /> },
+            {
+              key: "updatedAt",
+              header: "最終更新",
+              nowrap: true,
+              render: (c) => <Text size="sm">{formatDateTime(c.updatedAt)}</Text>,
+            },
+          ]}
+        />
+      )}
     </Section>
   );
 }

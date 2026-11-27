@@ -34,6 +34,42 @@ WHERE c.type = @type
 ORDER BY c.number DESC
 LIMIT @max_rows;
 
+-- name: ListRecentContents :many
+-- Contents of a type, last updated first, with the same columns as
+-- ListContents.
+SELECT c.*, coalesce(lr.title, '')::text AS title, coalesce(lr.id, 0)::bigint AS latest_revision_id,
+  r.path AS url
+FROM contents c
+LEFT JOIN LATERAL (
+  SELECT id, title FROM content_revisions
+  WHERE content_id = c.id ORDER BY id DESC LIMIT 1
+) lr ON true
+LEFT JOIN routes r ON r.content_id = c.id AND r.kind = 'canonical'
+WHERE c.type = @type
+ORDER BY c.updated_at DESC, c.number DESC
+LIMIT @max_rows;
+
+-- name: CountContents :many
+-- Per type, the contents by derived status (as ListContents), the live
+-- ones with unpublished changes (a newer revision or pending settings).
+SELECT c.type,
+  count(*) FILTER (WHERE c.published_revision_id IS NULL AND c.scheduled_revision_id IS NULL)::bigint AS draft,
+  count(*) FILTER (WHERE c.published_revision_id IS NULL AND c.scheduled_revision_id IS NOT NULL)::bigint AS scheduled,
+  count(*) FILTER (WHERE c.published_revision_id IS NOT NULL)::bigint AS published,
+  count(*) FILTER (WHERE c.published_revision_id IS NOT NULL
+    AND (c.pending_settings IS NOT NULL OR c.published_revision_id <> coalesce(lr.id, 0)))::bigint AS changed
+FROM contents c
+LEFT JOIN LATERAL (
+  SELECT max(id) AS id FROM content_revisions WHERE content_id = c.id
+) lr ON true
+GROUP BY c.type;
+
+-- name: NextScheduledContents :many
+-- Per type, the earliest scheduled first publication (status scheduled).
+SELECT DISTINCT ON (type) type, scheduled_at FROM contents
+WHERE published_revision_id IS NULL AND scheduled_revision_id IS NOT NULL
+ORDER BY type, scheduled_at;
+
 -- name: GetContentURL :one
 SELECT r.path FROM routes r WHERE r.content_id = $1 AND r.kind = 'canonical';
 

@@ -30,6 +30,19 @@ export const contentsPagesQuery = (type: ContentType, filter: ContentFilter = {}
     getNextPageParam: (last) => (last.more ? last.next : undefined),
   });
 
+/** The last updated contents of a type, for the home. Shares the ["contents", type] prefix. */
+export const recentContentsQuery = (type: ContentType, limit: number) =>
+  queryOptions({
+    queryKey: ["contents", type, "recent", limit],
+    queryFn: () => api.listRecentContents(type, limit),
+  });
+
+/** The home's status counts of both types (the lists stop at 1000 rows). */
+export const contentCountsQuery = queryOptions({
+  queryKey: ["contents", "counts"],
+  queryFn: api.contentCounts,
+});
+
 export const contentQuery = (id: number) =>
   queryOptions({ queryKey: ["content", id], queryFn: () => api.getContent(id) });
 

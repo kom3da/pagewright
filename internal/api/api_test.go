@@ -670,13 +670,20 @@ func TestTenantIsolation(t *testing.T) {
 	alice.mustDo(http.MethodPost, "/api/categories", map[string]any{"name": "A", "slug": "a-cat"}, &aCat, http.StatusCreated)
 
 	// Lists show only A.
-	lists := map[string]int{"/api/contents?type=post": 1, "/api/contents?type=page": 1, "/api/categories": 1, "/api/tags": 0, "/api/media": 0}
+	lists := map[string]int{"/api/contents?type=post": 1, "/api/contents?type=page": 1, "/api/contents?type=post&sort=updated": 1, "/api/categories": 1, "/api/tags": 0, "/api/media": 0}
 	for path, want := range lists {
 		var got []json.RawMessage
 		alice.mustDo(http.MethodGet, path, nil, &got, http.StatusOK)
 		if len(got) != want {
 			t.Errorf("GET %s from A: %d items, want %d", path, len(got), want)
 		}
+	}
+
+	// Counts are of A only: B's pending settings are not A's changes.
+	var counts map[string]contentCounts
+	alice.mustDo(http.MethodGet, "/api/contents/counts", nil, &counts, http.StatusOK)
+	if diff := cmp.Diff(map[string]contentCounts{"post": {Published: 1}, "page": {Published: 1}}, counts); diff != "" {
+		t.Errorf("counts from A (-want +got):\n%s", diff)
 	}
 
 	// Direct access to B's items is "not found".
@@ -909,6 +916,87 @@ func TestDeleteParentCategory(t *testing.T) {
 	alice.mustDo(http.MethodGet, "/api/categories", nil, &cats, http.StatusOK)
 	if len(cats) != 1 || cats[0].ID != child.ID || cats[0].ParentID != nil {
 		t.Errorf("categories after deleting the parent = %+v, want the child at the top", cats)
+	}
+}
+
+type contentCounts struct {
+	Draft, Scheduled, Published, Changed int64
+	NextScheduledAt                      *time.Time
+}
+
+func TestContentCounts(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	path := func(id int64, suffix string) string { return fmt.Sprintf("/api/contents/%d%s", id, suffix) }
+
+	var counts map[string]contentCounts
+	alice.mustDo(http.MethodGet, "/api/contents/counts", nil, &counts, http.StatusOK)
+	if diff := cmp.Diff(map[string]contentCounts{"post": {}, "page": {}}, counts); diff != "" {
+		t.Errorf("counts of an empty site (-want +got):\n%s", diff)
+	}
+
+	first := alice.newContent("post", "下書き", false)
+	alice.newContent("page", "下書きのページ", false)
+	soon := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	later := soon.Add(time.Hour)
+	for _, at := range []time.Time{later, soon} {
+		d := alice.newContent("post", "予約", false)
+		alice.mustDo(http.MethodPost, path(d.ID, "/schedule"), map[string]any{"publishAt": at}, nil, http.StatusOK)
+	}
+	alice.newContent("post", "公開中", true)
+	edited := alice.newContent("post", "公開後に編集", true)
+	alice.mustDo(http.MethodPut, path(edited.ID, "/draft"), map[string]any{"title": "編集", "body": json.RawMessage(paragraph)}, nil, http.StatusOK)
+	pending := alice.newContent("post", "公開後にURLを変更", true)
+	alice.mustDo(http.MethodPatch, path(pending.ID, ""), map[string]any{"slug": "new-url"}, nil, http.StatusOK)
+	// A live content with a scheduled update counts as published, not
+	// scheduled, as its status says.
+	update := alice.newContent("page", "更新を予約", true)
+	alice.mustDo(http.MethodPut, path(update.ID, "/draft"), map[string]any{"title": "更新", "body": json.RawMessage(paragraph)}, nil, http.StatusOK)
+	alice.mustDo(http.MethodPost, path(update.ID, "/schedule"), map[string]any{"publishAt": soon.Add(-30 * time.Minute)}, nil, http.StatusOK)
+
+	alice.mustDo(http.MethodGet, "/api/contents/counts", nil, &counts, http.StatusOK)
+	want := map[string]contentCounts{
+		"post": {Draft: 1, Scheduled: 2, Published: 3, Changed: 2, NextScheduledAt: &soon},
+		"page": {Draft: 1, Published: 1, Changed: 1},
+	}
+	if diff := cmp.Diff(want, counts); diff != "" {
+		t.Errorf("counts (-want +got):\n%s", diff)
+	}
+
+	// The counts agree with the lists.
+	for typ, c := range counts {
+		var list []detail
+		alice.mustDo(http.MethodGet, "/api/contents?type="+typ, nil, &list, http.StatusOK)
+		got := contentCounts{NextScheduledAt: c.NextScheduledAt}
+		for _, d := range list {
+			switch d.Status {
+			case "draft":
+				got.Draft++
+			case "scheduled":
+				got.Scheduled++
+			case "published":
+				got.Published++
+			}
+			if d.HasUnpublishedChanges {
+				got.Changed++
+			}
+		}
+		if diff := cmp.Diff(c, got); diff != "" {
+			t.Errorf("%s counts differ from the list (-counts +list):\n%s", typ, diff)
+		}
+	}
+
+	// sort=updated lists the last edited first.
+	alice.mustDo(http.MethodPut, path(first.ID, "/draft"), map[string]any{"title": "いま編集", "body": json.RawMessage(paragraph)}, nil, http.StatusOK)
+	var recent []detail
+	alice.mustDo(http.MethodGet, "/api/contents?type=post&sort=updated&limit=2", nil, &recent, http.StatusOK)
+	if len(recent) != 2 || recent[0].ID != first.ID || recent[0].Title != "いま編集" || recent[1].ID != pending.ID {
+		t.Errorf("recent posts = %+v, want %d then %d", recent, first.ID, pending.ID)
+	}
+	for _, q := range []string{"sort=number", "sort=updated&status=draft", "sort=updated&q=x", "sort=updated&before=3"} {
+		if got, code := alice.errorCode(http.MethodGet, "/api/contents?type=post&"+q, nil); got != http.StatusUnprocessableEntity || code != "invalid_sort" {
+			t.Errorf("%s = %d %s, want 422 invalid_sort", q, got, code)
+		}
 	}
 }
 

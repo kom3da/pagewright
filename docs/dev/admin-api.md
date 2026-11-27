@@ -86,9 +86,21 @@ type ContentDetail = ContentSummary & {
 
 公開中のコンテンツの設定（`slug`・`parentId`・`categoryIds`・`tagIds`・`publishedAt`）は、タイトルや本文と同じく変更を公開するまで公開サイトに出ない。`ContentDetail` はこれらに保存した値（公開を待つ値を含む）を返し、`pendingSettings` が true になる。`url` は公開中の URL のまま。一覧（`ContentSummary[]`）は公開中の値を返す。
 
+```ts
+// 種類ごとの件数。draft・scheduled・published は ContentSummary.status と同じ分け方（3 つの合計が全件）
+type ContentCounts = Record<"post" | "page", {
+  draft: number;
+  scheduled: number;           // 一度も公開していないものの公開予約（公開中の記事の更新の予約は published に入る）
+  published: number;
+  changed: number;             // published のうち hasUnpublishedChanges が true のもの
+  nextScheduledAt: string | null; // scheduled のうち、いちばん早い scheduledAt
+}>;
+```
+
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
-| `GET /api/contents?type=post&q=...&status=...&before=...&limit=...` | `type`：`post` / `page`（それ以外は 422 `invalid_type`）。`q`（省略可）：タイトルか「ページのURL」の部分一致、100文字まで。`status`（省略可）：`draft` / `scheduled` / `published`。`limit`（省略可）：1〜1000、省略すると 1000。`before`（省略可）：この番号より古いものから | 200 `ContentSummary[]`（番号の降順、`limit` 件まで）。続きは、受け取った最後の `number` を `before` に入れて取る。`q` が 100 文字を超えるか制御文字を含むと 422 `invalid_q`、`status` がそれ以外なら 422 `invalid_status`、`limit` が範囲外なら 422 `invalid_limit`、`before` が正の整数でなければ 422 `invalid_before` |
+| `GET /api/contents?type=post&q=...&status=...&before=...&limit=...` | `type`：`post` / `page`（それ以外は 422 `invalid_type`）。`q`（省略可）：タイトルか「ページのURL」の部分一致、100文字まで。`status`（省略可）：`draft` / `scheduled` / `published`。`limit`（省略可）：1〜1000、省略すると 1000。`before`（省略可）：この番号より古いものから | 200 `ContentSummary[]`（番号の降順、`limit` 件まで）。続きは、受け取った最後の `number` を `before` に入れて取る。`q` が 100 文字を超えるか制御文字を含むと 422 `invalid_q`、`status` がそれ以外なら 422 `invalid_status`、`limit` が範囲外なら 422 `invalid_limit`、`before` が正の整数でなければ 422 `invalid_before`。`sort=updated`（省略可）を付けると、番号ではなく最後に更新した順（`updatedAt` の降順）に `limit` 件まで返す（ホームの「最近編集した記事・ページ」用）。`sort=updated` は `q`・`status`・`before` と一緒には使えず、`sort` がそれ以外の値か組み合わせが違えば 422 `invalid_sort` |
+| `GET /api/contents/counts` | | 200 `ContentCounts`。ホームのタイルの件数。一覧（1000 件まで）と違い、記事・固定ページが何件あっても正しく数える |
 | `POST /api/contents` | `{"type": "post"}` | 201 `ContentDetail`（空の版を 1 つ作る）。`type` が `post`・`page` でなければ 422 `invalid_type` |
 | `GET /api/contents/{id}` | | 200 `ContentDetail` |
 | `PUT /api/contents/{id}/draft` | `{"title": "...", "body": {...}, "fields": {...}, "baseRevisionId": 12}`（`fields`・`baseRevisionId` は省略可） | 200 `ContentDetail`。保存のたびに新しい版を作る。タイトルが 200 文字を超えると 422 `invalid_title`、本文がスキーマに合わなければ 422 `invalid_body`、`fields` がオブジェクトでなければ 422 `invalid_fields`。`baseRevisionId`（編集を始めたときの `revision.id`）が最新の版と違えば、ほかの人が先に保存したので 409 `edit_conflict` |

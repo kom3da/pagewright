@@ -3,6 +3,7 @@ import type {
   Category,
   CategoryInput,
   CategoryPatch,
+  ContentCounts,
   ContentDetail,
   ContentFilter,
   ContentPatch,
@@ -155,6 +156,12 @@ export const api = {
     if (page.limit !== undefined) params.set("limit", String(page.limit));
     return get<ContentSummary[]>(`/contents?${params}`);
   },
+  /** Last updated first (sort=updated), at most `limit`. */
+  listRecentContents: (type: ContentType, limit: number) =>
+    get<ContentSummary[]>(
+      `/contents?${new URLSearchParams({ type, sort: "updated", limit: String(limit) })}`,
+    ),
+  contentCounts: () => get<Record<ContentType, ContentCounts>>("/contents/counts"),
   createContent: (type: ContentType) => post<ContentDetail>("/contents", { type }),
   getContent: (id: number) => get<ContentDetail>(`/contents/${id}`),
   saveDraft: (id: number, input: DraftInput) => put<ContentDetail>(`/contents/${id}/draft`, input),

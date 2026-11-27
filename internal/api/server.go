@@ -108,6 +108,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("GET /api/contents", s.site(s.listContents))
 	mux.Handle("POST /api/contents", s.site(s.createContent))
+	mux.Handle("GET /api/contents/counts", s.site(s.countContents))
 	mux.Handle("GET /api/contents/{id}", s.site(s.getContent))
 	mux.Handle("PUT /api/contents/{id}/draft", s.site(s.saveDraft))
 	mux.Handle("PATCH /api/contents/{id}", s.site(s.patchContent))
