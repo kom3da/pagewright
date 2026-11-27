@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -87,13 +88,30 @@ func contentType(t string) error {
 	return nil
 }
 
+// maxListRows is the most contents one list request returns.
+const maxListRows = 1000
+
 func (s *Server) listContents(w http.ResponseWriter, r *http.Request, _ *session) error {
 	query := r.URL.Query()
 	typ := query.Get("type")
 	if err := contentType(typ); err != nil {
 		return err
 	}
-	params := dbgen.ListContentsParams{Type: typ}
+	params := dbgen.ListContentsParams{Type: typ, MaxRows: maxListRows}
+	if v := query.Get("before"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n <= 0 {
+			return invalid("invalid_before", "ページの指定が正しくありません")
+		}
+		params.Before = &n
+	}
+	if v := query.Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > maxListRows {
+			return invalid("invalid_limit", fmt.Sprintf("件数は1から%dのあいだで指定してください", maxListRows))
+		}
+		params.MaxRows = int32(n)
+	}
 	if q := strings.TrimSpace(query.Get("q")); q != "" {
 		if len([]rune(q)) > 100 || !plainText(q, false) {
 			return invalid("invalid_q", "検索する言葉は100文字以内で入力してください")

@@ -1191,6 +1191,38 @@ func TestAdminPreview(t *testing.T) {
 	}
 }
 
+func TestListContentsPaging(t *testing.T) {
+	e := newEnv(t)
+	alice := e.login("alice@example.com")
+	bob := e.login("bob@example.com")
+	for _, title := range []string{"一", "二", "三"} {
+		alice.newContent("post", title, false)
+	}
+	bob.newContent("post", "B", false)
+
+	titles := func(ds []detail) []string {
+		var out []string
+		for _, d := range ds {
+			out = append(out, d.Title)
+		}
+		return out
+	}
+	var first, rest []detail
+	alice.mustDo(http.MethodGet, "/api/contents?type=post&limit=2", nil, &first, http.StatusOK)
+	if diff := cmp.Diff([]string{"三", "二"}, titles(first)); diff != "" {
+		t.Errorf("first page (-want +got):\n%s", diff)
+	}
+	alice.mustDo(http.MethodGet, fmt.Sprintf("/api/contents?type=post&limit=2&before=%d", first[1].Number), nil, &rest, http.StatusOK)
+	if diff := cmp.Diff([]string{"一"}, titles(rest)); diff != "" {
+		t.Errorf("next page (-want +got):\n%s", diff)
+	}
+	for _, q := range []string{"limit=0", "limit=1001", "limit=x", "before=0", "before=-1", "before=x"} {
+		if got, _ := alice.errorCode(http.MethodGet, "/api/contents?type=post&"+q, nil); got != http.StatusUnprocessableEntity {
+			t.Errorf("%s = %d, want 422", q, got)
+		}
+	}
+}
+
 func TestContentSearchAndBuilds(t *testing.T) {
 	e := newEnv(t)
 	alice := e.login("alice@example.com")

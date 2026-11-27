@@ -85,7 +85,7 @@ type ContentDetail = ContentSummary & {
 
 | メソッドとパス | 入力 | 出力 |
 | --- | --- | --- |
-| `GET /api/contents?type=post&q=...&status=...` | `type`：`post` / `page`。`q`（省略可）：タイトルか「ページのURL」の部分一致、100文字まで。`status`（省略可）：`draft` / `scheduled` / `published` | 200 `ContentSummary[]`（番号の降順、1000 件まで）。`q` が 100 文字を超えるか制御文字を含むと 422 `invalid_q`、`status` がそれ以外なら 422 `invalid_status` |
+| `GET /api/contents?type=post&q=...&status=...&before=...&limit=...` | `type`：`post` / `page`。`q`（省略可）：タイトルか「ページのURL」の部分一致、100文字まで。`status`（省略可）：`draft` / `scheduled` / `published`。`limit`（省略可）：1〜1000、省略すると 1000。`before`（省略可）：この番号より古いものから | 200 `ContentSummary[]`（番号の降順、`limit` 件まで）。続きは、受け取った最後の `number` を `before` に入れて取る。`q` が 100 文字を超えるか制御文字を含むと 422 `invalid_q`、`status` がそれ以外なら 422 `invalid_status`、`limit` が範囲外なら 422 `invalid_limit`、`before` が正の整数でなければ 422 `invalid_before` |
 | `POST /api/contents` | `{"type": "post"}` | 201 `ContentDetail`（空の版を 1 つ作る） |
 | `GET /api/contents/{id}` | | 200 `ContentDetail` |
 | `PUT /api/contents/{id}/draft` | `{"title": "...", "body": {...}, "fields": {...}, "baseRevisionId": 12}`（`fields`・`baseRevisionId` は省略可） | 200 `ContentDetail`。保存のたびに新しい版を作る。`baseRevisionId`（編集を始めたときの `revision.id`）が最新の版と違えば、ほかの人が先に保存したので 409 `edit_conflict` |

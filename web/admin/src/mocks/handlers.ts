@@ -578,15 +578,25 @@ export const handlers = [
     if (status && !["draft", "scheduled", "published"].includes(status)) {
       return error(422, "invalid_status", "状態の指定が正しくありません");
     }
+    const before = params.has("before") ? Number(params.get("before")) : undefined;
+    const limit = params.has("limit") ? Number(params.get("limit")) : 1000;
+    if (before !== undefined && !(Number.isInteger(before) && before > 0)) {
+      return error(422, "invalid_before", "ページの指定が正しくありません");
+    }
+    if (!(Number.isInteger(limit) && limit >= 1 && limit <= 1000)) {
+      return error(422, "invalid_limit", "件数は1から1000のあいだで指定してください");
+    }
     return HttpResponse.json(
       db.contents
         .filter((c) => c.type === type)
+        .filter((c) => before === undefined || c.number < before)
         .filter(
           (c) =>
             !q || c.title.toLowerCase().includes(q) || (c.slug ?? "").toLowerCase().includes(q),
         )
         .filter((c) => !status || c.status === status)
         .sort((a, b) => b.number - a.number)
+        .slice(0, limit)
         .map(summary),
     );
   }),

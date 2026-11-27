@@ -11,6 +11,25 @@ export const contentsQuery = (type: ContentType, filter: ContentFilter = {}) =>
     queryFn: () => api.listContents(type, filter),
   });
 
+/** How many contents the paged lists load at a time. */
+export const CONTENTS_PAGE_SIZE = 100;
+
+// The list of posts loads CONTENTS_PAGE_SIZE at a time (a site may have thousands). The key
+// shares the ["contents", type] prefix, so the same invalidations refresh it.
+export const contentsPagesQuery = (type: ContentType, filter: ContentFilter = {}) =>
+  infiniteQueryOptions({
+    queryKey: ["contents", type, "paged", filter],
+    queryFn: async ({ pageParam }) => {
+      const items = await api.listContents(type, filter, {
+        before: pageParam,
+        limit: CONTENTS_PAGE_SIZE,
+      });
+      return { items, more: items.length >= CONTENTS_PAGE_SIZE, next: items.at(-1)?.number };
+    },
+    initialPageParam: undefined as number | undefined,
+    getNextPageParam: (last) => (last.more ? last.next : undefined),
+  });
+
 export const contentQuery = (id: number) =>
   queryOptions({ queryKey: ["content", id], queryFn: () => api.getContent(id) });
 

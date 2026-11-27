@@ -124,10 +124,17 @@ export const api = {
   me: () => get<Me>("/me"),
   selectSite: (siteId: string) => post<Me>("/me/site", { siteId }),
 
-  listContents: (type: ContentType, filter: ContentFilter = {}) => {
+  /** Newest number first; `page` continues below the last number received (`before`). */
+  listContents: (
+    type: ContentType,
+    filter: ContentFilter = {},
+    page: { before?: number; limit?: number } = {},
+  ) => {
     const params = new URLSearchParams({ type });
     if (filter.q) params.set("q", filter.q);
     if (filter.status) params.set("status", filter.status);
+    if (page.before !== undefined) params.set("before", String(page.before));
+    if (page.limit !== undefined) params.set("limit", String(page.limit));
     return get<ContentSummary[]>(`/contents?${params}`);
   },
   createContent: (type: ContentType) => post<ContentDetail>("/contents", { type }),

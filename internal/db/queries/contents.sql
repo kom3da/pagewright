@@ -15,6 +15,7 @@ SELECT * FROM contents WHERE number = $1;
 -- Contents of a type, newest number first, with the title and id of their
 -- latest revision and their canonical URL. q (an ILIKE pattern, already
 -- escaped) matches the title or slug; status filters by derived status.
+-- before continues after the last number received.
 SELECT c.*, coalesce(lr.title, '')::text AS title, coalesce(lr.id, 0)::bigint AS latest_revision_id,
   r.path AS url
 FROM contents c
@@ -29,8 +30,9 @@ WHERE c.type = @type
         WHEN c.published_revision_id IS NOT NULL THEN 'published'
         WHEN c.scheduled_revision_id IS NOT NULL THEN 'scheduled'
         ELSE 'draft' END)
+  AND (sqlc.narg(before)::bigint IS NULL OR c.number < sqlc.narg(before)::bigint)
 ORDER BY c.number DESC
-LIMIT 1000;
+LIMIT @max_rows;
 
 -- name: GetContentURL :one
 SELECT r.path FROM routes r WHERE r.content_id = $1 AND r.kind = 'canonical';

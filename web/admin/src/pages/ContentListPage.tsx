@@ -8,12 +8,12 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { FileText, Newspaper, Search } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { errorMessage } from "../api/client";
-import { contentsQuery } from "../api/queries";
+import { contentsPagesQuery, contentsQuery } from "../api/queries";
 import type { ContentFilter, ContentStatus, ContentSummary, ContentType } from "../api/types";
 import { NewContentButton } from "../components/NewContentButton";
 import { AnchorLink } from "../components/ui/AnchorLink";
@@ -73,11 +73,24 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
     q: search.q,
     status: search.status === "changed" ? "published" : search.status,
   };
-  const { data, isPending, isPlaceholderData, error } = useQuery({
+  // Pages are drawn as a tree, so they come all at once; posts come a page at a time.
+  // Both keep showing the previous results while the next search loads (no flashing).
+  const pageList = useQuery({
     ...contentsQuery(type, apiFilter),
-    // Keep showing the previous results while the next search loads (no flashing).
     placeholderData: keepPreviousData,
+    enabled: type === "page",
   });
+  const postList = useInfiniteQuery({
+    ...contentsPagesQuery(type, apiFilter),
+    placeholderData: keepPreviousData,
+    enabled: type === "post",
+  });
+  const paged = type === "post";
+  const data = paged ? postList.data?.pages.flatMap((p) => p.items) : pageList.data;
+  const { isPending, isPlaceholderData } = paged ? postList : pageList;
+  // A failed 「もっと見る」 keeps the rows already shown; its message goes under the button.
+  const error = paged ? (postList.isFetchNextPageError ? null : postList.error) : pageList.error;
+  const more = paged && postList.hasNextPage;
   // Search results lose their parents; the whole list (usually cached) supplies them.
   const all = useQuery({ ...contentsQuery("page"), enabled: type === "page" && filtered });
 
@@ -106,7 +119,7 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
           {filtered && !isPending && !error
             ? isPlaceholderData
               ? "探しています…"
-              : `${conditions}の${label.title}：${rows.length}件`
+              : `${conditions}の${label.title}：${rows.length}件${more ? "（続きがあります）" : ""}`
             : ""}
         </Text>
         {isPending ? (
@@ -194,6 +207,19 @@ export function ContentListPage({ type, search }: { type: ContentType; search: L
               },
             ]}
           />
+        )}
+        {more && !isPending && (
+          <Stack gap={4} align="flex-start">
+            <Button onClick={() => postList.fetchNextPage()} loading={postList.isFetchingNextPage}>
+              もっと見る
+            </Button>
+            <Text size="sm" c="dimmed">
+              {rows.length}件を表示しています。もっと前の{label.title}を読み込みます。
+            </Text>
+          </Stack>
+        )}
+        {paged && postList.isFetchNextPageError && (
+          <ErrorMessage>{errorMessage(postList.error)}</ErrorMessage>
         )}
       </Stack>
     </>

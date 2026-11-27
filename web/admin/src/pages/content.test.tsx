@@ -57,6 +57,26 @@ describe("content list", () => {
     expect(status(rows[2])).toHaveTextContent(/^下書き$/);
   });
 
+  it("loads posts 100 at a time with もっと見る", async () => {
+    const base = db.contents.find((c) => c.type === "post");
+    if (!base) throw new Error("no post");
+    const top = Math.max(...db.contents.map((c) => c.number));
+    for (let i = 1; i <= 100; i++) {
+      db.contents.push({ ...base, id: 10_000 + i, number: top + i, title: `記事${i}` });
+    }
+    const requests = recordRequests();
+    const { user } = renderApp("/posts");
+    const table = await screen.findByRole("table");
+    expect(within(table).getAllByRole("row")).toHaveLength(101);
+    await user.click(screen.getByRole("button", { name: "もっと見る" }));
+    await waitFor(() => expect(within(table).getAllByRole("row")).toHaveLength(104));
+    expect(screen.queryByRole("button", { name: "もっと見る" })).not.toBeInTheDocument();
+    expect(requests.map((r) => r.path).filter((p) => p.startsWith("/api/contents?"))).toEqual([
+      "/api/contents?type=post&limit=100",
+      `/api/contents?type=post&before=${top + 1}&limit=100`,
+    ]);
+  });
+
   it("shows pages as a tree with their parents", async () => {
     renderApp("/pages");
     const table = await screen.findByRole("table");
@@ -100,9 +120,9 @@ describe("content list search and filter", () => {
     );
     expect(await titles()).toEqual(["年末年始の営業について"]);
     expect(history.location.search).toContain("q=");
-    expect(requests.some((r) => r.path === "/api/contents?type=post&q=%E5%96%B6%E6%A5%AD")).toBe(
-      true,
-    );
+    expect(
+      requests.some((r) => r.path === "/api/contents?type=post&q=%E5%96%B6%E6%A5%AD&limit=100"),
+    ).toBe(true);
     await expectNoAxeViolations();
 
     // Back restores the full list and empties the box.

@@ -404,14 +404,17 @@ WHERE c.type = $1
         WHEN c.published_revision_id IS NOT NULL THEN 'published'
         WHEN c.scheduled_revision_id IS NOT NULL THEN 'scheduled'
         ELSE 'draft' END)
+  AND ($4::bigint IS NULL OR c.number < $4::bigint)
 ORDER BY c.number DESC
-LIMIT 1000
+LIMIT $5
 `
 
 type ListContentsParams struct {
-	Type   string
-	Q      *string
-	Status *string
+	Type    string
+	Q       *string
+	Status  *string
+	Before  *int64
+	MaxRows int32
 }
 
 type ListContentsRow struct {
@@ -439,8 +442,15 @@ type ListContentsRow struct {
 // Contents of a type, newest number first, with the title and id of their
 // latest revision and their canonical URL. q (an ILIKE pattern, already
 // escaped) matches the title or slug; status filters by derived status.
+// before continues after the last number received.
 func (q *Queries) ListContents(ctx context.Context, arg ListContentsParams) ([]ListContentsRow, error) {
-	rows, err := q.db.Query(ctx, listContents, arg.Type, arg.Q, arg.Status)
+	rows, err := q.db.Query(ctx, listContents,
+		arg.Type,
+		arg.Q,
+		arg.Status,
+		arg.Before,
+		arg.MaxRows,
+	)
 	if err != nil {
 		return nil, err
 	}
