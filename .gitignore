@@ -10,3 +10,5 @@ coverage/
 /data/
 # go build ./cmd/pagewright without -o
 /pagewright
+docs/.vitepress/dist/
+docs/.vitepress/cache/

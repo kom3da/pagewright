@@ -1,0 +1,15 @@
+{
+  "name": "@pagewright/docs",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build && pagefind_extended --site .vitepress/dist --root-selector .vp-doc --exclude-selectors .header-anchor",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "1.6.4",
+    "vue": "3.5.46"
+  }
+}

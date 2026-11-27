@@ -15,7 +15,7 @@
 - `themes/` … 標準テーマ（Goのテンプレート）
 - `schema/` … 本文JSONのスキーマ定義（バージョン番号つき）
 - `deploy/` … Docker Compose、導入テンプレート
-- `docs/` … 導入手順など
+- `docs/` … ドキュメントのサイト（VitePress。導入・運用、テーマの作り方、開発。`mise run docs:dev`）
 
 ## 開発の始め方
 

@@ -26,6 +26,21 @@ description = "管理画面をビルドする（web/admin/dist）"
 dir = "web/admin"
 run = ["pnpm install --frozen-lockfile", "pnpm build"]
 
+[tasks."docs:dev"]
+description = "ドキュメントのサイト（VitePress）を http://localhost:5173/ で開く。検索は docs:build のあとの docs:preview で使える"
+dir = "docs"
+run = ["pnpm install --frozen-lockfile", "pnpm dev"]
+
+[tasks."docs:build"]
+description = "ドキュメントのサイトを docs/.vitepress/dist に書き出し、Pagefind（pagefind_extended）で検索の索引を作る"
+dir = "docs"
+run = ["pnpm install --frozen-lockfile", "pnpm build"]
+
+[tasks."docs:preview"]
+description = "書き出したドキュメントのサイトを http://localhost:4173/ で開く（先に docs:build）"
+dir = "docs"
+run = "pnpm preview"
+
 [tasks.dev]
 description = "開発用のDBとMailpitを起動し、管理画面をビルドしてGo本体を起動する"
 depends = ["admin:build"]

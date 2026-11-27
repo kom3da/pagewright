@@ -1,0 +1,5 @@
+# The docs site is its own pnpm project, separate from web/admin.
+allowBuilds:
+  # esbuild finds its binary through its optional platform package; the
+  # install script only speeds that up.
+  esbuild: false
