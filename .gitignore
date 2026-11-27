@@ -13,3 +13,5 @@ coverage/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
 /deploy/backups/
+# private notes for maintainers (not published)
+CLAUDE.local.md
